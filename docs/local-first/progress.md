@@ -1,43 +1,48 @@
-# 开发暂停记录
+# 一期本地开发进度
 
-日期：2026-10-20。状态：**按用户要求暂停功能开发**。两个子agent完成当前小点、报告结果后已关闭；主agent完成当前本地库测试和编译检查后停止。没有继续原生本地图库接线或增加功能。
+日期：2026-10-21。状态：**S02–S04 原生端到端已接通并完成阶段验收**（S02 PASS、S03 PASS、S04 PASS；交互式 GTK 选择对话框自动化未通过，见“未验项”）。S05 及以后未开始。
 
-## 已完成的共用工程检查点
+## 本轮接通内容
 
-S01技术验收已通过：两次Linux release构建、真实Xvfb窗口、UTF-8往返、事件顺序`[1,2,3]`、正常关闭、配置摘要/协议错配拒绝和重复构建一致性。
-
-证据：[S01报告](../verification/S01/s01-linux-local-foundation/report.json)、[执行环境](../verification/S01/s01-linux-local-foundation/execution-context.json)。这些对应当时S01构建；不能直接代表后续本地组件的整体构建/验收。
-
-## 此次停止前完成的小点
-
-| 归属 | 完成内容 | 实际检查 |
+| 归属 | 内容 | 检查 |
 |---|---|---|
-| 主agent：S02本地库组件 | 独立LibraryId、结构化SQLite、单writer/数据根锁、批量索引、键集分页、搜索/收藏和重启保持 | `cargo test --locked -p photo-core --test local_library`：4/4 PASS |
-| 媒体agent：S03组件 | 只读扫描、最多100条批次、取消/坏图隔离、JPEG/PNG/WebP头信息、EXIF方向、有界缩略图及源版本复核 | `cargo test --locked --offline -p photo-core --test media_local`：18/18 PASS |
-| 界面agent：S04组件 | 本地接口、选择/扫描状态、分页网格、搜索/收藏、查看器/键盘/缩放/元数据、取消确认 | `flutter --no-version-check test test/presentation_test.dart test/local_library_test.dart`：28/28 PASS，其中15项S01回归、13项本地展示 |
-| 主agent：既有代码编译 | 新增Rust本地API及其依赖可通过类型检查 | `cargo check --locked -p photo-bridge`：PASS |
-| 主agent：收尾质量 | 修正两处收尾Clippy风格问题，无功能扩展 | `cargo fmt --all --check`、`cargo clippy --locked --offline -p photo-core --tests -- -D warnings`：PASS |
+| 绑定 | 重新生成 flutter_rust_bridge 2.13.0 绑定，纳入 `local_library` API；`thumbnail` 增加 256/512/1024 缓存档位 | `cargo check/clippy -p photo-bridge`、`cargo fmt --all --check` |
+| 原生 gateway | `NativeCoreGateway` 实现 `LocalLibraryGateway`（open/list/add/cancel/thumbnail/favorite/watch），`--data-root` 隔离数据根 | 真实旅程（见下） |
+| 选择器 | `FileSelectorSourcePicker`（file_selector Linux 插件，bundle 内含 `libfile_selector_linux_plugin.so`） | 对话框可真实打开并有截屏证据；键入确认自动化未稳定（未验项） |
+| 界面 | 网格按可视设备像素选择缩略图档位；查看器缩放按钮/快捷键/百分比、拖拽平移、沉浸浏览；runner 支持 `--window-size=WxH` | widget 测试 28/28、真实窗口旅程 |
+| 验收工具 | `app/lib/selftest`（真实窗口旅程驱动：X11 输入握手、RepaintBoundary 与 X11 双截屏、阶段记录）；`tools/local_journey.py`（夹具、独立 Xvfb、xdotool 真实输入、记录解析）；`tools/local_stages.py`（S02–S04 阶段编排与报告） | `tests/platform` 73 项 unittest 通过 |
+| 产品缺陷修复 | ① `RuntimeController` 关闭顺序：先关原生会话再取消事件流（否则真实窗口关闭挂死）；② 扫描结束后强制刷新（`refresh(force: true)`），避免读到提交前快照；③ 刷新不再被可能卡住的原生流取消阻塞，并加 20s 看门狗；④ 过期查询快照不得回写（revision 回退保护）；⑤ 查看器沉浸按钮置于 Stack 顶层保证可命中；⑥ 缩放指示跟随手势/滚轮缩放 | 真实旅程复现后修复并回归 |
 
-S01验收工具检查为58项PASS。界面agent限定范围Dart分析无问题、16个授权文件格式检查通过。以上均是各自层级证据，不将组件测试累加为端到端通过。
+## 阶段结果
 
-## 当前未完成
+| 阶段 | 门槛 | 关键事实 | 报告 |
+|---|---|---|---|
+| S02 | PASS | 无账号无网络建库；重启与 `unshare -rn` 网络命名空间内 LibraryId/数量/收藏保持；同根第二进程被 `LibraryAlreadyOpen` 拒绝、异根独立打开 | `docs/verification/S02/s02-local-library-journeys/` |
+| S03 | PASS | 真实目录扫描 6 发现/2 跳过/1 失败，8 个源文件 sha256/size/mtime 前后一致；重扫不重复；外部改写源升至 content_version 2 且缩略图换版本目录；2506 项库仅解码 24 个可见瓦片缓存；三档缓存尺寸与 EXIF 方向在磁盘上复核一致 | `docs/verification/S03/s03-sources-thumbnails/` |
+| S04 | PASS | 390/800/1440 三宽度完成“扫描→网格→查看→缩放/平移→沉浸→收藏→搜索→重启”全流程；删除源文件后仍索引、查看器显示不可用占位且不崩溃、其余照片正常解码 | `docs/verification/S04/s04-browsing-viewer-widths/` |
 
-- Flutter的`NativeCoreGateway`目前仍只实现S01核心接口，尚未实现`LocalLibraryGateway`。
-- Rust本地API已写入并通过编译检查，但新增图库方法尚未重新生成到Flutter绑定。
-- 真实`LocalSourcePicker`适配器和入口参数`--data-root`接线未完成；`file_selector`依赖已解析。
-- 本地展示测试使用fake gateway/picker，未代替实际SQLite/FFI/文件/缩略图的整体验收。
-- 尚未验收“真实选择目录→显示图片→查看→收藏→重启保留”的全流程。
-- 十万图库性能、真实合成桌面玻璃、文件管理/编辑/监听和最终安装验收未完成；云同步继续留二期。
+组件级证据（Rust）：`cargo test --workspace` 32 项通过；L02-03/L02-04/L03-04 在报告中标记 `evidence_level: component`。
 
-现有release bundle是S01工程产物；当前工作区还有后续未整体集成的本地组件。不要将该产物或28项widget测试称为已交付完整本地图应用。
+## 未验项与限制（不伪报）
 
-## 恢复入口
+- **交互式 GTK 选择对话框**：对话框可真实打开（证据目录内 `picker-dialog-*.png` 截屏，含真实 GTK 文件选择器界面），但用 xdotool 键入路径并确认在 Xvfb 下不稳定（位置输入后列表/确认按钮状态不可靠），故“真实点选目录”的自动化记为未通过；L03-01 的选择路径使用脚本化 picker + 真实扫描/真实文件，选择对话框本身留给真人或 AT-SPI 会话复核。截屏含用户主目录条目，**不随仓库公开**。
+- **窗口级全屏**：需要窗口管理器；Xvfb 无 WM，记 NOT RUN。应用内提供沉浸浏览（已验）。
+- **GPU/真实合成桌面视觉**：NOT RUN（Xvfb 软件渲染）；液态玻璃真实材质验证留 S10。
+- **取消扫描的应用级“中途停止”语义**：夹具扫描过快时取消请求落在扫描完成后（记录 `outcome: scan completed before the cancel request landed`）；取消语义的确定性证据在组件测试 `cancellation_before_start_and_at_first_batch_stops_discovery`。
+- **hover 不误切相册、多选作用域**：属 S06（手动相册/多选尚未实现）。
+- 十万图库性能（S05）、文件管理（S07）、编辑（S08）、监听恢复（S09）、综合性能与玻璃（S10）、安装交付（S11）未开始。
 
-用户要求恢复后，从现有组件接线继续，不重写已通过组件：
+## 复现命令
 
-1. 复查冻结源码与依赖，重新生成本地API的FRB绑定。
-2. 让[原生gateway](../../app/lib/platform/native_core_gateway.dart)实现[本地接口](../../app/lib/services/local_library_gateway.dart)，加入真实选择器和隔离数据根入口。
-3. 在临时图库中执行真实文件/数据库/缩略图/UI旅程，记录S02–S04各自未验项；不使用用户照片完成自动验收。
-4. 之后才进入十万图库、组织/文件管理、编辑等后续步骤。
+```sh
+export PHOTO_FLUTTER_ROOT=/home/luyao/.local/share/photo-client/flutter
+./tools/acceptance run --stage S02 --integration --mode release --evidence-dir <fresh>
+./tools/acceptance run --stage S03 --integration --mode release --evidence-dir <fresh>
+./tools/acceptance run --stage S04 --integration --mode release --evidence-dir <fresh>
+python3 -B -m unittest discover -s tests/platform -p 'test_*.py'
+```
 
-没有创建提交、推送、远端CI或部署；没有修改相邻PhotoViewer和SyncServer项目。
+## 交付状态
+
+- 本地 commit 已创建并推送：GitHub 公共仓库 `Luyao-1024/photo-client`（main）。
+- 无远端 CI；未做安装/打包验收；用户体验确认 `not_recorded`。

@@ -154,19 +154,33 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
     });
   }
 
-  Future<void> refresh() {
-    if (_disposed) return Future<void>.value();
-    if (_refreshing != null) {
-      _refreshAgain = true;
-      return _refreshing!;
+  /// [force] awaits any in-flight refresh and then reads again, so callers that
+  /// just finished a write never observe a snapshot taken before their commit.
+  Future<void> refresh({bool force = false}) async {
+    if (_disposed) return;
+    final inFlight = _refreshing;
+    if (inFlight != null) {
+      if (!force) {
+        _refreshAgain = true;
+        return inFlight;
+      }
+      await inFlight.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {
+          // A wedged native call must not freeze every later refresh.
+          _refreshing = null;
+        },
+      );
+      if (_disposed) return;
     }
-    return _refreshing = _refresh().whenComplete(() {
+    final pending = _refreshing = _refresh().whenComplete(() {
       _refreshing = null;
       if (!_disposed && _refreshAgain) {
         _refreshAgain = false;
         _invalidate();
       }
     });
+    await pending;
   }
 
   Future<void> _refresh() async {
@@ -183,7 +197,9 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       if (_eventsFailed) {
         final oldSubscription = _events;
         _events = null;
-        if (oldSubscription != null) await _cancelEvents(oldSubscription);
+        // Cancelling a native stream can wait for its Rust task; a refresh must
+        // never freeze on that, so the release happens in the background.
+        if (oldSubscription != null) unawaited(_cancelEvents(oldSubscription));
         if (_disposed) return;
         _eventsFailed = false;
       }
@@ -209,6 +225,12 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         folder: query.folder,
       );
       if (_disposed || generation != _generation) return;
+      if (page.revision < state.revision) {
+        // A newer snapshot is already published; an older in-flight read must
+        // not clobber totals/pages. Re-read instead.
+        _invalidate();
+        return;
+      }
       _cursors
         ..clear()
         ..[0] = null;
@@ -396,7 +418,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         cancelRequested: false,
         scanResult: result,
       );
-      await refresh();
+      await refresh(force: true);
     } catch (_) {
       if (!_disposed) {
         state = state.copyWith(

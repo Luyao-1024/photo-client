@@ -15,6 +15,7 @@ final class LaunchOptions {
     this.expectCount,
     this.expectFavoritePath,
     this.missingPath,
+    this.changedPath,
     this.holdSeconds = 0,
     this.inputMode = 'x11',
     this.expectRejected = false,
@@ -33,6 +34,7 @@ final class LaunchOptions {
     '--expect-count',
     '--expect-favorite-path',
     '--missing-path',
+    '--changed-path',
     '--hold-seconds',
     '--input',
     '--expect-rejected',
@@ -51,6 +53,7 @@ final class LaunchOptions {
   final int? expectCount;
   final String? expectFavoritePath;
   final String? missingPath;
+  final String? changedPath;
   final int holdSeconds;
   final String inputMode;
   final bool expectRejected;
@@ -67,6 +70,7 @@ final class LaunchOptions {
     int? expectCount;
     String? expectFavoritePath;
     String? missingPath;
+    String? changedPath;
     var holdSeconds = 0;
     var inputMode = 'x11';
     var expectRejected = false;
@@ -120,6 +124,9 @@ final class LaunchOptions {
         case '--missing-path':
           missingPath = value(flag, inline, index);
           consumed = inline == null;
+        case '--changed-path':
+          changedPath = value(flag, inline, index);
+          consumed = inline == null;
         case '--hold-seconds':
           holdSeconds = int.parse(value(flag, inline, index));
           consumed = inline == null;
@@ -147,6 +154,7 @@ final class LaunchOptions {
       expectCount: expectCount,
       expectFavoritePath: expectFavoritePath,
       missingPath: missingPath,
+      changedPath: changedPath,
       holdSeconds: holdSeconds,
       inputMode: inputMode,
       expectRejected: expectRejected,

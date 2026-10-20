@@ -1,8 +1,8 @@
 {
   "plan_version": 2,
   "phase": "local",
-  "current_checkpoint": "S02",
-  "next_checkpoint": null,
+  "current_checkpoint": "S05",
+  "next_checkpoint": "S05",
   "cloud_phase": "deferred_to_phase2",
   "stages": [
     {
@@ -20,12 +20,13 @@
       "depends_on": [
         "S01"
       ],
-      "implementation_status": "in_progress",
-      "gate_status": "not_run",
+      "implementation_status": "implemented",
+      "gate_status": "passed",
       "user_review": "not_recorded",
-      "work_status": "paused",
+      "work_status": "active",
       "component_checks": "passed",
-      "end_to_end": "not_run"
+      "end_to_end": "passed",
+      "evidence_report": "docs/verification/S02/s02-local-library-journeys/report.json"
     },
     {
       "id": "S03",
@@ -33,12 +34,13 @@
       "depends_on": [
         "S02"
       ],
-      "implementation_status": "in_progress",
-      "gate_status": "not_run",
+      "implementation_status": "implemented",
+      "gate_status": "passed",
       "user_review": "not_recorded",
-      "work_status": "paused",
+      "work_status": "active",
       "component_checks": "passed",
-      "end_to_end": "not_run"
+      "end_to_end": "passed",
+      "evidence_report": "docs/verification/S03/s03-sources-thumbnails/report.json"
     },
     {
       "id": "S04",
@@ -46,12 +48,13 @@
       "depends_on": [
         "S03"
       ],
-      "implementation_status": "in_progress",
-      "gate_status": "not_run",
+      "implementation_status": "implemented",
+      "gate_status": "passed",
       "user_review": "not_recorded",
-      "work_status": "paused",
+      "work_status": "active",
       "component_checks": "passed",
-      "end_to_end": "not_run"
+      "end_to_end": "passed",
+      "evidence_report": "docs/verification/S04/s04-browsing-viewer-widths/report.json"
     },
     {
       "id": "S05",
@@ -124,10 +127,11 @@
       "user_review": "not_recorded"
     }
   ],
-  "status": "paused_by_user",
-  "paused_by_user": true,
-  "resume_checkpoint": "S02",
-  "paused_after": "local_catalog_component_and_current_worker_checks",
+  "status": "in_progress",
+  "paused_by_user": false,
+  "resume_checkpoint": "S05",
+  "paused_after": null,
   "pause_record": "docs/local-first/progress.md",
-  "paused_at": "2026-10-20T12:55:23.262076+00:00"
+  "paused_at": "2026-10-20T12:55:23.262076+00:00",
+  "resumed_at": "2026-10-20T16:00:00+00:00"
 }

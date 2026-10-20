@@ -141,6 +141,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                       onSelected: controller.setFavorites,
                     ),
                     IconButton(
+                      key: const ValueKey('refresh-library'),
                       tooltip: strings.refresh,
                       onPressed: state.loading
                           ? null

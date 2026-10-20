@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
@@ -15,8 +16,13 @@ import 'package:flutter/services.dart';
 abstract interface class JourneyInput {
   String get mode;
   Future<void> tap(Offset position, double devicePixelRatio);
+  Future<void> drag(Offset from, Offset to, double devicePixelRatio);
+  Future<void> scroll(Offset position, int clicks, double devicePixelRatio);
   Future<void> key(String keyName);
   Future<void> type(String text);
+
+  /// Capture the real window; only the external X11 helper can do this.
+  Future<bool> capture(String name);
   Future<void> dispose();
 }
 
@@ -36,7 +42,7 @@ JourneyInput createJourneyInput(String mode, String? evidenceDir) {
       }
       return X11HandshakeInput(Directory(directory));
     case 'framework':
-      return const FrameworkInput();
+      return FrameworkInput();
     default:
       throw JourneyInputFailure('Unsupported input mode: $mode');
   }
@@ -68,6 +74,9 @@ final class X11HandshakeInput implements JourneyInput {
       flush: true,
     );
     staged.renameSync(request.path);
+    stderr.writeln(
+      'INPUT step=$step kind=${payload['kind']} ${payload['detail'] ?? ''}',
+    );
     final deadline = DateTime.now().add(const Duration(seconds: 90));
     while (DateTime.now().isBefore(deadline)) {
       if (response.existsSync()) {
@@ -75,6 +84,9 @@ final class X11HandshakeInput implements JourneyInput {
           final decoded = jsonDecode(response.readAsStringSync());
           if (decoded is Map<String, Object?> && decoded['step'] == step) {
             response.deleteSync();
+            stderr.writeln(
+              'INPUT step=$step status=${decoded['status']} detail=${decoded['detail']}',
+            );
             if (decoded['status'] != 'ok') {
               throw JourneyInputFailure(
                 'input step $step failed: ${decoded['detail']}',
@@ -102,11 +114,38 @@ final class X11HandshakeInput implements JourneyInput {
   });
 
   @override
+  Future<void> drag(Offset from, Offset to, double devicePixelRatio) =>
+      _exchange({
+        'kind': 'drag',
+        'x': from.dx,
+        'y': from.dy,
+        'to_x': to.dx,
+        'to_y': to.dy,
+        'device_pixel_ratio': devicePixelRatio,
+      });
+
+  @override
+  Future<void> scroll(Offset position, int clicks, double devicePixelRatio) =>
+      _exchange({
+        'kind': 'scroll',
+        'x': position.dx,
+        'y': position.dy,
+        'clicks': clicks,
+        'device_pixel_ratio': devicePixelRatio,
+      });
+
+  @override
   Future<void> key(String keyName) =>
       _exchange({'kind': 'key', 'key': keyName});
 
   @override
   Future<void> type(String text) => _exchange({'kind': 'text', 'text': text});
+
+  @override
+  Future<bool> capture(String name) async {
+    await _exchange({'kind': 'screenshot', 'name': name});
+    return true;
+  }
 
   @override
   Future<void> dispose() async {
@@ -116,7 +155,9 @@ final class X11HandshakeInput implements JourneyInput {
 
 /// In-process driver using the same framework entry points as platform input.
 final class FrameworkInput implements JourneyInput {
-  const FrameworkInput();
+  FrameworkInput();
+
+  final Stopwatch _clock = Stopwatch()..start();
 
   @override
   String get mode => 'framework';
@@ -143,26 +184,71 @@ final class FrameworkInput implements JourneyInput {
   }
 
   @override
+  Future<void> drag(Offset from, Offset to, double devicePixelRatio) async {
+    final binding = GestureBinding.instance;
+    binding.handlePointerEvent(PointerDownEvent(position: from));
+    const steps = 8;
+    for (var index = 1; index <= steps; index += 1) {
+      binding.handlePointerEvent(
+        PointerMoveEvent(
+          position: Offset.lerp(from, to, index / steps)!,
+          buttons: kPrimaryButton,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+    binding.handlePointerEvent(PointerUpEvent(position: to));
+    await _settle();
+  }
+
+  @override
+  Future<void> scroll(
+    Offset position,
+    int clicks,
+    double devicePixelRatio,
+  ) async {
+    final binding = GestureBinding.instance;
+    for (var index = 0; index < clicks.abs(); index += 1) {
+      binding.handlePointerEvent(
+        PointerScrollEvent(
+          position: position,
+          scrollDelta: Offset(0, clicks > 0 ? -20 : 20),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    }
+    await _settle();
+  }
+
+  @override
+  Future<bool> capture(String name) async => false;
+
+  /// Injected at the engine key-data boundary, the same entry point the
+  /// embedder uses, so focus and shortcut routing stay real.
+  @override
   Future<void> key(String keyName) async {
     final entry = _keys[keyName];
     if (entry == null) {
       throw JourneyInputFailure('framework input has no mapping for $keyName');
     }
-    final keyboard = HardwareKeyboard.instance;
-    keyboard.handleKeyEvent(
-      KeyDownEvent(
-        physicalKey: entry.$2,
-        logicalKey: entry.$1,
-        timeStamp: Duration.zero,
-      ),
-    );
-    keyboard.handleKeyEvent(
-      KeyUpEvent(
-        physicalKey: entry.$2,
-        logicalKey: entry.$1,
-        timeStamp: Duration.zero,
-      ),
-    );
+    final onKeyData = ui.PlatformDispatcher.instance.onKeyData;
+    if (onKeyData == null) {
+      throw JourneyInputFailure('framework input has no key data channel');
+    }
+    for (final type in const [ui.KeyEventType.down, ui.KeyEventType.up]) {
+      final stamp = _clock.elapsed + const Duration(milliseconds: 8);
+      onKeyData(
+        ui.KeyData(
+          timeStamp: stamp,
+          type: type,
+          physical: entry.$2.usbHidUsage,
+          logical: entry.$1.keyId,
+          character: null,
+          synthesized: true,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 12));
+    }
     await _settle();
   }
 

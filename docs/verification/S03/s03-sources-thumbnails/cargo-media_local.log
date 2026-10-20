@@ -1,0 +1,25 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/media_local.rs (target/debug/deps/media_local-dc0a9a04c9a23f76)
+
+running 18 tests
+test callback_failures_propagate_and_missing_roots_do_not_hide_valid_files ... ok
+test oversized_header_is_rejected_before_decode_without_allocating_original_pixels ... ok
+test source_size_or_mtime_changes_reject_stale_work_and_preserve_existing_cache ... ok
+test scanning_skips_leaf_and_directory_symlinks_including_explicit_roots ... ok
+test failed_atomic_publish_removes_its_temporary_and_preserves_prior_destination ... ok
+test zero_edge_and_source_alias_destination_are_rejected ... ok
+test source_and_destination_symlinks_and_source_hardlink_alias_are_rejected ... ok
+test bad_pixel_data_is_deferred_by_header_scan_and_isolated_during_thumbnail_creation ... ok
+test small_webp_images_are_not_upscaled ... ok
+test scan_unicode_and_spaces_preserves_paths_and_isolates_bad_or_unsupported_files ... ok
+test png_exif_after_pixel_chunks_is_found_without_decoding_them_during_scan ... ok
+test png_exif_orientation_is_applied_after_resizing ... ok
+test webp_extended_container_exif_is_read_and_oriented ... ok
+test cancellation_before_start_and_at_first_batch_stops_discovery ... ok
+test recursive_discovery_streams_batches_before_finishing_the_root ... ok
+test exif_capture_time_requires_an_explicit_valid_offset_and_calendar ... ok
+test thumbnails_are_jpeg_aspect_preserving_and_leave_read_only_originals_unchanged ... ok
+test all_eight_exif_orientations_have_correct_dimensions_and_quadrants ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+

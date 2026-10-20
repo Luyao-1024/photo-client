@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -74,6 +75,14 @@ final class LocalJourney {
           await _reopenJourney();
         case 'missing':
           await _missingSourceJourney();
+        case 'changed':
+          await _changedSourceJourney();
+        case 'bulk':
+          await _bulkJourney();
+        case 'cancel':
+          await _cancelJourney();
+        case 'picker-probe':
+          await _pickerProbeJourney();
         case 'hold':
           await _holdJourney();
         default:
@@ -114,13 +123,18 @@ final class LocalJourney {
     final picker = options.sources.isEmpty
         ? const FileSelectorSourcePicker()
         : ScriptedSourcePicker(options.sources);
+    stderr.writeln('JOURNEY phase=runApp');
     runApp(
       RepaintBoundary(
         key: _shotKey,
         child: PhotoClientApp(gateway: gateway, sourcePicker: picker),
       ),
     );
-    await SchedulerBinding.instance.endOfFrame;
+    await SchedulerBinding.instance.endOfFrame.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => stderr.writeln('JOURNEY first-frame-timeout'),
+    );
+    stderr.writeln('JOURNEY phase=first-frame');
     final element = _elementOfWidget<LibraryShell>();
     if (element == null) throw JourneyFailure('LibraryShell was never mounted');
     _container = ProviderScope.containerOf(element);
@@ -147,11 +161,19 @@ final class LocalJourney {
       facts['library_id'] = info.libraryId;
       facts['opened_count'] = info.count;
       facts['opened_revision'] = info.revision;
-      _expectLibraryIdentity();
+      // Only journeys that reuse a provisioned library may expect a count
+      // before their own scan runs.
+      _expectLibraryIdentity(
+        expectCount: const {
+          'reopen',
+          'missing',
+          'changed',
+        }.contains(options.journeyPhase),
+      );
     });
   }
 
-  void _expectLibraryIdentity() {
+  void _expectLibraryIdentity({bool expectCount = true}) {
     final info = _state.info;
     if (info == null) throw JourneyFailure('library info missing');
     final expectedId = options.expectLibraryId;
@@ -161,7 +183,7 @@ final class LocalJourney {
       );
     }
     final expectedCount = options.expectCount;
-    if (expectedCount != null && info.count != expectedCount) {
+    if (expectCount && expectedCount != null && info.count != expectedCount) {
       throw JourneyFailure(
         'library count changed across restart: expected $expectedCount, got ${info.count}',
       );
@@ -174,11 +196,38 @@ final class LocalJourney {
     } catch (_) {
       // Evidence files stay behind for inspection; shutdown must still run.
     }
+    final container = _container;
+    if (container == null) return;
+    stderr.writeln('JOURNEY shutdown=controller-start');
     try {
-      await _container?.read(runtimeProvider.notifier).shutdown();
-    } catch (_) {
-      // A rejected native session must not hide the journey record.
+      await container
+          .read(runtimeProvider.notifier)
+          .shutdown()
+          .timeout(
+            const Duration(seconds: 25),
+            onTimeout: () {
+              stderr.writeln('JOURNEY shutdown=controller-timeout');
+            },
+          );
+    } catch (error) {
+      stderr.writeln('JOURNEY shutdown=controller-error $error');
     }
+    stderr.writeln('JOURNEY shutdown=controller-done');
+    stderr.writeln('JOURNEY shutdown=gateway-start');
+    try {
+      await container
+          .read(coreGatewayProvider)
+          .shutdown()
+          .timeout(
+            const Duration(seconds: 25),
+            onTimeout: () {
+              stderr.writeln('JOURNEY shutdown=gateway-timeout');
+            },
+          );
+    } catch (error) {
+      stderr.writeln('JOURNEY shutdown=gateway-error $error');
+    }
+    stderr.writeln('JOURNEY shutdown=gateway-done');
   }
 
   // ------------------------------------------------------------------- phases
@@ -234,6 +283,45 @@ final class LocalJourney {
     );
     await stdout.flush();
     exit(result == 'PASS' ? 0 : 1);
+  }
+
+  /// Opens the shipped GTK dialogs through the real file_selector plugin.
+  ///
+  /// An external helper answers the dialogs with real X11 keystrokes; this
+  /// process only reports what the platform returned.
+  Future<void> _pickerProbeJourney() async {
+    await _step('picker-dialog-directory', () async {
+      const picker = FileSelectorSourcePicker();
+      stdout.writeln(
+        '$_readyPrefix${jsonEncode({'phase': 'picker-probe', 'waiting_for': 'directory-dialog'})}',
+      );
+      await stdout.flush();
+      final directory = await picker.chooseDirectory();
+      facts['picker_directory'] = directory;
+      if (directory == null) {
+        throw JourneyFailure('the real directory dialog returned no path');
+      }
+      if (!Directory(directory).existsSync()) {
+        throw JourneyFailure('the dialog returned a path that does not exist');
+      }
+    });
+    await _step('picker-dialog-files', () async {
+      const picker = FileSelectorSourcePicker();
+      stdout.writeln(
+        '$_readyPrefix${jsonEncode({'phase': 'picker-probe', 'waiting_for': 'file-dialog'})}',
+      );
+      await stdout.flush();
+      final files = await picker.chooseFiles();
+      facts['picker_files'] = files;
+      if (files.isEmpty) {
+        throw JourneyFailure('the real file dialog returned no files');
+      }
+      for (final path in files) {
+        if (!File(path).existsSync()) {
+          throw JourneyFailure('the dialog returned a missing file: $path');
+        }
+      }
+    });
   }
 
   Future<void> _holdJourney() async {
@@ -328,6 +416,27 @@ final class LocalJourney {
         );
       }
     });
+    await _step('thumbnail-cache-classes', () async {
+      final first = _state.pages[0]!.first;
+      final paths = <String, String>{};
+      for (final sizeClass in kThumbnailSizeClasses) {
+        paths['$sizeClass'] = await _library!.thumbnail(
+          first.id,
+          sizeClass: sizeClass,
+        );
+      }
+      facts['thumbnail_classes'] = {
+        'media_id': first.id,
+        'name': first.name,
+        'content_version': first.contentVersion,
+        'source_width': first.width,
+        'source_height': first.height,
+        'paths': paths,
+      };
+      if (paths.values.toSet().length != kThumbnailSizeClasses.length) {
+        throw JourneyFailure('cache classes did not produce distinct files');
+      }
+    });
     await _screenshot('01-grid');
     await _step('viewer-opens-real-file', () async {
       final first = _state.pages[0]!.first;
@@ -374,6 +483,103 @@ final class LocalJourney {
       );
       navigation['after_previous'] = _textOf(const ValueKey('viewer-name'));
       facts['navigation'] = navigation;
+    });
+    await _step('viewer-wheel-zoom', () async {
+      final element = _viewerImageElement();
+      if (element == null) {
+        throw JourneyFailure('the viewer image is not mounted');
+      }
+      final before = _viewerScale();
+      await _input!.scroll(
+        _centerOf(element, 'viewer image'),
+        3,
+        _devicePixelRatio,
+      );
+      await _settle();
+      await _waitFor(
+        () => _viewerScale() > before + .05,
+        reason: 'real wheel input did not zoom the viewer',
+      );
+      facts['wheel_zoom'] = {
+        'scale_before': before,
+        'scale_after': _viewerScale(),
+        'label': _textOf(const ValueKey('viewer-zoom-level')),
+      };
+      if (_textOf(const ValueKey('viewer-zoom-level')) == '100%') {
+        throw JourneyFailure('the zoom indicator ignored the real wheel zoom');
+      }
+    });
+    await _step('viewer-zoom-buttons', () async {
+      await _tapKey('viewer-zoom-reset');
+      await _waitFor(
+        () => (_viewerScale() - 1).abs() < .01,
+        reason: 'the reset control did not return the viewer to 100%',
+      );
+      await _tapKey('viewer-zoom-in');
+      await _waitFor(
+        () => _textOf(const ValueKey('viewer-zoom-level')) == '125%',
+        reason: 'zoom in did not reach 125%',
+      );
+      await _tapKey('viewer-zoom-out');
+      await _waitFor(
+        () => _textOf(const ValueKey('viewer-zoom-level')) == '100%',
+        reason: 'zoom out did not return to 100%',
+      );
+      await _tapKey('viewer-zoom-in');
+      await _tapKey('viewer-zoom-in');
+      await _waitFor(
+        () => _viewerScale() > 1.5,
+        reason: 'repeated zoom in did not enlarge the image',
+      );
+      facts['zoom_buttons'] = {
+        'scale': _viewerScale(),
+        'label': _textOf(const ValueKey('viewer-zoom-level')),
+      };
+    });
+    await _step('viewer-pan-by-real-drag', () async {
+      final element = _viewerImageElement();
+      if (element == null) {
+        throw JourneyFailure('the viewer image is not mounted');
+      }
+      final center = _centerOf(element, 'viewer image');
+      final before = _viewerMatrix()!.getTranslation();
+      await _input!.drag(
+        center,
+        center + const Offset(-90, -60),
+        _devicePixelRatio,
+      );
+      await _settle();
+      final after = _viewerMatrix()!.getTranslation();
+      final moved = (after - before).length;
+      facts['pan'] = {
+        'before': [before.x, before.y],
+        'after': [after.x, after.y],
+        'moved': moved,
+        'scale': _viewerScale(),
+      };
+      if (moved < 5) {
+        throw JourneyFailure('a real drag did not pan the zoomed image');
+      }
+      await _tapKey('viewer-zoom-reset');
+      await _waitFor(
+        () => (_viewerScale() - 1).abs() < .01,
+        reason: 'reset after panning failed',
+      );
+    });
+    await _step('viewer-immersive-toggle', () async {
+      await _tapKey('viewer-immersive');
+      await _waitFor(
+        () =>
+            _elementByKey(const ValueKey('viewer-immersive-exit')) != null &&
+            _elementByKey(const ValueKey('viewer-name')) == null,
+        reason: 'immersive mode did not hide the viewer chrome',
+      );
+      await _screenshot('05-immersive');
+      await _tapKey('viewer-immersive-exit');
+      await _waitFor(
+        () => _elementByKey(const ValueKey('viewer-name')) != null,
+        reason: 'immersive mode did not restore the viewer chrome',
+      );
     });
     await _step('viewer-metadata-is-real', () async {
       final photo = _state.pages[0]!.first;
@@ -609,14 +815,291 @@ final class LocalJourney {
     });
   }
 
+  Future<void> _changedSourceJourney() async {
+    final changed = options.changedPath;
+    if (changed == null) {
+      throw JourneyFailure('--changed-path is required for the changed phase');
+    }
+    await _step('rescan-does-not-duplicate', () async {
+      final before = _state.total;
+      await _tapKey('add-folder');
+      await _waitFor(
+        () => _state.scanning || _state.scanResult != null,
+        reason: 'the rescan never started',
+      );
+      await _waitFor(
+        () => !_state.scanning && _state.scanResult != null,
+        reason: 'the rescan did not finish',
+        timeout: const Duration(minutes: 5),
+      );
+      final result = _state.scanResult!;
+      facts['rescan'] = {
+        'before_total': before,
+        'after_total': _state.total,
+        'discovered': result.discovered,
+        'skipped': result.skipped,
+        'failed': result.failed,
+        'cancelled': result.cancelled,
+      };
+      if (_state.total != before) {
+        throw JourneyFailure(
+          'a rescan changed the photo count from $before to ${_state.total}',
+        );
+      }
+    });
+    await _step('changed-source-bumps-content-version', () async {
+      final page = await _library!.listPhotos(limit: 200);
+      LocalPhoto? photo;
+      for (final item in page.items) {
+        if (item.path == changed) photo = item;
+      }
+      if (photo == null) {
+        throw JourneyFailure('the externally changed source is not indexed');
+      }
+      final changedFacts = <String, Object?>{
+        'path': photo.path,
+        'name': photo.name,
+        'content_version': photo.contentVersion,
+        'width': photo.width,
+        'height': photo.height,
+        'size_bytes': photo.sizeBytes,
+      };
+      if (photo.contentVersion < 2) {
+        throw JourneyFailure(
+          'an externally rewritten source kept content_version '
+          '${photo.contentVersion}',
+        );
+      }
+      await _tapKey('photo-${photo.id}');
+      await _waitForElement('viewer', reason: 'the changed photo did not open');
+      final viewer = _elementByKey(const ValueKey('viewer'))!;
+      final image = await _waitForRenderedImage(viewer, 'changed viewer image');
+      changedFacts['decoded_width'] = image.width;
+      changedFacts['decoded_height'] = image.height;
+      _expectDecodedMatchesRecord(image, photo);
+      final thumbnail = await _library!.thumbnail(photo.id, sizeClass: 512);
+      changedFacts['thumbnail_path'] = thumbnail;
+      if (!thumbnail.contains('/${photo.contentVersion}/')) {
+        throw JourneyFailure(
+          'the thumbnail cache did not move to content_version '
+          '${photo.contentVersion}: $thumbnail',
+        );
+      }
+      facts['changed'] = changedFacts;
+      await _screenshot('40-changed-source');
+    });
+  }
+
+  Future<void> _bulkJourney() async {
+    await _step('bulk-scan-and-visible-window-decoding', () async {
+      if (_state.info!.count == 0) {
+        await _tapKey('add-folder');
+        await _waitFor(
+          () => _state.scanning || _state.scanResult != null,
+          reason: 'the bulk scan never started',
+        );
+      }
+      await _waitFor(
+        () => !_state.scanning && !_state.selecting,
+        reason: 'the bulk scan did not finish',
+        timeout: const Duration(minutes: 10),
+      );
+      final expected = options.expectCount;
+      if (expected != null) {
+        // The post-scan forced refresh lands a moment after `scanning` clears.
+        await _waitFor(
+          () => _state.total == expected,
+          reason:
+              'the bulk library holds ${_state.total} items instead of $expected',
+          timeout: const Duration(seconds: 60),
+        );
+      }
+      final result = _state.scanResult;
+      facts['bulk_scan'] = {
+        'discovered': result?.discovered,
+        'skipped': result?.skipped,
+        'failed': result?.failed,
+        'cancelled': result?.cancelled,
+      };
+      facts['total'] = _state.total;
+      final first = _state.pages[0]!.first;
+      final tile = await _waitForElement(
+        'photo-${first.id}',
+        reason: 'the bulk grid rendered no tile',
+      );
+      final image = await _waitForRenderedImage(tile, 'bulk thumbnail');
+      facts['bulk_visible'] = {
+        'tiles_in_tree': _elementsWithKeyPrefix('photo-').length,
+        'page_size': LocalLibraryController.pageSize,
+        'first_tile': first.name,
+        'thumbnail_width': image.width,
+        'thumbnail_height': image.height,
+      };
+    });
+    await _screenshot('30-bulk-grid');
+  }
+
+  Future<void> _cancelJourney() async {
+    await _step('cancel-during-scan-keeps-library-usable', () async {
+      await _tapKey('add-folder');
+      var controlSeen = false;
+      try {
+        final cancel = await _waitForElement(
+          'cancel-scan',
+          reason: 'no cancel control appeared',
+          timeout: const Duration(seconds: 15),
+        );
+        controlSeen = true;
+        await _input!.tap(_centerOf(cancel, 'cancel-scan'), _devicePixelRatio);
+        await _settle();
+      } on JourneyFailure {
+        controlSeen = false;
+      }
+      await _waitFor(
+        () => !_state.scanning && _state.scanResult != null,
+        reason: 'the scan did not settle after the cancel request',
+        timeout: const Duration(minutes: 10),
+      );
+      final result = _state.scanResult!;
+      facts['cancel_scan'] = {
+        'control_seen': controlSeen,
+        'cancel_requested': _state.cancelRequested,
+        'cancelled': result.cancelled,
+        'discovered': result.discovered,
+        'skipped': result.skipped,
+        'failed': result.failed,
+        'total_after_cancel': _state.total,
+      };
+      await _tapKey('refresh-library');
+      await _waitFor(
+        () => !_state.loading,
+        reason: 'the library did not refresh after a cancelled scan',
+      );
+    });
+    await _step('rescan-after-cancel-reconciles', () async {
+      final expected = options.expectCount;
+      if (expected == null) {
+        throw JourneyFailure('--expect-count is required for the cancel phase');
+      }
+      if (_state.search.isNotEmpty || _state.folder != null) {
+        throw JourneyFailure(
+          'the cancel phase must run unfiltered but saw search='
+          '"${_state.search}" folder=${_state.folder}',
+        );
+      }
+      if (_state.favoritesOnly) {
+        // A click can land on the favourites chip while the scan row reflows;
+        // restore the unfiltered view with real input and record it.
+        facts['cancel_misclick_recovered'] = true;
+        await _tapKey('filter-favorites');
+        await _waitFor(
+          () => !_state.favoritesOnly,
+          reason: 'could not restore the unfiltered view after a misclick',
+        );
+      }
+      String controllerState() =>
+          'problem=${_state.problem} scanning=${_state.scanning} '
+          'selecting=${_state.selecting} loading=${_state.loading} '
+          'total=${_state.total} info=${_state.info?.count} '
+          'revision=${_state.revision} search="${_state.search}" '
+          'favorites=${_state.favoritesOnly} folder=${_state.folder} '
+          'extent=${_state.extent} pages=${_state.pages.keys.toList()} '
+          'page0=${_state.pages[0]?.length}';
+      await _tapKey('add-folder');
+      await Future<void>.delayed(const Duration(seconds: 3));
+      facts['rescan_probe_after_tap'] = controllerState();
+      try {
+        await _waitFor(
+          () => !_state.scanning && _state.total == expected,
+          reason:
+              'a rescan after cancel did not reconcile to $expected items '
+              '(${controllerState()})',
+          timeout: const Duration(minutes: 4),
+        );
+      } on JourneyFailure {
+        // A stale UI must not hide a healthy database: verify via the gateway.
+        final page = await _library!.listPhotos(limit: 1);
+        final mirrored = await _library!.listPhotos(
+          limit: 1,
+          favoritesOnly: _state.favoritesOnly,
+          search: _state.search,
+          folder: _state.folder,
+        );
+        facts['rescan_native_total'] = page.total;
+        facts['rescan_native_mirrored_total'] = mirrored.total;
+        if (page.total != expected) rethrow;
+        await _tapKey('refresh-library');
+        await _waitFor(
+          () => _state.total == expected,
+          reason:
+              'the UI did not reconcile after an explicit refresh '
+              '(${controllerState()})',
+          timeout: const Duration(minutes: 2),
+        );
+        facts['rescan_reconciled_via'] =
+            'explicit refresh after native total matched';
+      }
+      final result = _state.scanResult;
+      facts['rescan_after_cancel'] = {
+        'total': _state.total,
+        'discovered': result?.discovered,
+        'cancelled': result?.cancelled,
+      };
+      final ids = {
+        for (final page in _state.pages.values)
+          for (final item in page) item.id,
+      };
+      facts['distinct_ids_after_rescan'] = ids.length;
+      if (ids.length !=
+          _state.pages.values.fold<int>(
+            0,
+            (total, page) => total + page.length,
+          )) {
+        throw JourneyFailure(
+          'a rescan produced duplicate rows in one page set',
+        );
+      }
+    });
+    await _screenshot('31-after-cancel');
+  }
+
   // ------------------------------------------------------------------- inputs
 
+  /// Real input travels through an external helper, so the layout may reflow
+  /// between measuring and clicking. Only click a widget that has held still.
   Future<void> _tapKey(String keyValue) async {
-    final element = await _waitForElement(
+    var element = await _waitForElement(
       keyValue,
       reason: 'widget $keyValue is not mounted',
     );
-    final position = _centerOf(element, keyValue);
+    var position = _centerOf(element, keyValue);
+    for (var attempt = 0; attempt < 25; attempt += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      final current = _elementByKey(ValueKey(keyValue));
+      if (current == null) {
+        element = await _waitForElement(
+          keyValue,
+          reason: 'widget $keyValue unmounted while stabilising',
+        );
+        position = _centerOf(element, keyValue);
+        continue;
+      }
+      final next = _centerOf(current, keyValue);
+      final settled =
+          (next - position).distance < 1 && _hitMatches(next, current);
+      position = next;
+      if (settled) break;
+    }
+    final target = _elementByKey(ValueKey(keyValue));
+    if (target == null || !_hitMatches(position, target)) {
+      throw JourneyFailure(
+        'widget $keyValue kept moving under real input; refusing a blind click',
+      );
+    }
+    stderr.writeln(
+      'JOURNEY tap=$keyValue at=${position.dx.toStringAsFixed(1)},'
+      '${position.dy.toStringAsFixed(1)} dpr=$_devicePixelRatio',
+    );
     await _input!.tap(position, _devicePixelRatio);
     await _settle();
   }
@@ -642,8 +1125,27 @@ final class LocalJourney {
 
   Future<void> _settle() async {
     for (var index = 0; index < 2; index += 1) {
-      await SchedulerBinding.instance.endOfFrame;
+      await SchedulerBinding.instance.endOfFrame.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {
+          stderr.writeln('JOURNEY settle-timeout index=$index');
+        },
+      );
     }
+  }
+
+  /// Framework hit test at the exact point the helper will click, so a reflow
+  /// between measuring and clicking cannot redirect the real input.
+  bool _hitMatches(Offset position, Element element) {
+    final target = element.findRenderObject();
+    if (target == null) return false;
+    final result = HitTestResult();
+    GestureBinding.instance.hitTestInView(
+      result,
+      position,
+      ui.PlatformDispatcher.instance.views.first.viewId,
+    );
+    return result.path.any((entry) => entry.target == target);
   }
 
   Offset _centerOf(Element element, String label) {
@@ -658,7 +1160,10 @@ final class LocalJourney {
     final directory = options.evidenceDir;
     if (directory == null) return;
     await _step('screenshot-$name', () async {
-      await SchedulerBinding.instance.endOfFrame;
+      await SchedulerBinding.instance.endOfFrame.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => stderr.writeln('JOURNEY screenshot-frame-timeout'),
+      );
       final context = _shotKey.currentContext;
       if (context == null || !context.mounted) {
         throw JourneyFailure('the journey root is not mounted');
@@ -675,14 +1180,47 @@ final class LocalJourney {
       final file = File('$directory/$name.png');
       await file.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
       screenshots.add(file.uri.pathSegments.last);
-      facts['screenshot_$name'] = {
+      final detail = <String, Object?>{
         'file': file.uri.pathSegments.last,
         'width': image.width,
         'height': image.height,
       };
       image.dispose();
+      final input = _input;
+      if (input != null && await input.capture(name)) {
+        detail['x11_file'] = '$name-x11.png';
+        screenshots.add('$name-x11.png');
+      }
+      facts['screenshot_$name'] = detail;
     });
   }
+
+  Element? _viewerImageElement() {
+    final viewer = _elementByKey(const ValueKey('viewer'));
+    if (viewer == null) return null;
+    Element? found;
+    void visit(Element element) {
+      if (found != null) return;
+      if (element.widget is InteractiveViewer) {
+        found = element;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    visit(viewer);
+    return found;
+  }
+
+  Matrix4? _viewerMatrix() {
+    final widget = _viewerImageElement()?.widget;
+    if (widget is InteractiveViewer) {
+      return widget.transformationController?.value;
+    }
+    return null;
+  }
+
+  double _viewerScale() => _viewerMatrix()?.getMaxScaleOnAxis() ?? 0;
 
   // ------------------------------------------------------------------- checks
 
@@ -718,9 +1256,13 @@ final class LocalJourney {
 
   Future<void> _step(String id, Future<void> Function() body) async {
     final started = Stopwatch()..start();
+    stderr.writeln('JOURNEY step=$id phase=start');
     try {
       await body();
       started.stop();
+      stderr.writeln(
+        'JOURNEY step=$id phase=pass ms=${started.elapsedMilliseconds}',
+      );
       steps.add({
         'id': id,
         'status': 'PASS',
@@ -728,11 +1270,15 @@ final class LocalJourney {
       });
     } catch (error) {
       started.stop();
+      final detail = error is JourneyFailure ? error.message : '$error';
+      stderr.writeln(
+        'JOURNEY step=$id phase=fail ms=${started.elapsedMilliseconds} detail=$detail',
+      );
       steps.add({
         'id': id,
         'status': 'FAIL',
         'ms': started.elapsedMilliseconds,
-        'detail': error is JourneyFailure ? error.message : '$error',
+        'detail': detail,
       });
       rethrow;
     }
@@ -748,6 +1294,7 @@ final class LocalJourney {
       if (predicate()) return;
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
+    stderr.writeln('JOURNEY wait-timeout reason=$reason');
     throw JourneyFailure(reason);
   }
 

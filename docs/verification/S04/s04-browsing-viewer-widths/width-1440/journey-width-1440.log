@@ -1,0 +1,138 @@
+MESA-EGL: warning: DRI3 error: Could not get DRI3 device
+MESA-EGL: warning: Ensure your X server supports DRI3 to get accelerated rendering
+
+(io.github.photo_client.photo_client:655773): Atk-CRITICAL **: 00:53:09.579: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+JOURNEY phase=runApp
+JOURNEY phase=first-frame
+JOURNEY step=runtime-ready phase=start
+JOURNEY step=runtime-ready phase=pass ms=51
+JOURNEY step=library-open phase=start
+JOURNEY step=library-open phase=pass ms=51
+JOURNEY step=scan-real-source phase=start
+JOURNEY tap=add-folder at=477.8,188.0 dpr=1.0
+INPUT step=1 kind=tap 
+INPUT step=1 status=ok detail=click at 478,188 | pointer x:478 y:188 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=scan-real-source phase=pass ms=672
+JOURNEY step=grid-is-database-driven phase=start
+JOURNEY step=grid-is-database-driven phase=pass ms=0
+JOURNEY step=thumbnail-decoded phase=start
+JOURNEY step=thumbnail-decoded phase=pass ms=0
+JOURNEY step=thumbnail-cache-classes phase=start
+JOURNEY step=thumbnail-cache-classes phase=pass ms=142
+JOURNEY step=screenshot-01-grid phase=start
+INPUT step=2 kind=screenshot 
+INPUT step=2 status=ok detail=01-grid-x11.png
+JOURNEY step=screenshot-01-grid phase=pass ms=775
+JOURNEY step=viewer-opens-real-file phase=start
+JOURNEY tap=photo-5220c352-16e3-48ef-b288-22073b7a224b at=353.0,480.1 dpr=1.0
+INPUT step=3 kind=tap 
+INPUT step=3 status=ok detail=click at 353,480 | pointer x:353 y:480 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=viewer-opens-real-file phase=pass ms=614
+JOURNEY step=viewer-keyboard-and-button-navigation phase=start
+INPUT step=4 kind=key 
+INPUT step=4 status=ok detail=key Right
+JOURNEY tap=viewer-previous at=556.8,868.0 dpr=1.0
+INPUT step=5 kind=tap 
+INPUT step=5 status=ok detail=click at 557,868 | pointer x:557 y:868 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=viewer-keyboard-and-button-navigation phase=pass ms=1038
+JOURNEY step=viewer-wheel-zoom phase=start
+INPUT step=6 kind=scroll 
+INPUT step=6 status=ok detail=scroll button 4
+JOURNEY step=viewer-wheel-zoom phase=pass ms=899
+JOURNEY step=viewer-zoom-buttons phase=start
+JOURNEY tap=viewer-zoom-reset at=856.8,868.0 dpr=1.0
+INPUT step=7 kind=tap 
+INPUT step=7 status=ok detail=click at 857,868 | pointer x:857 y:868 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY tap=viewer-zoom-in at=782.4,868.0 dpr=1.0
+INPUT step=8 kind=tap 
+INPUT step=8 status=ok detail=click at 782,868 | pointer x:782 y:868 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY tap=viewer-zoom-out at=697.7,868.0 dpr=1.0
+INPUT step=9 kind=tap 
+INPUT step=9 status=ok detail=click at 698,868 | pointer x:698 y:868 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY tap=viewer-zoom-in at=782.4,868.0 dpr=1.0
+INPUT step=10 kind=tap 
+INPUT step=10 status=ok detail=click at 782,868 | pointer x:782 y:868 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY tap=viewer-zoom-in at=782.4,868.0 dpr=1.0
+INPUT step=11 kind=tap 
+INPUT step=11 status=ok detail=click at 782,868 | pointer x:782 y:868 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=viewer-zoom-buttons phase=pass ms=3118
+JOURNEY step=viewer-pan-by-real-drag phase=start
+INPUT step=12 kind=drag 
+INPUT step=12 status=ok detail=drag 720,446 to 630,386
+JOURNEY tap=viewer-zoom-reset at=856.8,868.0 dpr=1.0
+INPUT step=13 kind=tap 
+INPUT step=13 status=ok detail=click at 857,868 | pointer x:857 y:868 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=viewer-pan-by-real-drag phase=pass ms=1249
+JOURNEY step=viewer-immersive-toggle phase=start
+JOURNEY tap=viewer-immersive at=1416.0,28.0 dpr=1.0
+INPUT step=14 kind=tap 
+INPUT step=14 status=ok detail=click at 1416,28 | pointer x:1416 y:28 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=screenshot-05-immersive phase=start
+INPUT step=15 kind=screenshot 
+INPUT step=15 status=ok detail=05-immersive-x11.png
+JOURNEY step=screenshot-05-immersive phase=pass ms=803
+JOURNEY tap=viewer-immersive-exit at=1408.0,32.0 dpr=1.0
+INPUT step=16 kind=tap 
+INPUT step=16 status=ok detail=click at 1408,32 | pointer x:1408 y:32 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=viewer-immersive-toggle phase=pass ms=2032
+JOURNEY step=viewer-metadata-is-real phase=start
+JOURNEY tap=viewer-details at=1368.0,28.0 dpr=1.0
+INPUT step=17 kind=tap 
+INPUT step=17 status=ok detail=click at 1368,28 | pointer x:1368 y:28 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+INPUT step=18 kind=tap 
+INPUT step=18 status=ok detail=click at 827,626 | pointer x:827 y:626 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=viewer-metadata-is-real phase=pass ms=1198
+JOURNEY step=favorite-persists-in-database phase=start
+JOURNEY tap=viewer-favorite at=1320.0,28.0 dpr=1.0
+INPUT step=19 kind=tap 
+INPUT step=19 status=ok detail=click at 1320,28 | pointer x:1320 y:28 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=favorite-persists-in-database phase=pass ms=576
+JOURNEY step=screenshot-02-viewer-favorite phase=start
+INPUT step=20 kind=screenshot 
+INPUT step=20 status=ok detail=02-viewer-favorite-x11.png
+JOURNEY step=screenshot-02-viewer-favorite phase=pass ms=705
+JOURNEY step=escape-returns-to-grid phase=start
+INPUT step=21 kind=key 
+INPUT step=21 status=ok detail=key Escape
+JOURNEY step=escape-returns-to-grid phase=pass ms=605
+JOURNEY step=favorites-filter phase=start
+JOURNEY tap=filter-favorites at=617.1,188.0 dpr=1.0
+INPUT step=22 kind=tap 
+INPUT step=22 status=ok detail=click at 617,188 | pointer x:617 y:188 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=screenshot-03-favorites-filter phase=start
+INPUT step=23 kind=screenshot 
+INPUT step=23 status=ok detail=03-favorites-filter-x11.png
+JOURNEY step=screenshot-03-favorites-filter phase=pass ms=766
+JOURNEY tap=filter-favorites at=627.1,188.0 dpr=1.0
+INPUT step=24 kind=tap 
+INPUT step=24 status=ok detail=click at 627,188 | pointer x:627 y:188 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=favorites-filter phase=pass ms=2080
+JOURNEY step=search-uses-current-query-only phase=start
+JOURNEY tap=library-search at=838.0,248.0 dpr=1.0
+INPUT step=25 kind=tap 
+INPUT step=25 status=ok detail=click at 838,248 | pointer x:838 y:248 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+INPUT step=26 kind=text 
+INPUT step=26 status=ok detail=typed 5 characters
+JOURNEY step=screenshot-04-search phase=start
+INPUT step=27 kind=screenshot 
+INPUT step=27 status=ok detail=04-search-x11.png
+JOURNEY step=screenshot-04-search phase=pass ms=680
+INPUT step=28 kind=key 
+INPUT step=28 status=ok detail=key BackSpace
+INPUT step=29 kind=key 
+INPUT step=29 status=ok detail=key BackSpace
+INPUT step=30 kind=key 
+INPUT step=30 status=ok detail=key BackSpace
+INPUT step=31 kind=key 
+INPUT step=31 status=ok detail=key BackSpace
+INPUT step=32 kind=key 
+INPUT step=32 status=ok detail=key BackSpace
+JOURNEY step=search-uses-current-query-only phase=pass ms=4390
+JOURNEY step=library-summary-text phase=start
+JOURNEY step=library-summary-text phase=pass ms=0
+JOURNEY shutdown=controller-start
+JOURNEY shutdown=controller-done
+JOURNEY shutdown=gateway-start
+JOURNEY shutdown=gateway-done
+PHOTO_CLIENT_LOCAL {"result":"PASS","phase":"provision","input":"x11","started_at":"2026-10-20T16:53:09.702840Z","elapsed_ms":20284,"window":{"width":1440,"height":900,"device_pixel_ratio":1.0},"steps":[{"id":"runtime-ready","status":"PASS","ms":51},{"id":"library-open","status":"PASS","ms":51},{"id":"scan-real-source","status":"PASS","ms":672},{"id":"grid-is-database-driven","status":"PASS","ms":0},{"id":"thumbnail-decoded","status":"PASS","ms":0},{"id":"thumbnail-cache-classes","status":"PASS","ms":142},{"id":"screenshot-01-grid","status":"PASS","ms":775},{"id":"viewer-opens-real-file","status":"PASS","ms":614},{"id":"viewer-keyboard-and-button-navigation","status":"PASS","ms":1038},{"id":"viewer-wheel-zoom","status":"PASS","ms":899},{"id":"viewer-zoom-buttons","status":"PASS","ms":3118},{"id":"viewer-pan-by-real-drag","status":"PASS","ms":1249},{"id":"screenshot-05-immersive","status":"PASS","ms":803},{"id":"viewer-immersive-toggle","status":"PASS","ms":2032},{"id":"viewer-metadata-is-real","status":"PASS","ms":1198},{"id":"favorite-persists-in-database","status":"PASS","ms":576},{"id":"screenshot-02-viewer-favorite","status":"PASS","ms":705},{"id":"escape-returns-to-grid","status":"PASS","ms":605},{"id":"screenshot-03-favorites-filter","status":"PASS","ms":766},{"id":"favorites-filter","status":"PASS","ms":2080},{"id":"screenshot-04-search","status":"PASS","ms":680},{"id":"search-uses-current-query-only","status":"PASS","ms":4390},{"id":"library-summary-text","status":"PASS","ms":0}],"facts":{"profile_id":"linux-x86_64","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","session_id":"f31aef68-5679-4afc-bc47-8a85c6b7e8ff","library_id":"036ecbe0-41a2-49e7-b23d-ed4d504d0490","opened_count":0,"opened_revision":0,"scan":{"source":"/tmp/s04-final4/fixtures/photos","discovered":6,"skipped":2,"failed":1,"cancelled":false},"total":6,"page_size":100,"first_page_items":6,"tiles_in_tree":6,"first_photo":{"id":"5220c352-16e3-48ef-b288-22073b7a224b","name":"large.jpg","path":"/tmp/s04-final4/fixtures/photos/large.jpg","parent":"/tmp/s04-final4/fixtures/photos","size_bytes":408956,"width":1600,"height":1200,"content_version":1,"favorite":false},"grid_thumbnail":{"width":186,"height":139},"thumbnail_classes":{"media_id":"5220c352-16e3-48ef-b288-22073b7a224b","name":"large.jpg","content_version":1,"source_width":1600,"source_height":1200,"paths":{"256":"/tmp/s04-final4/data-root-1440/cache/5220c352-16e3-48ef-b288-22073b7a224b/1/thumbnail-256.jpg","512":"/tmp/s04-final4/data-root-1440/cache/5220c352-16e3-48ef-b288-22073b7a224b/1/thumbnail-512.jpg","1024":"/tmp/s04-final4/data-root-1440/cache/5220c352-16e3-48ef-b288-22073b7a224b/1/thumbnail-1024.jpg"}},"screenshot_01-grid":{"file":"01-grid.png","width":1440,"height":900,"x11_file":"01-grid-x11.png"},"viewer":{"opened_name":"large.jpg","expected_name":"large.jpg","path":"/tmp/s04-final4/fixtures/photos/large.jpg","decoded_width":1440,"decoded_height":1080},"decoded_exact_size":false,"decoded_axes_swapped":false,"navigation":{"start":"large.jpg","after_right":"small.png","after_previous":"large.jpg"},"wheel_zoom":{"scale_before":1.0,"scale_after":2.2144409968040746,"label":"221%"},"zoom_buttons":{"scale":1.5625,"label":"156%"},"pan":{"before":[-405.0,-219.375],"after":[-521.6652359770843,-297.22804845679326],"moved":140.25645952898057,"scale":1.5625},"screenshot_05-immersive":{"file":"05-immersive.png","width":1440,"height":900,"x11_file":"05-immersive-x11.png"},"details":["Photo information","File path","/tmp/s04-final4/fixtures/photos/large.jpg","File size","408956 B","Modified","2026-10-21 00:52:27.301","Dimensions","1600 × 1200","/tmp/s04-final4/fixtures/photos","Close"],"favorite":{"id":"5220c352-16e3-48ef-b288-22073b7a224b","query_total":1,"query_ids":["5220c352-16e3-48ef-b288-22073b7a224b"]},"screenshot_02-viewer-favorite":{"file":"02-viewer-favorite.png","width":1440,"height":900,"x11_file":"02-viewer-favorite-x11.png"},"favorites_filter_total":1,"screenshot_03-favorites-filter":{"file":"03-favorites-filter.png","width":1440,"height":900,"x11_file":"03-favorites-filter-x11.png"},"search":{"query":"large","total":1,"names":["large.jpg"]},"screenshot_04-search":{"file":"04-search.png","width":1440,"height":900,"x11_file":"04-search-x11.png"},"library_info_text":"Library: 6 photos · revision 2"},"screenshots":["01-grid.png","01-grid-x11.png","05-immersive.png","05-immersive-x11.png","02-viewer-favorite.png","02-viewer-favorite-x11.png","03-favorites-filter.png","03-favorites-filter-x11.png","04-search.png","04-search-x11.png"]}

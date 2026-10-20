@@ -101,5 +101,39 @@ packaging validation remains `NOT RUN`. Mocked integration tests prove the
 validator's behavior and are not application execution evidence.
 
 Existing reports/logs are preserved: use a fresh empty evidence directory for
-each run. S02–S14 and unknown stages exit 2 with `NOT IMPLEMENTED` and create no
+each run. S05–S14 and unknown stages exit 2 with `NOT IMPLEMENTED` and create no
 evidence directory, including when `--integration` is supplied.
+
+## S02–S04 local journeys
+
+```sh
+PHOTO_FLUTTER_ROOT=/path/to/flutter ./tools/acceptance run --stage S02 --integration --mode release --evidence-dir /path/to/fresh-evidence
+PHOTO_FLUTTER_ROOT=/path/to/flutter ./tools/acceptance run --stage S03 --integration --mode release --evidence-dir /path/to/fresh-evidence
+PHOTO_FLUTTER_ROOT=/path/to/flutter ./tools/acceptance run --stage S04 --integration --mode release --evidence-dir /path/to/fresh-evidence
+```
+
+These stages run the shipped bundle (`--local-journey`) against isolated data
+roots and synthetic fixtures generated into the evidence directory; no user
+photo collection is touched. Each journey starts its own Xvfb, so a wedged
+display cannot poison later evidence, and the display of every journey is
+recorded. Pointer, keyboard, wheel and drag input are injected with XTest
+through `xdotool`, and the app answers a small file handshake
+(`input-request.json` / `input-response.json`) with the widget coordinates it
+wants exercised. `--input=framework` keeps an in-process fallback for local
+iteration; it cannot type into the search field and is never reported as
+real-window evidence.
+
+Fixture expectations are fixed in `tools/local_journey.py`: six images
+(JPEG/PNG/WebP, one with EXIF orientation 6), one unsupported text file, one
+broken `.jpg`, one symlink (skipped), and an optional bulk subtree of tiny PNGs
+for visible-window thumbnail evidence. Source fingerprints (SHA-256, size,
+mtime) are compared before and after every scan, and cached thumbnails are
+re-measured with Pillow against the native aspect/orientation rules.
+
+Journey records are single `PHOTO_CLIENT_LOCAL ` JSON lines; a second
+`PHOTO_CLIENT_LOCAL_READY ` line marks phases that must stay alive (instance
+lock probes) or that wait for a native GTK dialog (picker probe). Missing,
+duplicated or malformed records fail. Checks that only have component-level
+evidence are labelled `evidence_level: "component"` in `report.json`; the
+interactive GTK file-dialog probe is reported separately as
+`L03-05-picker-dialog` and never upgrades `L03-01` on its own.

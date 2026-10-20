@@ -31,7 +31,19 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   Size _viewport = Size.zero;
 
   @override
+  void initState() {
+    super.initState();
+    // Gesture and wheel zoom must also update the indicator and button states.
+    _transform.addListener(_transformChanged);
+  }
+
+  void _transformChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _transform.removeListener(_transformChanged);
     _transform.dispose();
     super.dispose();
   }
@@ -153,18 +165,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
           body: Stack(
             fit: StackFit.expand,
             children: [
-              if (_immersive)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    key: const ValueKey('viewer-immersive-exit'),
-                    tooltip: strings.exitImmersive,
-                    color: Colors.white,
-                    icon: const Icon(Icons.fullscreen_exit),
-                    onPressed: _toggleImmersive,
-                  ),
-                ),
               Column(
                 children: [
                   if (library.problem == LibraryProblem.favorite)
@@ -312,6 +312,19 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                     ),
                 ],
               ),
+              // Last child: the control stays above the image and hittable.
+              if (_immersive)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: IconButton(
+                    key: const ValueKey('viewer-immersive-exit'),
+                    tooltip: strings.exitImmersive,
+                    color: Colors.white,
+                    icon: const Icon(Icons.fullscreen_exit),
+                    onPressed: _toggleImmersive,
+                  ),
+                ),
             ],
           ),
         ),

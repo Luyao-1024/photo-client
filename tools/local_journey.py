@@ -150,10 +150,17 @@ class XvfbDisplay:
         xvfb = shutil.which("Xvfb")
         if not xvfb:
             raise ProfileError("display: Xvfb is required for real input journeys")
-        for number in range(99, 89, -1):
+        for number in range(90, 130):
             display = f":{number}"
-            if Path(f"/tmp/.X{number}-lock").exists():
-                continue
+            lock = Path(f"/tmp/.X{number}-lock")
+            if lock.exists():
+                try:
+                    owner = int(lock.read_text().strip())
+                    os.kill(owner, 0)
+                    continue  # a live server owns this display
+                except (ValueError, ProcessLookupError, OSError):
+                    lock.unlink(missing_ok=True)
+                    Path(f"/tmp/.X11-unix/X{number}").unlink(missing_ok=True)
             process = subprocess.Popen(
                 [xvfb, display, "-screen", "0", self.screen, "-nolisten", "tcp"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
@@ -186,14 +193,57 @@ def _run_x11(command: list[str], display: str, timeout: int = 20) -> subprocess.
     return subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout)
 
 
-def find_window(display: str, timeout: float = 30.0) -> str:
+def _window_ids(display: str, command: list[str]) -> list[str]:
+    result = _run_x11(command, display)
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _window_geometry(display: str, window: str) -> tuple[int, int] | None:
+    result = _run_x11(["xdotool", "getwindowgeometry", window], display, timeout=10)
+    for line in result.stdout.splitlines():
+        if "Geometry:" not in line:
+            continue
+        try:
+            width, height = line.split("Geometry:")[1].strip().split("x")
+            return int(width), int(height)
+        except (ValueError, IndexError):
+            return None
+    return None
+
+
+def _largest(display: str, ids: list[str]) -> str | None:
+    best: tuple[int, str] | None = None
+    for window in ids:
+        geometry = _window_geometry(display, window)
+        if geometry is None:
+            continue
+        area = geometry[0] * geometry[1]
+        if best is None or area > best[0]:
+            best = (area, window)
+    return best[1] if best else None
+
+
+def process_windows(display: str, pid: int) -> list[str]:
+    return _window_ids(display, ["xdotool", "search", "--pid", str(pid)])
+
+
+def find_window(display: str, pid: int | None = None, timeout: float = 45.0) -> str:
+    """Locate the application's main window, preferring process-owned search."""
     deadline = time.monotonic() + timeout
+    # --onlyvisible keeps unmapped GTK windows out of the candidate set.
+    attempts: list[list[str]] = [
+        ["xdotool", "search", "--onlyvisible", "--name", f"^{WINDOW_TITLE}$"]]
+    if pid is not None:
+        attempts.insert(0, ["xdotool", "search", "--onlyvisible", "--pid", str(pid),
+                            "--name", f"^{WINDOW_TITLE}$"])
+    attempts.append(["xdotool", "search", "--name", f"^{WINDOW_TITLE}$"])
+    attempts.append(["xdotool", "search", "--name", WINDOW_TITLE])
     while time.monotonic() < deadline:
-        result = _run_x11(["xdotool", "search", "--name", WINDOW_TITLE], display)
-        ids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-        if ids:
-            return ids[0]
-        time.sleep(0.25)
+        for command in attempts:
+            chosen = _largest(display, _window_ids(display, command))
+            if chosen is not None:
+                return chosen
+        time.sleep(0.3)
     raise ProfileError("input: no application window appeared on the test display")
 
 
@@ -210,9 +260,10 @@ def _focus(window: str, display: str) -> None:
 class X11InputHelper:
     """Answers the app's input handshake with real XTest events."""
 
-    def __init__(self, evidence_dir: Path, display: str):
+    def __init__(self, evidence_dir: Path, display: str, pid: int | None = None):
         self.evidence_dir = evidence_dir
         self.display = display
+        self.pid = pid
         self.request = evidence_dir / REQUEST_NAME
         self.response = evidence_dir / RESPONSE_NAME
         self.window: str | None = None
@@ -223,9 +274,28 @@ class X11InputHelper:
 
     def _window_id(self) -> str:
         if self.window is None:
-            self.window = find_window(self.display)
-            _focus(self.window, self.display)
+            self.window = find_window(self.display, self.pid)
         return self.window
+
+    def _visible(self, window: str) -> bool:
+        return window in _window_ids(
+            self.display, ["xdotool", "search", "--onlyvisible", "--name", f"^{WINDOW_TITLE}$"])
+
+    def _await_visible(self) -> str:
+        """GTK maps the window only once Flutter presents its first frame, and
+        input before that lands on the root window."""
+        deadline = time.monotonic() + 60
+        window = self._window_id()
+        while time.monotonic() < deadline:
+            if self._visible(window):
+                time.sleep(0.2)
+                if self._visible(window):
+                    _focus(window, self.display)
+                    return window
+            self.window = None
+            window = self._window_id()
+            time.sleep(0.25)
+        raise ProfileError("input: the application window never became visible")
 
     def _respond(self, step: int, status: str, detail: str = "") -> None:
         staged = self.response.with_suffix(".tmp")
@@ -255,6 +325,14 @@ class X11InputHelper:
                              "detail": detail, "payload": payload})
         return True
 
+    def _move(self, window: str, x: int, y: int) -> None:
+        if _window_geometry(self.display, window) is None:
+            raise ProfileError(f"input: window {window} is gone")
+        # No --sync: warping onto the current position emits no MotionNotify
+        # and --sync would then wait forever.
+        _run_x11(["xdotool", "mousemove", "--window", window, str(x), str(y)],
+                 self.display, timeout=10)
+
     def _scaled(self, payload: dict, axis: str) -> int:
         ratio = float(payload.get("device_pixel_ratio") or 1.0)
         return int(round(float(payload[axis]) * ratio))
@@ -264,47 +342,48 @@ class X11InputHelper:
         window = self._window_id()
         if kind == "tap":
             x, y = self._scaled(payload, "x"), self._scaled(payload, "y")
-            _focus(window, self.display)
-            _run_x11(["xdotool", "mousemove", "--sync", "--window", window, str(x), str(y)],
-                     self.display)
+            window = self._await_visible()
+            self._move(window, x, y)
+            location = _run_x11(["xdotool", "getmouselocation"], self.display).stdout.strip()
+            visible = window in _window_ids(
+                self.display, ["xdotool", "search", "--onlyvisible", "--name", f"^{WINDOW_TITLE}$"])
+            geometry = _window_geometry(self.display, window)
             _run_x11(["xdotool", "click", "1"], self.display)
-            return f"click at {x},{y}"
+            return (f"click at {x},{y} | pointer {location} | win={window} "
+                    f"visible={visible} geometry={geometry}")
         if kind == "drag":
             x1, y1 = self._scaled(payload, "x"), self._scaled(payload, "y")
             x2 = int(round(float(payload["to_x"]) * float(payload.get("device_pixel_ratio") or 1.0)))
             y2 = int(round(float(payload["to_y"]) * float(payload.get("device_pixel_ratio") or 1.0)))
-            _focus(window, self.display)
-            _run_x11(["xdotool", "mousemove", "--sync", "--window", window, str(x1), str(y1)],
-                     self.display)
+            window = self._await_visible()
+            self._move(window, x1, y1)
             _run_x11(["xdotool", "mousedown", "1"], self.display)
             for step in range(1, 9):
-                _run_x11(["xdotool", "mousemove", "--sync", "--window", window,
-                          str(x1 + (x2 - x1) * step // 8), str(y1 + (y2 - y1) * step // 8)],
-                         self.display)
+                self._move(window, x1 + (x2 - x1) * step // 8, y1 + (y2 - y1) * step // 8)
                 time.sleep(0.02)
             _run_x11(["xdotool", "mouseup", "1"], self.display)
             return f"drag {x1},{y1} to {x2},{y2}"
         if kind == "scroll":
             x, y = self._scaled(payload, "x"), self._scaled(payload, "y")
             button = "4" if int(payload.get("clicks", 1)) > 0 else "5"
-            _focus(window, self.display)
-            _run_x11(["xdotool", "mousemove", "--sync", "--window", window, str(x), str(y)],
-                     self.display)
+            window = self._await_visible()
+            self._move(window, x, y)
             for _ in range(abs(int(payload.get("clicks", 1)))):
                 _run_x11(["xdotool", "click", button], self.display)
                 time.sleep(0.05)
             return f"scroll button {button}"
         if kind == "key":
-            _focus(window, self.display)
+            window = self._await_visible()
             _run_x11(["xdotool", "key", "--clearmodifiers", str(payload["key"])], self.display)
             return f"key {payload['key']}"
         if kind == "text":
-            _focus(window, self.display)
+            window = self._await_visible()
             _run_x11(["xdotool", "type", "--delay", "30", "--", str(payload["text"])], self.display)
             return f"typed {len(str(payload['text']))} characters"
         if kind == "screenshot":
             if not shutil.which("import"):
                 raise ProfileError("screenshot: ImageMagick import is unavailable")
+            window = self._await_visible()
             target = self.evidence_dir / f"{payload['name']}-x11.png"
             _run_x11(["import", "-window", window, str(target)], self.display, timeout=30)
             if not target.is_file() or target.stat().st_size == 0:
@@ -340,7 +419,8 @@ class JourneyRun:
 
     def __init__(self, command: list[str], log_path: Path, exit_code: int | None,
                  timed_out: bool, elapsed: float, record: dict | None,
-                 ready: dict | None, actions: list[dict], error: str | None = None):
+                 ready: dict | None, actions: list[dict], error: str | None = None,
+                 peak_rss_kib: int = 0, display: str | None = None):
         self.command = command
         self.log_path = log_path
         self.exit_code = exit_code
@@ -350,6 +430,8 @@ class JourneyRun:
         self.ready = ready
         self.actions = actions
         self.error = error
+        self.peak_rss_kib = peak_rss_kib
+        self.display = display
 
     def as_evidence(self, root: Path) -> dict:
         return {
@@ -362,19 +444,29 @@ class JourneyRun:
             "record": self.record,
             "ready": self.ready,
             "input_actions": len(self.actions),
+            "peak_rss_kib": self.peak_rss_kib,
+            "display": self.display,
             **({"error": self.error} if self.error else {}),
         }
 
 
-def run_journey(executable: Path, *, display: str, phase: str, data_root: Path,
+def run_journey(executable: Path, *, phase: str, data_root: Path,
                 evidence_dir: Path, log_name: str, timeout: int,
                 args: list[str] | None = None, helper: bool = True,
-                on_ready=None) -> JourneyRun:
+                on_ready=None, prefix: list[str] | None = None,
+                pid_sink=None, display_sink=None,
+                display: str | None = None) -> JourneyRun:
     """Run one journey phase and service its real-input handshake."""
     evidence_dir.mkdir(parents=True, exist_ok=True)
     for name in (REQUEST_NAME, RESPONSE_NAME):
         (evidence_dir / name).unlink(missing_ok=True)
-    command = [str(executable), "--local-journey", f"--journey-phase={phase}",
+    owned_display: XvfbDisplay | None = None
+    if display is None:
+        owned_display = XvfbDisplay()
+        display = owned_display.__enter__()
+    if display_sink is not None:
+        display_sink(display)
+    command = [*(prefix or []), str(executable), "--local-journey", f"--journey-phase={phase}",
                f"--data-root={data_root}", f"--evidence-dir={evidence_dir}",
                f"--input={'x11' if helper else 'framework'}", *(args or [])]
     env = os.environ.copy()
@@ -383,32 +475,41 @@ def run_journey(executable: Path, *, display: str, phase: str, data_root: Path,
     # Keep the journey off the user's session bus and any network namespace.
     env.pop("DBUS_SESSION_BUS_ADDRESS", None)
     log_path = evidence_dir / log_name
-    helper_driver = X11InputHelper(evidence_dir, display) if helper else None
+    helper_driver = None
     started = time.monotonic()
     record = None
     ready = None
     error = None
+    peak_rss_kib = 0
+    handled = 0
     with log_path.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(command, cwd=executable.parent, stdout=log,
                                    stderr=subprocess.STDOUT, env=env, start_new_session=True)
+        if helper:
+            helper_driver = X11InputHelper(evidence_dir, display, pid=process.pid)
+        if pid_sink is not None:
+            pid_sink(process.pid)
         deadline = started + timeout
-        notified = False
         try:
             while time.monotonic() < deadline:
                 if helper_driver is not None:
                     helper_driver.poll_once()
-                if ready is None and log_path.exists():
+                if log_path.exists():
                     text = log_path.read_text(encoding="utf-8", errors="replace")
+                    markers = []
                     for line in text.splitlines():
                         if line.startswith(READY_PREFIX):
                             try:
-                                ready = json.loads(line[len(READY_PREFIX):])
+                                markers.append(json.loads(line[len(READY_PREFIX):]))
                             except ValueError:
-                                ready = {"parse_error": True}
-                    if ready is not None and not notified:
-                        notified = True
+                                markers.append({"parse_error": True})
+                    while handled < len(markers):
+                        marker = markers[handled]
+                        handled += 1
+                        ready = marker
                         if on_ready is not None:
-                            on_ready()
+                            on_ready(marker, handled)
+                peak_rss_kib = max(peak_rss_kib, _rss_kib(process.pid))
                 if process.poll() is not None:
                     # Drain any final handshake requests before giving up.
                     for _ in range(4):
@@ -434,6 +535,20 @@ def run_journey(executable: Path, *, display: str, phase: str, data_root: Path,
             record = parse_record(text)
         except ProfileError as exc:
             error = error or str(exc)
-    return JourneyRun(command, log_path, exit_code, error is not None and "timed out" in error,
-                      round(time.monotonic() - started, 3), record, ready,
-                      helper_driver.actions if helper_driver else [], error)
+    run = JourneyRun(command, log_path, exit_code, error is not None and "timed out" in error,
+                     round(time.monotonic() - started, 3), record, ready,
+                     helper_driver.actions if helper_driver else [], error, peak_rss_kib, display)
+    if owned_display is not None:
+        owned_display.__exit__(None, None, None)
+    return run
+
+
+def _rss_kib(pid: int) -> int:
+    try:
+        with open(f"/proc/{pid}/status", encoding="utf-8") as status:
+            for line in status:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return 0
+    return 0

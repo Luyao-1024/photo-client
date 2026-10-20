@@ -1,0 +1,17 @@
+MESA-EGL: warning: DRI3 error: Could not get DRI3 device
+MESA-EGL: warning: Ensure your X server supports DRI3 to get accelerated rendering
+
+(io.github.photo_client.photo_client:620424): Atk-CRITICAL **: 23:28:07.322: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+JOURNEY phase=runApp
+JOURNEY phase=first-frame
+JOURNEY step=runtime-ready phase=start
+JOURNEY step=runtime-ready phase=pass ms=51
+JOURNEY step=library-open phase=start
+JOURNEY step=library-open phase=pass ms=53
+PHOTO_CLIENT_LOCAL_READY {"phase":"hold","library_id":"753afd4b-754d-4085-84b5-af4be6a82b3f","count":6,"hold_seconds":90}
+JOURNEY shutdown=controller-start
+JOURNEY shutdown=controller-done
+JOURNEY shutdown=gateway-start
+JOURNEY shutdown=gateway-done
+PHOTO_CLIENT_LOCAL {"result":"PASS","phase":"hold","input":"x11","started_at":"2026-10-20T15:28:07.444575Z","elapsed_ms":90184,"window":{"width":1280,"height":720,"device_pixel_ratio":1.0},"steps":[{"id":"runtime-ready","status":"PASS","ms":51},{"id":"library-open","status":"PASS","ms":53}],"facts":{"profile_id":"linux-x86_64","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","session_id":"be11ba70-6c5e-44ed-9686-f29ec245dc82","library_id":"753afd4b-754d-4085-84b5-af4be6a82b3f","opened_count":6,"opened_revision":2},"screenshots":[]}

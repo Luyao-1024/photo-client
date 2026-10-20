@@ -300,7 +300,8 @@ class ToolTests(unittest.TestCase):
         self.assertNotIn("secret", str(output.call_args_list))
 
     def test_unknown_stages_never_create_pass_or_evidence(self):
-        for stage in (*[f"S{i:02}" for i in range(2, 15)], "S99", "unknown"):
+        # S02-S04 are implemented local stages; everything after stays gated.
+        for stage in (*[f"S{i:02}" for i in range(5, 15)], "S99", "unknown"):
             directory = self.root / stage
             result = subprocess.run([sys.executable, "-B", str(ROOT / "tools/acceptance"), "run", "--stage", stage, "--evidence-dir", str(directory)], text=True, capture_output=True, check=False)
             with self.subTest(stage=stage):

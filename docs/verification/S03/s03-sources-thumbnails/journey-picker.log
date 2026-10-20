@@ -1,0 +1,73 @@
+MESA-EGL: warning: DRI3 error: Could not get DRI3 device
+MESA-EGL: warning: Ensure your X server supports DRI3 to get accelerated rendering
+
+(io.github.photo_client.photo_client:652482): Atk-CRITICAL **: 00:49:36.261: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+JOURNEY phase=runApp
+JOURNEY phase=first-frame
+JOURNEY step=runtime-ready phase=start
+JOURNEY step=runtime-ready phase=pass ms=53
+JOURNEY step=library-open phase=start
+JOURNEY step=library-open phase=pass ms=51
+JOURNEY step=picker-dialog-directory phase=start
+PHOTO_CLIENT_LOCAL_READY {"phase":"picker-probe","waiting_for":"directory-dialog"}
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:36.899: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:36.960: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:36.973: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.026: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.069: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.080: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.098: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.114: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.131: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.144: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.160: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.742: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): Gtk-CRITICAL **: 00:49:37.751: gtk_widget_event: assertion 'WIDGET_REALIZED_FOR_EVENT (widget, event)' failed
+
+(io.github.photo_client.photo_client:652482): Gtk-CRITICAL **: 00:49:37.757: gtk_widget_event: assertion 'WIDGET_REALIZED_FOR_EVENT (widget, event)' failed
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.759: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.778: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.794: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.811: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.827: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.844: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.861: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.878: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.894: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.909: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.926: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.942: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.959: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.976: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:37.991: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
+
+(io.github.photo_client.photo_client:652482): dconf-WARNING **: 00:49:38.009: failed to commit changes to dconf: Failed to execute child process “dbus-launch” (No such file or directory)
