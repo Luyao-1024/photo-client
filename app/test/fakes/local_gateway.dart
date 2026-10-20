@@ -109,8 +109,13 @@ class FakeLocalGateway extends FakeGateway implements LocalLibraryGateway {
     cancellationsRequested++;
   }
 
+  final requestedSizeClasses = <int>[];
+
   @override
-  Future<String> thumbnail(String mediaId) async => imagePath;
+  Future<String> thumbnail(String mediaId, {int sizeClass = 512}) async {
+    requestedSizeClasses.add(sizeClass);
+    return imagePath;
+  }
 
   @override
   Future<void> setFavorite(String mediaId, bool favorite) async {

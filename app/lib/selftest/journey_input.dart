@@ -1,0 +1,178 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+
+/// Real-input contract for the acceptance journey.
+///
+/// The X11 driver hands coordinates to an external helper that injects events
+/// into the real window through XTest, so the app observes genuine platform
+/// input. The framework driver keeps the journey runnable without X tooling and
+/// is reported separately, never as real-window evidence.
+abstract interface class JourneyInput {
+  String get mode;
+  Future<void> tap(Offset position, double devicePixelRatio);
+  Future<void> key(String keyName);
+  Future<void> type(String text);
+  Future<void> dispose();
+}
+
+class JourneyInputFailure implements Exception {
+  JourneyInputFailure(this.message);
+  final String message;
+  @override
+  String toString() => 'JourneyInputFailure: $message';
+}
+
+JourneyInput createJourneyInput(String mode, String? evidenceDir) {
+  switch (mode) {
+    case 'x11':
+      final directory = evidenceDir;
+      if (directory == null) {
+        throw JourneyInputFailure('x11 input needs --evidence-dir');
+      }
+      return X11HandshakeInput(Directory(directory));
+    case 'framework':
+      return const FrameworkInput();
+    default:
+      throw JourneyInputFailure('Unsupported input mode: $mode');
+  }
+}
+
+/// File-handshake driver: one pending request at a time, matched by step id.
+final class X11HandshakeInput implements JourneyInput {
+  X11HandshakeInput(this.directory)
+    : request = File('${directory.path}/input-request.json'),
+      response = File('${directory.path}/input-response.json') {
+    directory.createSync(recursive: true);
+    if (response.existsSync()) response.deleteSync();
+    if (request.existsSync()) request.deleteSync();
+  }
+
+  final Directory directory;
+  final File request;
+  final File response;
+  int _step = 0;
+
+  @override
+  String get mode => 'x11';
+
+  Future<void> _exchange(Map<String, Object?> payload) async {
+    final step = ++_step;
+    final staged = File('${request.path}.tmp');
+    staged.writeAsStringSync(
+      jsonEncode({...payload, 'step': step}),
+      flush: true,
+    );
+    staged.renameSync(request.path);
+    final deadline = DateTime.now().add(const Duration(seconds: 90));
+    while (DateTime.now().isBefore(deadline)) {
+      if (response.existsSync()) {
+        try {
+          final decoded = jsonDecode(response.readAsStringSync());
+          if (decoded is Map<String, Object?> && decoded['step'] == step) {
+            response.deleteSync();
+            if (decoded['status'] != 'ok') {
+              throw JourneyInputFailure(
+                'input step $step failed: ${decoded['detail']}',
+              );
+            }
+            // Let the engine deliver and the framework settle the event.
+            await Future<void>.delayed(const Duration(milliseconds: 120));
+            return;
+          }
+        } on FormatException {
+          // A partially written response is retried on the next poll.
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    throw JourneyInputFailure('input step $step timed out waiting for helper');
+  }
+
+  @override
+  Future<void> tap(Offset position, double devicePixelRatio) => _exchange({
+    'kind': 'tap',
+    'x': position.dx,
+    'y': position.dy,
+    'device_pixel_ratio': devicePixelRatio,
+  });
+
+  @override
+  Future<void> key(String keyName) =>
+      _exchange({'kind': 'key', 'key': keyName});
+
+  @override
+  Future<void> type(String text) => _exchange({'kind': 'text', 'text': text});
+
+  @override
+  Future<void> dispose() async {
+    if (request.existsSync()) request.deleteSync();
+  }
+}
+
+/// In-process driver using the same framework entry points as platform input.
+final class FrameworkInput implements JourneyInput {
+  const FrameworkInput();
+
+  @override
+  String get mode => 'framework';
+
+  static const Map<String, (LogicalKeyboardKey, PhysicalKeyboardKey)> _keys = {
+    'Right': (LogicalKeyboardKey.arrowRight, PhysicalKeyboardKey.arrowRight),
+    'Left': (LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft),
+    'Escape': (LogicalKeyboardKey.escape, PhysicalKeyboardKey.escape),
+  };
+
+  Future<void> _settle() async {
+    for (var index = 0; index < 3; index += 1) {
+      await SchedulerBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+    }
+  }
+
+  @override
+  Future<void> tap(Offset position, double devicePixelRatio) async {
+    final binding = GestureBinding.instance;
+    binding.handlePointerEvent(PointerDownEvent(position: position));
+    binding.handlePointerEvent(PointerUpEvent(position: position));
+    await _settle();
+  }
+
+  @override
+  Future<void> key(String keyName) async {
+    final entry = _keys[keyName];
+    if (entry == null) {
+      throw JourneyInputFailure('framework input has no mapping for $keyName');
+    }
+    final keyboard = HardwareKeyboard.instance;
+    keyboard.handleKeyEvent(
+      KeyDownEvent(
+        physicalKey: entry.$2,
+        logicalKey: entry.$1,
+        timeStamp: Duration.zero,
+      ),
+    );
+    keyboard.handleKeyEvent(
+      KeyUpEvent(
+        physicalKey: entry.$2,
+        logicalKey: entry.$1,
+        timeStamp: Duration.zero,
+      ),
+    );
+    await _settle();
+  }
+
+  @override
+  Future<void> type(String text) => Future<void>.error(
+    JourneyInputFailure(
+      'framework input cannot type into a TextField; use --input=x11',
+    ),
+  );
+
+  @override
+  Future<void> dispose() async {}
+}

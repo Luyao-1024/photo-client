@@ -10,7 +10,7 @@ abstract interface class LocalLibraryGateway {
   });
   Future<LocalScanResult> addPaths(List<String> paths);
   Future<void> cancelScan();
-  Future<String> thumbnail(String mediaId);
+  Future<String> thumbnail(String mediaId, {int sizeClass = 512});
   Future<void> setFavorite(String mediaId, bool favorite);
   Stream<void> watchLibrary();
 }
@@ -18,6 +18,17 @@ abstract interface class LocalLibraryGateway {
 abstract interface class LocalSourcePicker {
   Future<List<String>> chooseFiles();
   Future<String?> chooseDirectory();
+}
+
+/// Cache classes owned by the native thumbnail cache; UI must not invent keys.
+const List<int> kThumbnailSizeClasses = [256, 512, 1024];
+
+/// Smallest cached class that still covers the requested device pixels.
+int thumbnailSizeClassFor(double devicePixels) {
+  for (final sizeClass in kThumbnailSizeClasses) {
+    if (devicePixels <= sizeClass) return sizeClass;
+  }
+  return kThumbnailSizeClasses.last;
 }
 
 class LocalLibraryInfo {

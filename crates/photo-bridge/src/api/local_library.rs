@@ -258,7 +258,13 @@ pub async fn cancel_scan() -> Result<(), String> {
     Ok(())
 }
 
-pub async fn thumbnail(media_id: String) -> Result<String, String> {
+/// Cached preview classes are fixed so the cache key space stays bounded.
+pub const THUMBNAIL_SIZE_CLASSES: [u32; 3] = [256, 512, 1024];
+
+pub async fn thumbnail(media_id: String, size_class: u32) -> Result<String, String> {
+    if !THUMBNAIL_SIZE_CLASSES.contains(&size_class) {
+        return Err("InvalidThumbnailSizeClass".into());
+    }
     let active = service()?;
     let _permit = active
         .thumbnails
@@ -278,13 +284,13 @@ pub async fn thumbnail(media_id: String) -> Result<String, String> {
             .join(&photo.id)
             .join(photo.content_version.to_string());
         std::fs::create_dir_all(&directory).map_err(|_| "CacheUnavailable")?;
-        let destination = directory.join("thumbnail-512.jpg");
+        let destination = directory.join(format!("thumbnail-{size_class}.jpg"));
         if !destination.is_file() {
             media::prepare_thumbnail(
                 std::path::Path::new(&photo.path),
                 photo.size_bytes,
                 photo.modified_ns,
-                512,
+                size_class,
                 &destination,
             )?;
         }

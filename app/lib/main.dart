@@ -5,28 +5,44 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'platform/file_selector_source_picker.dart';
 import 'platform/native_core_gateway.dart';
+import 'selftest/launch_options.dart';
+import 'selftest/local_journey.dart';
 import 'services/core_gateway.dart';
 
 void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
-  final smoke = arguments.contains('--self-test');
-  final rejection = smoke && arguments.contains('--expect-profile-mismatch')
-      ? 'BuildProfileMismatch'
-      : smoke && arguments.contains('--expect-bridge-mismatch')
-      ? 'BridgeMismatch'
-      : null;
+  final LaunchOptions options;
+  try {
+    options = LaunchOptions.parse(arguments, strict: true);
+  } on ArgumentError catch (error) {
+    stderr.writeln('PHOTO_CLIENT_ARGUMENT_ERROR: ${error.message}');
+    exit(2);
+  }
+  final rejection = options.selfTest ? options.expectedRejection : null;
   final gateway = NativeCoreGateway(
     expectedDigestOverride: rejection == 'BuildProfileMismatch'
         ? 'invalid'
         : null,
     protocolOverride: rejection == 'BridgeMismatch' ? 2 : null,
+    dataRoot: options.dataRoot,
   );
-  if (smoke) {
+  if (options.selfTest) {
     runApp(_BootstrapSmokeApp(gateway: gateway, expectedRejection: rejection));
-  } else {
-    runApp(PhotoClientApp(gateway: gateway));
+    return;
   }
+  if (options.localJourney) {
+    // Real product widgets over real FFI/SQLite/files; see selftest docs.
+    unawaited(LocalJourney.run(gateway, options).then((code) => exit(code)));
+    return;
+  }
+  runApp(
+    PhotoClientApp(
+      gateway: gateway,
+      sourcePicker: const FileSelectorSourcePicker(),
+    ),
+  );
 }
 
 /// A real-window check, separate from the product flow and fake widget tests.

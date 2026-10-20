@@ -117,7 +117,10 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiBootstrapShutdown();
 
-  Future<String> crateApiLocalLibraryThumbnail({required String mediaId});
+  Future<String> crateApiLocalLibraryThumbnail({
+    required String mediaId,
+    required int sizeClass,
+  });
 
   Stream<RuntimeEvent> crateApiBootstrapWatchRuntime();
 }
@@ -438,12 +441,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "shutdown", argNames: []);
 
   @override
-  Future<String> crateApiLocalLibraryThumbnail({required String mediaId}) {
+  Future<String> crateApiLocalLibraryThumbnail({
+    required String mediaId,
+    required int sizeClass,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(mediaId, serializer);
+          sse_encode_u_32(sizeClass, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -456,14 +463,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiLocalLibraryThumbnailConstMeta,
-        argValues: [mediaId],
+        argValues: [mediaId, sizeClass],
         apiImpl: this,
       ),
     );
   }
 
   TaskConstMeta get kCrateApiLocalLibraryThumbnailConstMeta =>
-      const TaskConstMeta(debugName: "thumbnail", argNames: ["mediaId"]);
+      const TaskConstMeta(
+        debugName: "thumbnail",
+        argNames: ["mediaId", "sizeClass"],
+      );
 
   @override
   Stream<RuntimeEvent> crateApiBootstrapWatchRuntime() {

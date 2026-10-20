@@ -34,8 +34,11 @@ Future<LocalScanResult> addPaths({required List<String> paths}) =>
 Future<void> cancelScan() =>
     RustLib.instance.api.crateApiLocalLibraryCancelScan();
 
-Future<String> thumbnail({required String mediaId}) =>
-    RustLib.instance.api.crateApiLocalLibraryThumbnail(mediaId: mediaId);
+Future<String> thumbnail({required String mediaId, required int sizeClass}) =>
+    RustLib.instance.api.crateApiLocalLibraryThumbnail(
+      mediaId: mediaId,
+      sizeClass: sizeClass,
+    );
 
 Future<void> setFavorite({required String mediaId, required bool favorite}) =>
     RustLib.instance.api.crateApiLocalLibrarySetFavorite(

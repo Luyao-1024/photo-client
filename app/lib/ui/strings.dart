@@ -103,6 +103,11 @@ class AppStrings {
   String get markFavorite => pick('收藏照片', 'Favorite photo');
   String get unmarkFavorite => pick('取消收藏', 'Remove favorite');
   String get details => pick('照片信息', 'Photo information');
+  String get zoomIn => pick('放大', 'Zoom in');
+  String get zoomOut => pick('缩小', 'Zoom out');
+  String get zoomReset => pick('恢复缩放', 'Reset zoom');
+  String get immersive => pick('沉浸浏览', 'Immersive view');
+  String get exitImmersive => pick('退出沉浸浏览', 'Exit immersive view');
   String get close => pick('关闭', 'Close');
   String get filePath => pick('文件路径', 'File path');
   String get fileSize => pick('文件大小', 'File size');

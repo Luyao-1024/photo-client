@@ -20,22 +20,28 @@ class LocalMediaTile extends StatefulWidget {
 }
 
 class _LocalMediaTileState extends State<LocalMediaTile> {
-  late Future<String> _thumbnail;
-  @override
-  void initState() {
-    super.initState();
-    _load();
+  /// One in-flight request per bounded cache class, reused across rebuilds.
+  final Map<int, Future<String>> _requests = {};
+  String? _identity;
+
+  String get _photoIdentity =>
+      '${widget.photo.id}:${widget.photo.contentVersion}';
+
+  Future<String> _thumbnail(int sizeClass) {
+    final identity = _photoIdentity;
+    if (_identity != identity) {
+      _identity = identity;
+      _requests.clear();
+    }
+    return _requests.putIfAbsent(
+      sizeClass,
+      () => widget.gateway.thumbnail(widget.photo.id, sizeClass: sizeClass),
+    );
   }
 
-  void _load() => _thumbnail = widget.gateway.thumbnail(widget.photo.id);
-  @override
-  void didUpdateWidget(LocalMediaTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.photo.id != widget.photo.id ||
-        oldWidget.photo.contentVersion != widget.photo.contentVersion ||
-        oldWidget.gateway != widget.gateway) {
-      _load();
-    }
+  void _retry(int sizeClass) {
+    if (!mounted) return;
+    setState(() => _requests.remove(sizeClass));
   }
 
   @override
@@ -62,24 +68,24 @@ class _LocalMediaTileState extends State<LocalMediaTile> {
                         color: Theme.of(context)
                             .colorScheme
                             .surfaceContainerHighest,
-                        child: FutureBuilder<String>(
-                          future: _thumbnail,
-                          builder: (context, result) {
-                            if (result.hasError) return _failure(strings);
-                            if (!result.hasData) {
-                              return const Center(
-                                child: Icon(Icons.photo_outlined),
-                              );
-                            }
-                            return LayoutBuilder(
-                              builder: (context, constraints) {
-                                final target =
-                                    (constraints.maxWidth *
-                                            MediaQuery.devicePixelRatioOf(
-                                              context,
-                                            ))
-                                        .ceil()
-                                        .clamp(64, 1024);
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final pixels =
+                                constraints.maxWidth *
+                                MediaQuery.devicePixelRatioOf(context);
+                            final sizeClass = thumbnailSizeClassFor(pixels);
+                            final target = pixels.ceil().clamp(64, 1024);
+                            return FutureBuilder<String>(
+                              future: _thumbnail(sizeClass),
+                              builder: (context, result) {
+                                if (result.hasError) {
+                                  return _failure(strings, sizeClass);
+                                }
+                                if (!result.hasData) {
+                                  return const Center(
+                                    child: Icon(Icons.photo_outlined),
+                                  );
+                                }
                                 return Image(
                                   image: ResizeImage.resizeIfNeeded(
                                     target,
@@ -89,7 +95,7 @@ class _LocalMediaTileState extends State<LocalMediaTile> {
                                   fit: BoxFit.cover,
                                   excludeFromSemantics: true,
                                   errorBuilder: (context, error, stack) =>
-                                      _failure(strings),
+                                      _failure(strings, sizeClass),
                                 );
                               },
                             );
@@ -134,10 +140,10 @@ class _LocalMediaTileState extends State<LocalMediaTile> {
     );
   }
 
-  Widget _failure(AppStrings strings) => Center(
+  Widget _failure(AppStrings strings, int sizeClass) => Center(
     child: IconButton(
       tooltip: strings.retryImage,
-      onPressed: () => setState(_load),
+      onPressed: () => _retry(sizeClass),
       icon: Icon(
         Icons.broken_image_outlined,
         semanticLabel: strings.thumbnailUnavailable,

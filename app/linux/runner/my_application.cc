@@ -1,5 +1,7 @@
 #include "my_application.h"
 
+#include <stdio.h>
+
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -52,7 +54,26 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "photo_client");
   }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  // Deterministic window geometry for responsive/acceptance runs. The flag is
+  // also forwarded to Dart, which ignores it.
+  gint window_width = 1280;
+  gint window_height = 720;
+  const gchar kWindowSizeFlag[] = "--window-size=";
+  for (gchar** argument = self->dart_entrypoint_arguments; argument && *argument;
+       ++argument) {
+    if (!g_str_has_prefix(*argument, kWindowSizeFlag)) {
+      continue;
+    }
+    gint parsed_width = 0;
+    gint parsed_height = 0;
+    if (sscanf(*argument + sizeof(kWindowSizeFlag) - 1, "%dx%d", &parsed_width,
+               &parsed_height) == 2 &&
+        parsed_width > 0 && parsed_height > 0) {
+      window_width = parsed_width;
+      window_height = parsed_height;
+    }
+  }
+  gtk_window_set_default_size(window, window_width, window_height);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
