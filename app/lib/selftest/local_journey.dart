@@ -15,12 +15,12 @@ import '../services/local_library_gateway.dart';
 import '../ui/library_shell.dart';
 import '../ui/local_library_controller.dart';
 import '../ui/runtime_controller.dart';
-import '../ui/strings.dart';
 import 'journey_input.dart';
 import 'launch_options.dart';
 
 const String _recordPrefix = 'PHOTO_CLIENT_LOCAL ';
 const String _readyPrefix = 'PHOTO_CLIENT_LOCAL_READY ';
+const String _stepPrefix = 'PHOTO_CLIENT_LOCAL_STEP ';
 
 /// Drives the shipped UI over real FFI, SQLite, files and a real window.
 ///
@@ -41,6 +41,7 @@ final class LocalJourney {
   ProviderContainer? _container;
   JourneyInput? _input;
   LocalLibraryGateway? _library;
+  File? _traceFile;
 
   LibraryViewState get _state => _container!.read(localLibraryProvider);
   RuntimeViewState get _runtime => _container!.read(runtimeProvider);
@@ -59,6 +60,11 @@ final class LocalJourney {
 
   Future<int> _execute() async {
     final started = DateTime.now();
+    final tracePath = options.evidenceDir;
+    if (tracePath != null) {
+      _traceFile = File('$tracePath/journey-trace.jsonl');
+    }
+    _trace('journey', 'START', options.journeyPhase);
     var result = 'PASS';
     String? failure;
     try {
@@ -85,6 +91,7 @@ final class LocalJourney {
       result = 'FAIL';
       failure = error is JourneyFailure ? error.message : '$error';
       steps.add({'id': 'journey', 'status': 'FAIL', 'detail': failure});
+      _trace('journey', 'FAIL', failure);
     }
     final record = <String, Object?>{
       'result': result,
@@ -102,9 +109,13 @@ final class LocalJourney {
       'screenshots': screenshots,
       'failure': ?failure,
     };
+    _trace('shutdown', 'START');
     await _shutdown();
+    _trace('shutdown', 'DONE');
     stdout.writeln('$_recordPrefix${jsonEncode(record)}');
+    _trace('record', 'WRITTEN');
     await stdout.flush();
+    _trace('record', 'FLUSHED');
     return result == 'PASS' ? 0 : 1;
   }
 
@@ -169,16 +180,19 @@ final class LocalJourney {
   }
 
   Future<void> _shutdown() async {
+    _trace('shutdown-input', 'START');
     try {
       await _input?.dispose();
     } catch (_) {
       // Evidence files stay behind for inspection; shutdown must still run.
     }
+    _trace('shutdown-input', 'DONE');
     try {
       await _container?.read(runtimeProvider.notifier).shutdown();
     } catch (_) {
       // A rejected native session must not hide the journey record.
     }
+    _trace('shutdown-runtime', 'DONE');
   }
 
   // ------------------------------------------------------------------- phases
@@ -214,9 +228,11 @@ final class LocalJourney {
       }
     }
     facts['detail'] = detail;
+    _trace('probe-shutdown', 'START');
     try {
       await gateway.shutdown();
     } catch (_) {}
+    _trace('probe-shutdown', 'DONE');
     stdout.writeln(
       '$_recordPrefix${jsonEncode({
         'result': result,
@@ -255,7 +271,19 @@ final class LocalJourney {
         facts['scan_skipped_existing_items'] = opened;
         return;
       }
+      // Settings now owns source management: open the dialog, pick the
+      // scripted folder, then close the dialog before watching the real scan.
+      await _tapKey('sidebar-settings');
+      await _waitForElement(
+        'add-folder',
+        reason: 'the settings dialog did not offer add-folder',
+      );
       await _tapKey('add-folder');
+      await _key('Escape');
+      await _waitFor(
+        () => _elementByKey(const ValueKey('add-folder')) == null,
+        reason: 'Escape did not close the settings dialog',
+      );
       await _waitFor(
         () => _state.scanning || _state.scanResult != null,
         reason: 'the real add-folder button did not start a scan',
@@ -291,6 +319,10 @@ final class LocalJourney {
           'grid total ${state.total} disagrees with the library count ${state.info!.count}',
         );
       }
+      // Reopen must pin the library provision leaves behind, not the empty
+      // one library-open observed before the scan.
+      facts['opened_count'] = state.info!.count;
+      facts['opened_revision'] = state.info!.revision;
       final tiles = _elementsWithKeyPrefix('photo-');
       facts['tiles_in_tree'] = tiles.length;
       if (tiles.isEmpty) throw JourneyFailure('no grid tile was rendered');
@@ -379,26 +411,36 @@ final class LocalJourney {
       final photo = _state.pages[0]!.first;
       await _tapKey('viewer-details');
       await _waitFor(
-        () => _dialogTexts().contains(photo.path),
-        reason: 'the details dialog does not show the real source path',
+        () => _panelTexts().contains(photo.path),
+        reason: 'the details panel does not show the real source path',
       );
-      final texts = _dialogTexts();
+      final texts = _panelTexts();
       facts['details'] = texts;
       if (!texts.contains('${photo.sizeBytes} B')) {
-        throw JourneyFailure('details dialog is missing the real file size');
+        throw JourneyFailure('details panel is missing the real file size');
       }
       if (photo.width != null &&
           !texts.contains('${photo.width} × ${photo.height}')) {
-        throw JourneyFailure('details dialog is missing the real dimensions');
+        throw JourneyFailure('details panel is missing the real dimensions');
       }
-      final dialog = _elementOfWidget<AlertDialog>();
-      if (dialog == null) {
-        throw JourneyFailure('the details dialog disappeared');
-      }
-      await _tapText(AppStrings.of(dialog).close);
+      // The panel slides in over ~220ms; wait until it rests at its final
+      // position so the real pointer tap aims at the live close control.
+      Offset? previous;
+      await _waitFor(() {
+        final render = _elementByKey(
+          const ValueKey('viewer-details-panel'),
+        )?.findRenderObject();
+        if (render is! RenderBox || !render.hasSize) return false;
+        final position = render.localToGlobal(Offset.zero);
+        final stable =
+            previous != null && (position - previous!).distance < .5;
+        previous = position;
+        return stable;
+      }, reason: 'the details panel never came to rest');
+      await _tapKey('viewer-details-close');
       await _waitFor(
-        () => _dialogTexts().isEmpty,
-        reason: 'the details dialog did not close',
+        () => _elementByKey(const ValueKey('viewer-details-panel')) == null,
+        reason: 'the details panel did not close',
       );
     });
     await _step('favorite-persists-in-database', () async {
@@ -440,20 +482,20 @@ final class LocalJourney {
       }
     });
     await _step('favorites-filter', () async {
-      await _tapKey('filter-favorites');
+      await _tapKey('sidebar-favorites');
       await _waitFor(
         () => _state.favoritesOnly && !_state.loading,
-        reason: 'the favorites filter did not activate',
+        reason: 'the favorites album did not activate',
       );
       facts['favorites_filter_total'] = _state.total;
       if (_state.total != 1) {
         throw JourneyFailure('favorites filter returned ${_state.total} items');
       }
       await _screenshot('03-favorites-filter');
-      await _tapKey('filter-favorites');
+      await _tapKey('sidebar-photos');
       await _waitFor(
         () => !_state.favoritesOnly && _state.total > 1,
-        reason: 'clearing the favorites filter did not restore the library',
+        reason: 'leaving the favorites album did not restore the library',
       );
     });
     await _step('search-uses-current-query-only', () async {
@@ -529,10 +571,10 @@ final class LocalJourney {
       facts['favorite_id'] = favorites.items.single.id;
     });
     await _step('restart-favorites-filter', () async {
-      await _tapKey('filter-favorites');
+      await _tapKey('sidebar-favorites');
       await _waitFor(
         () => _state.favoritesOnly && _state.total == 1,
-        reason: 'the favorites filter did not restore the marked photo',
+        reason: 'the favorites album did not restore the marked photo',
       );
     });
     await _step('restart-viewer-still-decodes', () async {
@@ -617,32 +659,39 @@ final class LocalJourney {
       reason: 'widget $keyValue is not mounted',
     );
     final position = _centerOf(element, keyValue);
+    _trace('tap', 'SEND', '$keyValue at ${position.dx},${position.dy}');
     await _input!.tap(position, _devicePixelRatio);
-    await _settle();
-  }
-
-  Future<void> _tapText(String label) async {
-    final element = await _waitForTextButton(
-      label,
-      reason: 'no button labelled "$label" is mounted',
-    );
-    await _input!.tap(_centerOf(element, label), _devicePixelRatio);
+    _trace('tap', 'ACK', keyValue);
     await _settle();
   }
 
   Future<void> _key(String keyName) async {
+    _trace('key', 'SEND', keyName);
     await _input!.key(keyName);
+    _trace('key', 'ACK', keyName);
     await _settle();
   }
 
   Future<void> _type(String text) async {
+    _trace('type', 'SEND', '$text (${text.length} characters)');
     await _input!.type(text);
+    _trace('type', 'ACK', text);
     await _settle();
   }
 
   Future<void> _settle() async {
     for (var index = 0; index < 2; index += 1) {
-      await SchedulerBinding.instance.endOfFrame;
+      // A quiet window may never schedule a frame on its own; ask for one and
+      // bound the wait so a stalled renderer is reported instead of hanging.
+      SchedulerBinding.instance.scheduleFrame();
+      var stalled = false;
+      await SchedulerBinding.instance.endOfFrame.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          stalled = true;
+        },
+      );
+      if (stalled) _trace('settle', 'STALL', 'no frame within 10s');
     }
   }
 
@@ -718,6 +767,7 @@ final class LocalJourney {
 
   Future<void> _step(String id, Future<void> Function() body) async {
     final started = Stopwatch()..start();
+    _trace(id, 'START');
     try {
       await body();
       started.stop();
@@ -726,6 +776,7 @@ final class LocalJourney {
         'status': 'PASS',
         'ms': started.elapsedMilliseconds,
       });
+      _trace(id, 'PASS', '${started.elapsedMilliseconds}ms');
     } catch (error) {
       started.stop();
       steps.add({
@@ -734,7 +785,32 @@ final class LocalJourney {
         'ms': started.elapsedMilliseconds,
         'detail': error is JourneyFailure ? error.message : '$error',
       });
+      _trace(id, 'FAIL', error is JourneyFailure ? error.message : '$error');
       rethrow;
+    }
+  }
+
+  /// Progress lines keep a stalled journey diagnosable: the JSON record is only
+  /// written on exit, so a hang would otherwise leave an empty log. The copy in
+  /// the evidence directory is written synchronously because a wedged isolate
+  /// never flushes the buffered stdout sink. Stdout writes must never flush per
+  /// line: a flush binds the sink, and the next write would then throw.
+  void _trace(String id, String status, [Object? detail]) {
+    final line =
+        '${jsonEncode({
+          'id': id,
+          'status': status,
+          'at': DateTime.now().toUtc().toIso8601String(),
+          if (detail != null) 'detail': '$detail',
+        })}\n';
+    final target = _traceFile;
+    if (target != null) {
+      target.writeAsStringSync(line, mode: FileMode.append, flush: true);
+    }
+    try {
+      stdout.write('$_stepPrefix$line');
+    } catch (_) {
+      // Instrumentation must never fail the journey it observes.
     }
   }
 
@@ -748,6 +824,7 @@ final class LocalJourney {
       if (predicate()) return;
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
+    _trace('wait', 'TIMEOUT', '$reason after ${timeout.inSeconds}s');
     throw JourneyFailure(reason);
   }
 
@@ -761,23 +838,6 @@ final class LocalJourney {
     await _waitFor(
       () {
         found = _elementByKey(key);
-        return found != null;
-      },
-      reason: reason,
-      timeout: timeout,
-    );
-    return found!;
-  }
-
-  Future<Element> _waitForTextButton(
-    String label, {
-    required String reason,
-    Duration timeout = const Duration(seconds: 30),
-  }) async {
-    Element? found;
-    await _waitFor(
-      () {
-        found = _buttonElementWithLabel(label);
         return found != null;
       },
       reason: reason,
@@ -887,9 +947,9 @@ final class LocalJourney {
     return null;
   }
 
-  List<String> _dialogTexts() {
-    final dialog = _elementOfWidget<AlertDialog>();
-    if (dialog == null) return const [];
+  List<String> _panelTexts() {
+    final panel = _elementByKey(const ValueKey('viewer-details-panel'));
+    if (panel == null) return const [];
     final texts = <String>[];
     void visit(Element element) {
       final widget = element.widget;
@@ -900,35 +960,8 @@ final class LocalJourney {
       element.visitChildren(visit);
     }
 
-    visit(dialog);
+    visit(panel);
     return texts;
-  }
-
-  Element? _buttonElementWithLabel(String label) {
-    Element? found;
-    void visit(Element element) {
-      if (found != null) return;
-      final widget = element.widget;
-      if (widget is TextButton) {
-        final texts = <String>[];
-        void collect(Element child) {
-          final text = child.widget;
-          if (text is Text && text.data != null) texts.add(text.data!);
-          child.visitChildren(collect);
-        }
-
-        collect(element);
-        if (texts.any((value) => value.toLowerCase() == label.toLowerCase())) {
-          found = element;
-          return;
-        }
-      }
-      element.visitChildren(visit);
-    }
-
-    final root = WidgetsBinding.instance.rootElement;
-    if (root != null) visit(root);
-    return found;
   }
 }
 

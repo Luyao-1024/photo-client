@@ -181,23 +181,24 @@ class RuntimeController extends Notifier<RuntimeViewState> {
     }
     // A late successful initialize must not create an orphaned native session.
     await _initializing;
+    if (_attempted) {
+      try {
+        // Native shutdown emits the closing event, which ends the event stream;
+        // cancelling the subscription beforehand never completes.
+        await _gateway.shutdown();
+        _attempted = false;
+      } catch (_) {
+        if (!_disposed) {
+          state = state.copyWith(problem: RuntimeProblem.shutdown);
+        }
+      }
+    }
     try {
       await _subscription?.cancel();
       _subscription = null;
     } catch (_) {
       if (!_disposed) {
         state = state.copyWith(problem: RuntimeProblem.shutdown);
-      }
-    } finally {
-      if (_attempted) {
-        try {
-          await _gateway.shutdown();
-          _attempted = false;
-        } catch (_) {
-          if (!_disposed) {
-            state = state.copyWith(problem: RuntimeProblem.shutdown);
-          }
-        }
       }
     }
   }

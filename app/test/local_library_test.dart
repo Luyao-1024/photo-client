@@ -58,26 +58,49 @@ void main() {
     await gateway.events.close();
   }
 
+  Future<void> openSettings(WidgetTester tester) async {
+    await tester.tap(find.byKey(const ValueKey('sidebar-settings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('add-folder')), findsOneWidget);
+  }
+
+  /// Escape-closes the dialog with bounded pumps: while a scan spinner runs,
+  /// pumpAndSettle would never return.
+  Future<void> closeSettingsQuietly(WidgetTester tester) async {
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const ValueKey('add-folder')), findsNothing);
+  }
+
   testWidgets(
     'real mode opens an empty local library and disables unavailable picker',
     (tester) async {
       final gateway = FakeLocalGateway(imagePath: image);
       await mount(tester, gateway);
-      expect(find.text('Add local photos to start browsing'), findsOneWidget);
-      expect(find.text('Library: 0 photos · revision 1'), findsOneWidget);
+      expect(find.text('Library is empty'), findsOneWidget);
+      // The empty state offers a live path into Settings (not a dead button);
+      // the quiet overview with counts only renders once there is content.
       expect(
         tester
-            .widget<FilledButton>(find.byKey(const ValueKey('add-files')))
+            .widget<FilledButton>(find.byKey(const ValueKey('open-settings')))
             .onPressed,
-        isNull,
-      );
-      expect(
-        tester
-            .widget<OutlinedButton>(find.byKey(const ValueKey('add-folder')))
-            .onPressed,
-        isNull,
+        isNotNull,
       );
       expect(find.textContaining('cloud'), findsNothing);
+      await openSettings(tester);
+      expect(
+        tester
+            .widget<OutlinedButton>(find.byKey(const ValueKey('add-files')))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('add-folder')))
+            .onPressed,
+        isNull,
+      );
       await disposeApp(tester, gateway);
     },
   );
@@ -90,6 +113,7 @@ void main() {
       ..directory = null
       ..files = [];
     await mount(tester, gateway, picker: picker);
+    await openSettings(tester);
     await tester.tap(find.byKey(const ValueKey('add-folder')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('add-files')));
@@ -108,6 +132,7 @@ void main() {
         final gateway = FakeLocalGateway(imagePath: image);
         final picker = FakePicker();
         await mount(tester, gateway, picker: picker, width: 390);
+        await openSettings(tester);
         await tester.tap(
           find.byKey(ValueKey(directory ? 'add-folder' : 'add-files')),
         );
@@ -116,7 +141,7 @@ void main() {
           gateway.addedPaths,
           directory ? ['/chosen/photos'] : ['/chosen/photo.png'],
         );
-        expect(find.text('Library: 1 photos · revision 2'), findsOneWidget);
+        expect(find.text('1 photos'), findsOneWidget);
         expect(
           find.text('Scan finished: 1 discovered, 0 skipped, 0 failed'),
           findsOneWidget,
@@ -199,7 +224,7 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('viewer-close')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('filter-favorites')));
+    await tester.tap(find.byKey(const ValueKey('sidebar-favorites')));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
@@ -214,17 +239,19 @@ void main() {
     (tester) async {
       final gateway = FakeLocalGateway(imagePath: image, count: 4);
       await mount(tester, gateway);
-      await tester.enterText(
-        find.byKey(const ValueKey('library-search')),
-        'not-present',
-      );
+      // The search field is hidden behind the round search button at rest.
+      await tester.tap(find.byKey(const ValueKey('library-search')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'not-present');
       await tester.pump(const Duration(milliseconds: 100));
       expect(gateway.listCalls, 1);
       await tester.pump(const Duration(milliseconds: 250));
       await tester.pumpAndSettle();
       expect(gateway.requestedSearches.last, 'not-present');
+      // An unmatched search is distinct from an empty library: the no-matches
+      // state shows, and the empty-library state never does.
       expect(find.text('No matching photos'), findsOneWidget);
-      expect(find.text('Library: 4 photos · revision 1'), findsOneWidget);
+      expect(find.text('Library is empty'), findsNothing);
       await disposeApp(tester, gateway);
     },
   );
@@ -236,11 +263,11 @@ void main() {
       await mount(tester, gateway);
       expect(find.byKey(const ValueKey('library-error')), findsOneWidget);
       expect(find.textContaining('PRIVATE'), findsNothing);
-      expect(find.text('Add local photos to start browsing'), findsNothing);
+      expect(find.text('Library is empty'), findsNothing);
       gateway.failOpen = false;
       await tester.tap(find.byKey(const ValueKey('retry-library')));
       await tester.pumpAndSettle();
-      expect(find.text('Add local photos to start browsing'), findsOneWidget);
+      expect(find.text('Library is empty'), findsOneWidget);
       await disposeApp(tester, gateway);
     },
   );
@@ -275,16 +302,21 @@ void main() {
       final gateway = FakeLocalGateway(imagePath: image)
         ..pendingScan = Completer<LocalScanResult>();
       await mount(tester, gateway, picker: FakePicker());
+      await openSettings(tester);
       await tester.tap(find.byKey(const ValueKey('add-folder')));
       await tester.pump();
+      await closeSettingsQuietly(tester);
+      // Empty library + active scan: the indexing status page shows instead
+      // of the grid, and its spinner never lets pumpAndSettle return.
+      expect(find.text('Scanning local sources…'), findsOneWidget);
       gateway.photos.add(gateway.photo(0));
       gateway.revision++;
       for (var index = 0; index < 10; index++) {
         gateway.changes.add(null);
       }
       await tester.pump(const Duration(milliseconds: 350));
-      await tester.pumpAndSettle();
-      expect(find.text('Scanning local sources…'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.text('Indexing…'), findsOneWidget);
       expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
       expect(gateway.listCalls, 2);
       gateway.pendingScan!.complete(
@@ -307,16 +339,18 @@ void main() {
   testWidgets(
     'cancel acknowledgement keeps scan pending until its actual result',
     (tester) async {
-      final gateway = FakeLocalGateway(imagePath: image)
+      final gateway = FakeLocalGateway(imagePath: image, count: 1)
         ..pendingScan = Completer<LocalScanResult>();
       await mount(tester, gateway, picker: FakePicker());
       expect(find.byKey(const ValueKey('cancel-scan')), findsNothing);
+      await openSettings(tester);
       await tester.tap(find.byKey(const ValueKey('add-folder')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await closeSettingsQuietly(tester);
       await tester.tap(find.byKey(const ValueKey('cancel-scan')));
-      await tester.pumpAndSettle();
+      await tester.pump();
       expect(gateway.cancellationsRequested, 1);
-      expect(find.text('Scanning local sources…'), findsOneWidget);
+      expect(find.text('Indexing…'), findsOneWidget);
       expect(find.textContaining('Scan cancelled:'), findsNothing);
       expect(
         tester
@@ -324,12 +358,17 @@ void main() {
             .onPressed,
         isNull,
       );
+      // Reopening settings during the scan shows add-folder disabled.
+      await tester.tap(find.byKey(const ValueKey('sidebar-settings')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
         tester
-            .widget<OutlinedButton>(find.byKey(const ValueKey('add-folder')))
+            .widget<FilledButton>(find.byKey(const ValueKey('add-folder')))
             .onPressed,
         isNull,
       );
+      await closeSettingsQuietly(tester);
       gateway.pendingScan!.complete(
         const LocalScanResult(
           discovered: 0,

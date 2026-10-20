@@ -1,43 +1,40 @@
-# 开发暂停记录
+# 开发进度记录（已恢复）
 
-日期：2026-10-20。状态：**按用户要求暂停功能开发**。两个子agent完成当前小点、报告结果后已关闭；主agent完成当前本地库测试和编译检查后停止。没有继续原生本地图库接线或增加功能。
+日期：2026-10-20 暂停 → 2026-10-20/21 恢复。状态：**按用户要求恢复开发**，完成恢复入口第 1–3 步（FRB 绑定再生、原生 gateway 接通本地接口与真实选择器/`--data-root`、隔离临时库真实旅程），并执行 S02–S04 真实端到端旅程。未使用用户照片完成自动验收。
 
-## 已完成的共用工程检查点
+## 已完成共用工程检查点
 
-S01技术验收已通过：两次Linux release构建、真实Xvfb窗口、UTF-8往返、事件顺序`[1,2,3]`、正常关闭、配置摘要/协议错配拒绝和重复构建一致性。
+S01 技术验收已通过：两次 Linux release 构建、真实 Xvfb 窗口、UTF-8 往返、事件顺序、正常关闭、配置摘要/协议错配拒绝与重复构建一致性。证据：[S01 报告](../verification/S01/s01-linux-local-foundation/report.json)。
 
-证据：[S01报告](../verification/S01/s01-linux-local-foundation/report.json)、[执行环境](../verification/S01/s01-linux-local-foundation/execution-context.json)。这些对应当时S01构建；不能直接代表后续本地组件的整体构建/验收。
+组件层证据（暂停前，仍有效）：S02 `local_library` 4/4、S03 `media_local` 18/18、S04 widget 28/28、`cargo check/fmt/clippy` PASS。这些是各自层级证据，不累加为端到端通过。
 
-## 此次停止前完成的小点
+## S02–S04 真实端到端旅程（本次恢复）
 
-| 归属 | 完成内容 | 实际检查 |
-|---|---|---|
-| 主agent：S02本地库组件 | 独立LibraryId、结构化SQLite、单writer/数据根锁、批量索引、键集分页、搜索/收藏和重启保持 | `cargo test --locked -p photo-core --test local_library`：4/4 PASS |
-| 媒体agent：S03组件 | 只读扫描、最多100条批次、取消/坏图隔离、JPEG/PNG/WebP头信息、EXIF方向、有界缩略图及源版本复核 | `cargo test --locked --offline -p photo-core --test media_local`：18/18 PASS |
-| 界面agent：S04组件 | 本地接口、选择/扫描状态、分页网格、搜索/收藏、查看器/键盘/缩放/元数据、取消确认 | `flutter --no-version-check test test/presentation_test.dart test/local_library_test.dart`：28/28 PASS，其中15项S01回归、13项本地展示 |
-| 主agent：既有代码编译 | 新增Rust本地API及其依赖可通过类型检查 | `cargo check --locked -p photo-bridge`：PASS |
-| 主agent：收尾质量 | 修正两处收尾Clippy风格问题，无功能扩展 | `cargo fmt --all --check`、`cargo clippy --locked --offline -p photo-core --tests -- -D warnings`：PASS |
+通过 `tools/journey run --evidence-dir <fresh> --skip-build` 执行（隔离 Xvfb 显示 + xdotool 真实输入 + 真实 SQLite/FFI/文件/缩略图）。证据：[journey 报告](../verification/S02-S04/local-journey/report.json)，关键截图同目录（`01-grid.png`、`02-viewer-favorite.png`、`10-restart-favorite.png`）。
 
-S01验收工具检查为58项PASS。界面agent限定范围Dart分析无问题、16个授权文件格式检查通过。以上均是各自层级证据，不将组件测试累加为端到端通过。
+- 9 个 run 全 PASS：provision（扫描/网格/查看器/收藏）、hold + probe-rejected（单 writer 数据根锁）、probe-independent（独立数据根并发）、reopen + 390x844/800x600/1440x900（重启保留）、missing（源缺失不阻断）。
+- 9 项 check PASS：L02-01、L02-02、L03-01、L03-02、L03-03、L04-01、L04-02、L04-03、L04-04。
+- 扫描计数与 fixture 清单一致（发现 6 / 跳过 2 / 失败 1）；源文件字节与 mtime 未变（`source_facts.unchanged = true`）。
+- 重启锚点正确：library_id、opened_count=6、收藏路径在 reopen 后保持一致；收藏经全新 favorites-only 原生查询验证。
+- **gate = INCOMPLETE**：8 个子项无法端到端驱动，诚实记为 NOT RUN —— L02-03、L02-04（仅组件测试）、L03-01-dialog（真实 GTK 选择器）、L03-02-rescan、L03-03-bounds、L03-04、L04-02-viewer-gestures、L04-04-hover。
+
+旅程中修复的真实缺陷：
+1. `xdotool click` 零时长按压不被手势竞技场识别为 tap（hover 生效但 click 无效）→ [helper](../../tools/local_journey.py) 改为 mousedown/保持/mouseup 的真实按压时长。
+2. provision 的 `opened_count` 记录的是扫描前空库，导致 reopen 锚点错配（expected 0 got 6）→ [journey](../../app/lib/selftest/local_journey.dart) 在网格步后把锚点更新为扫描后库状态。
+3. 查看器缩放下界声明 0.5 但 InteractiveViewer 对满视口子节点钳制在 fit(1.0)，致 zoom-out 按钮"启用但无效" → [viewer](../../app/lib/ui/local_photo_viewer.dart) `_minScale` 改为 1，widget 测试下界同步为 100%。
+4. （此前）RuntimeController 关闭死锁（先取消永不完成的 FRB 流）与 trace 的 IOSink StateError 已修复。
+
+补充 widget 测试：新增 `viewer_zoom_test.dart`（3 项：缩放边界/沉浸/连发一致性）与 `responsive_widths_test.dart`（3 项：三分辨率全流程 + hover 不改变状态）。`flutter test` 全 35 项 PASS；`flutter analyze lib test` 0 问题。
 
 ## 当前未完成
 
-- Flutter的`NativeCoreGateway`目前仍只实现S01核心接口，尚未实现`LocalLibraryGateway`。
-- Rust本地API已写入并通过编译检查，但新增图库方法尚未重新生成到Flutter绑定。
-- 真实`LocalSourcePicker`适配器和入口参数`--data-root`接线未完成；`file_selector`依赖已解析。
-- 本地展示测试使用fake gateway/picker，未代替实际SQLite/FFI/文件/缩略图的整体验收。
-- 尚未验收“真实选择目录→显示图片→查看→收藏→重启保留”的全流程。
-- 十万图库性能、真实合成桌面玻璃、文件管理/编辑/监听和最终安装验收未完成；云同步继续留二期。
+- 上述 8 个 NOT RUN 子项仍仅组件级覆盖：真实 GTK 文件/目录选择器、重复源 rescan 去重与中途取消、256/512/1024 缓存匹配与解码优先级/有界队列、解码期间源变更、全屏查看/缩放平移/快速切换锚点、hover 不激活与焦点/触控目标、L02-03 跨库外键与命令作用域、L02-04 事务失败与迁移中断保留。**gate 保持 INCOMPLETE**。
+- reopen 查看器截图中图像主体偶发空白（截图早于异步解码完成）；不影响基于 DB/查询的断言，记为证据质量问题。
+- 十万图库性能、组织/搜索、文件管理、本地编辑、监听恢复、综合性能/玻璃 UX、Linux 安装交付未完成；云同步继续留二期。
 
-现有release bundle是S01工程产物；当前工作区还有后续未整体集成的本地组件。不要将该产物或28项widget测试称为已交付完整本地图应用。
+## 下一步入口
 
-## 恢复入口
+1. 决定是否为 8 个 NOT RUN 子项补端到端手段（真实 GTK 选择器需驱动真实对话框；缓存边界/手势需测量手段），或按验收规则在接受当前覆盖的前提下记录并关闸。
+2. 关闸后才进入 S05 十万图库前置性能。
 
-用户要求恢复后，从现有组件接线继续，不重写已通过组件：
-
-1. 复查冻结源码与依赖，重新生成本地API的FRB绑定。
-2. 让[原生gateway](../../app/lib/platform/native_core_gateway.dart)实现[本地接口](../../app/lib/services/local_library_gateway.dart)，加入真实选择器和隔离数据根入口。
-3. 在临时图库中执行真实文件/数据库/缩略图/UI旅程，记录S02–S04各自未验项；不使用用户照片完成自动验收。
-4. 之后才进入十万图库、组织/文件管理、编辑等后续步骤。
-
-没有创建提交、推送、远端CI或部署；没有修改相邻PhotoViewer和SyncServer项目。
+没有创建提交、推送、远端 CI 或部署；没有修改相邻 PhotoViewer 和 SyncServer 项目。

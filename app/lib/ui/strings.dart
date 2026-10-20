@@ -11,7 +11,35 @@ class AppStrings {
   String get appTitle => 'PhotoViewer';
   String get library => pick('图库', 'Library');
   String get connection => pick('核心连接', 'Core connection');
-  String get settings => pick('外观', 'Appearance');
+  String get settings => pick('设置', 'Settings');
+  String get appearance => pick('外观', 'Appearance');
+  String get albums => pick('相册', 'Albums');
+  String get albumFavorites => pick('收藏', 'Favorites');
+  String get trash => pick('回收站', 'Trash');
+  String get trashEmpty => pick(
+    '回收站为空。删除的照片会先移到这里，可恢复或彻底删除。',
+    'Trash is empty. Deleted photos land here first and can be restored or removed permanently.',
+  );
+  String get searchHint => pick('搜索照片', 'Search photos');
+  String get modeYear => pick('年', 'Year');
+  String get modeMonth => pick('月', 'Month');
+  String get modeDay => pick('日', 'Day');
+  String get today => pick('今天', 'Today');
+  String get yesterday => pick('昨天', 'Yesterday');
+  String selectedCountLabel(int n) => pick('已选择 $n 项', '$n selected');
+  String get selectAll => pick('全选', 'Select all');
+  String get deselectAll => pick('取消全选', 'Deselect all');
+  String get exitSelection => pick('退出选择', 'Exit selection');
+  String get addToAlbum => pick('添加到相册', 'Add to album');
+  String get moveToTrash => pick('移到回收站', 'Move to trash');
+  String get indexing => pick('正在索引…', 'Indexing…');
+  String get scanFailed => pick('扫描失败', 'Scan failed');
+  String get retryScan => pick('重新扫描', 'Retry scan');
+  String get emptyLibrary => pick('图库为空', 'Library is empty');
+  String get openSettings => pick('打开设置', 'Open settings');
+  String get scanFolders => pick('扫描目录', 'Scan folders');
+  String photosCountLabel(int n) => pick('$n 张照片', '$n photos');
+  String positionLabel(int cur, int total) => '$cur / $total';
   String get stage => pick('S01 · 工程验证', 'S01 · Foundation');
   String get connecting => pick('正在连接本地核心…', 'Connecting to the local core…');
   String get ready => pick('本地核心已连接', 'Local core connected');

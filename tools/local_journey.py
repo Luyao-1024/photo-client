@@ -267,7 +267,12 @@ class X11InputHelper:
             _focus(window, self.display)
             _run_x11(["xdotool", "mousemove", "--sync", "--window", window, str(x), str(y)],
                      self.display)
-            _run_x11(["xdotool", "click", "1"], self.display)
+            # A zero-duration press (down+up back-to-back) is not recognised as
+            # a tap by the gesture arena under XTest; hold like a real click.
+            time.sleep(0.05)
+            _run_x11(["xdotool", "mousedown", "1"], self.display)
+            time.sleep(0.12)
+            _run_x11(["xdotool", "mouseup", "1"], self.display)
             return f"click at {x},{y}"
         if kind == "drag":
             x1, y1 = self._scaled(payload, "x"), self._scaled(payload, "y")

@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Real local-journey entry point; uncovered checks keep the gate nonzero."""
+import sys
+
+try:
+    from journey_cli import main
+except ModuleNotFoundError as exc:
+    if exc.name == "yaml":
+        sys.exit("journey: PyYAML is required; install requirements-dev.txt")
+    raise
+
+sys.exit(main())
