@@ -1,0 +1,38 @@
+MESA-EGL: warning: DRI3 error: Could not get DRI3 device
+MESA-EGL: warning: Ensure your X server supports DRI3 to get accelerated rendering
+
+(io.github.photo_client.photo_client:656811): Atk-CRITICAL **: 00:53:59.837: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+JOURNEY phase=runApp
+JOURNEY phase=first-frame
+JOURNEY step=runtime-ready phase=start
+JOURNEY step=runtime-ready phase=pass ms=56
+JOURNEY step=library-open phase=start
+JOURNEY step=library-open phase=pass ms=53
+JOURNEY step=missing-source-keeps-history phase=start
+JOURNEY step=missing-source-keeps-history phase=pass ms=0
+JOURNEY step=missing-source-viewer-degrades phase=start
+JOURNEY tap=photo-aa35bfef-e02d-4f8f-b9c2-95422b37044e at=935.0,452.1 dpr=1.0
+INPUT step=1 kind=tap 
+INPUT step=1 status=ok detail=click at 935,452 | pointer x:935 y:452 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=screenshot-20-missing-source phase=start
+INPUT step=2 kind=screenshot 
+INPUT step=2 status=ok detail=20-missing-source-x11.png
+JOURNEY step=screenshot-20-missing-source phase=pass ms=600
+JOURNEY step=missing-source-viewer-degrades phase=pass ms=1419
+JOURNEY step=missing-source-does-not-block-others phase=start
+INPUT step=3 kind=key 
+INPUT step=3 status=ok detail=key Escape
+JOURNEY tap=photo-d6e57240-6076-4d67-9d77-0de8bb2b6940 at=353.0,452.1 dpr=1.0
+INPUT step=4 kind=tap 
+INPUT step=4 status=ok detail=click at 353,452 | pointer x:353 y:452 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=screenshot-21-healthy-after-missing phase=start
+INPUT step=5 kind=screenshot 
+INPUT step=5 status=ok detail=21-healthy-after-missing-x11.png
+JOURNEY step=screenshot-21-healthy-after-missing phase=pass ms=714
+JOURNEY step=missing-source-does-not-block-others phase=pass ms=1967
+JOURNEY shutdown=controller-start
+JOURNEY shutdown=controller-done
+JOURNEY shutdown=gateway-start
+JOURNEY shutdown=gateway-done
+PHOTO_CLIENT_LOCAL {"result":"PASS","phase":"missing","input":"x11","started_at":"2026-10-20T16:53:59.961595Z","elapsed_ms":3575,"window":{"width":1440,"height":900,"device_pixel_ratio":1.0},"steps":[{"id":"runtime-ready","status":"PASS","ms":56},{"id":"library-open","status":"PASS","ms":53},{"id":"missing-source-keeps-history","status":"PASS","ms":0},{"id":"screenshot-20-missing-source","status":"PASS","ms":600},{"id":"missing-source-viewer-degrades","status":"PASS","ms":1419},{"id":"screenshot-21-healthy-after-missing","status":"PASS","ms":714},{"id":"missing-source-does-not-block-others","status":"PASS","ms":1967}],"facts":{"profile_id":"linux-x86_64","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","session_id":"53152748-ba77-4b43-bd97-bba92afa9d70","library_id":"43c59575-4044-4daf-8e1a-391afa9d6fb9","opened_count":6,"opened_revision":2,"missing_path":"/tmp/s04-final4/fixtures-missing/photos/nested/gamma.webp","missing_viewer":{"name":"gamma.webp","placeholder":"broken_image_outlined"},"screenshot_20-missing-source":{"file":"20-missing-source.png","width":1440,"height":900,"x11_file":"20-missing-source-x11.png"},"healthy_after_missing":{"name":"large.jpg","decoded_width":1440,"decoded_height":1080},"screenshot_21-healthy-after-missing":{"file":"21-healthy-after-missing.png","width":1440,"height":900,"x11_file":"21-healthy-after-missing-x11.png"}},"screenshots":["20-missing-source.png","20-missing-source-x11.png","21-healthy-after-missing.png","21-healthy-after-missing-x11.png"]}

@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 
+import local_stages
 from platform_config import (
     ROOT, ProfileError, canonical_json, dart_defines, generate, load_profile,
     profile_digest, profile_path,
@@ -304,15 +305,24 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--evidence-dir", type=Path, required=True)
     run.add_argument("--integration", action="store_true", help="Run two actual builds and real-window/rejection smoke checks")
     run.add_argument("--mode", choices=("debug", "release"), default="release")
+    run.add_argument(
+        "--bulk-count", type=int, default=None,
+        help="Override the synthetic bulk fixture size for S03 visible-window evidence")
     options = parser.parse_args(argv)
-    if options.stage != "S01":
-        print(f"{options.stage}: NOT IMPLEMENTED", file=sys.stderr)
-        return 2
     try:
-        return run_s01(options.evidence_dir.resolve(), integration=options.integration, mode=options.mode)
+        if options.stage == "S01":
+            return run_s01(options.evidence_dir.resolve(), integration=options.integration,
+                           mode=options.mode)
+        if options.stage in local_stages.STAGE_CHECKS:
+            if options.bulk_count is not None:
+                local_stages.BULK_COUNT = max(0, options.bulk_count)
+            return local_stages.run(options.stage, options.evidence_dir.resolve(),
+                                    integration=options.integration, mode=options.mode)
     except (ProfileError, OSError) as exc:
         print(f"acceptance: {exc}", file=sys.stderr)
         return 2
+    print(f"{options.stage}: NOT IMPLEMENTED", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

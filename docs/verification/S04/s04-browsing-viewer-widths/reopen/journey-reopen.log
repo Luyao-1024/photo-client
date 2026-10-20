@@ -1,0 +1,32 @@
+MESA-EGL: warning: DRI3 error: Could not get DRI3 device
+MESA-EGL: warning: Ensure your X server supports DRI3 to get accelerated rendering
+
+(io.github.photo_client.photo_client:656203): Atk-CRITICAL **: 00:53:31.455: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+JOURNEY phase=runApp
+JOURNEY phase=first-frame
+JOURNEY step=runtime-ready phase=start
+JOURNEY step=runtime-ready phase=pass ms=52
+JOURNEY step=library-open phase=start
+JOURNEY step=library-open phase=pass ms=51
+JOURNEY step=restart-keeps-identity-and-favorite phase=start
+JOURNEY step=restart-keeps-identity-and-favorite phase=pass ms=1
+JOURNEY step=restart-favorites-filter phase=start
+JOURNEY tap=filter-favorites at=617.1,188.0 dpr=1.0
+INPUT step=1 kind=tap 
+INPUT step=1 status=ok detail=click at 617,188 | pointer x:617 y:188 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=restart-favorites-filter phase=pass ms=682
+JOURNEY step=restart-viewer-still-decodes phase=start
+JOURNEY tap=photo-5220c352-16e3-48ef-b288-22073b7a224b at=353.0,452.1 dpr=1.0
+INPUT step=2 kind=tap 
+INPUT step=2 status=ok detail=click at 353,452 | pointer x:353 y:452 screen:0 window:0 | win=2097157 visible=True geometry=(1440, 900)
+JOURNEY step=restart-viewer-still-decodes phase=pass ms=625
+JOURNEY step=screenshot-10-restart-favorite phase=start
+INPUT step=3 kind=screenshot 
+INPUT step=3 status=ok detail=10-restart-favorite-x11.png
+JOURNEY step=screenshot-10-restart-favorite phase=pass ms=802
+JOURNEY shutdown=controller-start
+JOURNEY shutdown=controller-done
+JOURNEY shutdown=gateway-start
+JOURNEY shutdown=gateway-done
+PHOTO_CLIENT_LOCAL {"result":"PASS","phase":"reopen","input":"x11","started_at":"2026-10-20T16:53:31.578886Z","elapsed_ms":2293,"window":{"width":1440,"height":900,"device_pixel_ratio":1.0},"steps":[{"id":"runtime-ready","status":"PASS","ms":52},{"id":"library-open","status":"PASS","ms":51},{"id":"restart-keeps-identity-and-favorite","status":"PASS","ms":1},{"id":"restart-favorites-filter","status":"PASS","ms":682},{"id":"restart-viewer-still-decodes","status":"PASS","ms":625},{"id":"screenshot-10-restart-favorite","status":"PASS","ms":802}],"facts":{"profile_id":"linux-x86_64","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","session_id":"436cdf3b-b1ad-4811-a8c1-ac15d8738ad9","library_id":"036ecbe0-41a2-49e7-b23d-ed4d504d0490","opened_count":6,"opened_revision":2,"favorites_after_restart":{"total":1,"items":[{"id":"5220c352-16e3-48ef-b288-22073b7a224b","path":"/tmp/s04-final4/fixtures/photos/large.jpg","favorite":true}]},"favorite_id":"5220c352-16e3-48ef-b288-22073b7a224b","restart_viewer":{"name":"large.jpg","decoded_width":1440,"decoded_height":1080},"decoded_exact_size":false,"decoded_axes_swapped":false,"screenshot_10-restart-favorite":{"file":"10-restart-favorite.png","width":1440,"height":900,"x11_file":"10-restart-favorite-x11.png"}},"screenshots":["10-restart-favorite.png","10-restart-favorite-x11.png"]}

@@ -19,4 +19,4 @@ PhotoViewer跨平台重写：Flutter界面、独立Rust核心与SQLite。**一�
 - [统一验收矩阵](docs/design/acceptance.md)
 - [设计核查记录](docs/design/review.md)
 
-当前按用户要求暂停开发。S01工程基础已验收；本地数据库、扫描/缩略图、界面组件已分别完成聚焦检查，尚未接通原生端到端流程。详情见[暂停与恢复记录](docs/local-first/progress.md)。
+S01工程基础已验收；S02–S04已接通原生端到端链路（真实SQLite/FFI/文件/缩略图/窗口输入），阶段级验收记录见[一期阶段记录](docs/local-first/progress.md)与 `docs/verification/`。

@@ -1,0 +1,138 @@
+MESA-EGL: warning: DRI3 error: Could not get DRI3 device
+MESA-EGL: warning: Ensure your X server supports DRI3 to get accelerated rendering
+
+(io.github.photo_client.photo_client:655344): Atk-CRITICAL **: 00:52:49.103: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+JOURNEY phase=runApp
+JOURNEY phase=first-frame
+JOURNEY step=runtime-ready phase=start
+JOURNEY step=runtime-ready phase=pass ms=51
+JOURNEY step=library-open phase=start
+JOURNEY step=library-open phase=pass ms=61
+JOURNEY step=scan-real-source phase=start
+JOURNEY tap=add-folder at=368.2,188.0 dpr=1.0
+INPUT step=1 kind=tap 
+INPUT step=1 status=ok detail=click at 368,188 | pointer x:368 y:188 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=scan-real-source phase=pass ms=606
+JOURNEY step=grid-is-database-driven phase=start
+JOURNEY step=grid-is-database-driven phase=pass ms=0
+JOURNEY step=thumbnail-decoded phase=start
+JOURNEY step=thumbnail-decoded phase=pass ms=0
+JOURNEY step=thumbnail-cache-classes phase=start
+JOURNEY step=thumbnail-cache-classes phase=pass ms=137
+JOURNEY step=screenshot-01-grid phase=start
+INPUT step=2 kind=screenshot 
+INPUT step=2 status=ok detail=01-grid-x11.png
+JOURNEY step=screenshot-01-grid phase=pass ms=639
+JOURNEY step=viewer-opens-real-file phase=start
+JOURNEY tap=photo-17151e37-db1e-4f9e-8b54-4c0d4be71ce8 at=252.0,490.1 dpr=1.0
+INPUT step=3 kind=tap 
+INPUT step=3 status=ok detail=click at 252,490 | pointer x:252 y:490 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=viewer-opens-real-file phase=pass ms=649
+JOURNEY step=viewer-keyboard-and-button-navigation phase=start
+INPUT step=4 kind=key 
+INPUT step=4 status=ok detail=key Right
+JOURNEY tap=viewer-previous at=236.8,568.0 dpr=1.0
+INPUT step=5 kind=tap 
+INPUT step=5 status=ok detail=click at 237,568 | pointer x:237 y:568 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=viewer-keyboard-and-button-navigation phase=pass ms=1015
+JOURNEY step=viewer-wheel-zoom phase=start
+INPUT step=6 kind=scroll 
+INPUT step=6 status=ok detail=scroll button 4
+JOURNEY step=viewer-wheel-zoom phase=pass ms=883
+JOURNEY step=viewer-zoom-buttons phase=start
+JOURNEY tap=viewer-zoom-reset at=536.8,568.0 dpr=1.0
+INPUT step=7 kind=tap 
+INPUT step=7 status=ok detail=click at 537,568 | pointer x:537 y:568 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY tap=viewer-zoom-in at=462.4,568.0 dpr=1.0
+INPUT step=8 kind=tap 
+INPUT step=8 status=ok detail=click at 462,568 | pointer x:462 y:568 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY tap=viewer-zoom-out at=377.7,568.0 dpr=1.0
+INPUT step=9 kind=tap 
+INPUT step=9 status=ok detail=click at 378,568 | pointer x:378 y:568 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY tap=viewer-zoom-in at=462.4,568.0 dpr=1.0
+INPUT step=10 kind=tap 
+INPUT step=10 status=ok detail=click at 462,568 | pointer x:462 y:568 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY tap=viewer-zoom-in at=462.4,568.0 dpr=1.0
+INPUT step=11 kind=tap 
+INPUT step=11 status=ok detail=click at 462,568 | pointer x:462 y:568 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=viewer-zoom-buttons phase=pass ms=3000
+JOURNEY step=viewer-pan-by-real-drag phase=start
+INPUT step=12 kind=drag 
+INPUT step=12 status=ok detail=drag 400,296 to 310,236
+JOURNEY tap=viewer-zoom-reset at=536.8,568.0 dpr=1.0
+INPUT step=13 kind=tap 
+INPUT step=13 status=ok detail=click at 537,568 | pointer x:537 y:568 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=viewer-pan-by-real-drag phase=pass ms=1215
+JOURNEY step=viewer-immersive-toggle phase=start
+JOURNEY tap=viewer-immersive at=776.0,28.0 dpr=1.0
+INPUT step=14 kind=tap 
+INPUT step=14 status=ok detail=click at 776,28 | pointer x:776 y:28 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=screenshot-05-immersive phase=start
+INPUT step=15 kind=screenshot 
+INPUT step=15 status=ok detail=05-immersive-x11.png
+JOURNEY step=screenshot-05-immersive phase=pass ms=580
+JOURNEY tap=viewer-immersive-exit at=768.0,32.0 dpr=1.0
+INPUT step=16 kind=tap 
+INPUT step=16 status=ok detail=click at 768,32 | pointer x:768 y:32 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=viewer-immersive-toggle phase=pass ms=1784
+JOURNEY step=viewer-metadata-is-real phase=start
+JOURNEY tap=viewer-details at=728.0,28.0 dpr=1.0
+INPUT step=17 kind=tap 
+INPUT step=17 status=ok detail=click at 728,28 | pointer x:728 y:28 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+INPUT step=18 kind=tap 
+INPUT step=18 status=ok detail=click at 507,476 | pointer x:507 y:476 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=viewer-metadata-is-real phase=pass ms=1117
+JOURNEY step=favorite-persists-in-database phase=start
+JOURNEY tap=viewer-favorite at=680.0,28.0 dpr=1.0
+INPUT step=19 kind=tap 
+INPUT step=19 status=ok detail=click at 680,28 | pointer x:680 y:28 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=favorite-persists-in-database phase=pass ms=600
+JOURNEY step=screenshot-02-viewer-favorite phase=start
+INPUT step=20 kind=screenshot 
+INPUT step=20 status=ok detail=02-viewer-favorite-x11.png
+JOURNEY step=screenshot-02-viewer-favorite phase=pass ms=578
+JOURNEY step=escape-returns-to-grid phase=start
+INPUT step=21 kind=key 
+INPUT step=21 status=ok detail=key Escape
+JOURNEY step=escape-returns-to-grid phase=pass ms=619
+JOURNEY step=favorites-filter phase=start
+JOURNEY tap=filter-favorites at=507.5,188.0 dpr=1.0
+INPUT step=22 kind=tap 
+INPUT step=22 status=ok detail=click at 508,188 | pointer x:508 y:188 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=screenshot-03-favorites-filter phase=start
+INPUT step=23 kind=screenshot 
+INPUT step=23 status=ok detail=03-favorites-filter-x11.png
+JOURNEY step=screenshot-03-favorites-filter phase=pass ms=568
+JOURNEY tap=filter-favorites at=517.5,188.0 dpr=1.0
+INPUT step=24 kind=tap 
+INPUT step=24 status=ok detail=click at 518,188 | pointer x:518 y:188 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+JOURNEY step=favorites-filter phase=pass ms=1817
+JOURNEY step=search-uses-current-query-only phase=start
+JOURNEY tap=library-search at=463.2,248.0 dpr=1.0
+INPUT step=25 kind=tap 
+INPUT step=25 status=ok detail=click at 463,248 | pointer x:463 y:248 screen:0 window:0 | win=2097157 visible=True geometry=(800, 600)
+INPUT step=26 kind=text 
+INPUT step=26 status=ok detail=typed 5 characters
+JOURNEY step=screenshot-04-search phase=start
+INPUT step=27 kind=screenshot 
+INPUT step=27 status=ok detail=04-search-x11.png
+JOURNEY step=screenshot-04-search phase=pass ms=526
+INPUT step=28 kind=key 
+INPUT step=28 status=ok detail=key BackSpace
+INPUT step=29 kind=key 
+INPUT step=29 status=ok detail=key BackSpace
+INPUT step=30 kind=key 
+INPUT step=30 status=ok detail=key BackSpace
+INPUT step=31 kind=key 
+INPUT step=31 status=ok detail=key BackSpace
+INPUT step=32 kind=key 
+INPUT step=32 status=ok detail=key BackSpace
+JOURNEY step=search-uses-current-query-only phase=pass ms=4089
+JOURNEY step=library-summary-text phase=start
+JOURNEY step=library-summary-text phase=pass ms=0
+JOURNEY shutdown=controller-start
+JOURNEY shutdown=controller-done
+JOURNEY shutdown=gateway-start
+JOURNEY shutdown=gateway-done
+PHOTO_CLIENT_LOCAL {"result":"PASS","phase":"provision","input":"x11","started_at":"2026-10-20T16:52:49.227628Z","elapsed_ms":18947,"window":{"width":800,"height":600,"device_pixel_ratio":1.0},"steps":[{"id":"runtime-ready","status":"PASS","ms":51},{"id":"library-open","status":"PASS","ms":61},{"id":"scan-real-source","status":"PASS","ms":606},{"id":"grid-is-database-driven","status":"PASS","ms":0},{"id":"thumbnail-decoded","status":"PASS","ms":0},{"id":"thumbnail-cache-classes","status":"PASS","ms":137},{"id":"screenshot-01-grid","status":"PASS","ms":639},{"id":"viewer-opens-real-file","status":"PASS","ms":649},{"id":"viewer-keyboard-and-button-navigation","status":"PASS","ms":1015},{"id":"viewer-wheel-zoom","status":"PASS","ms":883},{"id":"viewer-zoom-buttons","status":"PASS","ms":3000},{"id":"viewer-pan-by-real-drag","status":"PASS","ms":1215},{"id":"screenshot-05-immersive","status":"PASS","ms":580},{"id":"viewer-immersive-toggle","status":"PASS","ms":1784},{"id":"viewer-metadata-is-real","status":"PASS","ms":1117},{"id":"favorite-persists-in-database","status":"PASS","ms":600},{"id":"screenshot-02-viewer-favorite","status":"PASS","ms":578},{"id":"escape-returns-to-grid","status":"PASS","ms":619},{"id":"screenshot-03-favorites-filter","status":"PASS","ms":568},{"id":"favorites-filter","status":"PASS","ms":1817},{"id":"screenshot-04-search","status":"PASS","ms":526},{"id":"search-uses-current-query-only","status":"PASS","ms":4089},{"id":"library-summary-text","status":"PASS","ms":0}],"facts":{"profile_id":"linux-x86_64","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","session_id":"396f1b6a-92cc-4184-b26e-c35682b0d18f","library_id":"13c3b939-5a7d-4c8f-8392-0a38c6be3a54","opened_count":0,"opened_revision":0,"scan":{"source":"/tmp/s04-final4/fixtures/photos","discovered":6,"skipped":2,"failed":1,"cancelled":false},"total":6,"page_size":100,"first_page_items":6,"tiles_in_tree":6,"first_photo":{"id":"17151e37-db1e-4f9e-8b54-4c0d4be71ce8","name":"large.jpg","path":"/tmp/s04-final4/fixtures/photos/large.jpg","parent":"/tmp/s04-final4/fixtures/photos","size_bytes":408956,"width":1600,"height":1200,"content_version":1,"favorite":false},"grid_thumbnail":{"width":204,"height":153},"thumbnail_classes":{"media_id":"17151e37-db1e-4f9e-8b54-4c0d4be71ce8","name":"large.jpg","content_version":1,"source_width":1600,"source_height":1200,"paths":{"256":"/tmp/s04-final4/data-root-800/cache/17151e37-db1e-4f9e-8b54-4c0d4be71ce8/1/thumbnail-256.jpg","512":"/tmp/s04-final4/data-root-800/cache/17151e37-db1e-4f9e-8b54-4c0d4be71ce8/1/thumbnail-512.jpg","1024":"/tmp/s04-final4/data-root-800/cache/17151e37-db1e-4f9e-8b54-4c0d4be71ce8/1/thumbnail-1024.jpg"}},"screenshot_01-grid":{"file":"01-grid.png","width":800,"height":600,"x11_file":"01-grid-x11.png"},"viewer":{"opened_name":"large.jpg","expected_name":"large.jpg","path":"/tmp/s04-final4/fixtures/photos/large.jpg","decoded_width":800,"decoded_height":600},"decoded_exact_size":false,"decoded_axes_swapped":false,"navigation":{"start":"large.jpg","after_right":"small.png","after_previous":"large.jpg"},"wheel_zoom":{"scale_before":1.0,"scale_after":2.2144409968040746,"label":"221%"},"zoom_buttons":{"scale":1.5625,"label":"156%"},"pan":{"before":[-225.0,-135.0],"after":[-348.39875766096316,-217.4821616454782],"moved":148.42695301723305,"scale":1.5625},"screenshot_05-immersive":{"file":"05-immersive.png","width":800,"height":600,"x11_file":"05-immersive-x11.png"},"details":["Photo information","File path","/tmp/s04-final4/fixtures/photos/large.jpg","File size","408956 B","Modified","2026-10-21 00:52:27.301","Dimensions","1600 × 1200","/tmp/s04-final4/fixtures/photos","Close"],"favorite":{"id":"17151e37-db1e-4f9e-8b54-4c0d4be71ce8","query_total":1,"query_ids":["17151e37-db1e-4f9e-8b54-4c0d4be71ce8"]},"screenshot_02-viewer-favorite":{"file":"02-viewer-favorite.png","width":800,"height":600,"x11_file":"02-viewer-favorite-x11.png"},"favorites_filter_total":1,"screenshot_03-favorites-filter":{"file":"03-favorites-filter.png","width":800,"height":600,"x11_file":"03-favorites-filter-x11.png"},"search":{"query":"large","total":1,"names":["large.jpg"]},"screenshot_04-search":{"file":"04-search.png","width":800,"height":600,"x11_file":"04-search-x11.png"},"library_info_text":"Library: 6 photos · revision 2"},"screenshots":["01-grid.png","01-grid-x11.png","05-immersive.png","05-immersive-x11.png","02-viewer-favorite.png","02-viewer-favorite-x11.png","03-favorites-filter.png","03-favorites-filter-x11.png","04-search.png","04-search-x11.png"]}

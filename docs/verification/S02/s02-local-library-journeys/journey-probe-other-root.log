@@ -1,0 +1,6 @@
+MESA-EGL: warning: DRI3 error: Could not get DRI3 device
+MESA-EGL: warning: Ensure your X server supports DRI3 to get accelerated rendering
+
+(io.github.photo_client.photo_client:620689): Atk-CRITICAL **: 23:28:10.833: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+PHOTO_CLIENT_LOCAL {"result":"PASS","phase":"probe-open","input":"none","started_at":"2026-10-20T15:28:10.945718Z","elapsed_ms":8,"steps":[{"id":"data-root-lock","status":"PASS","detail":"opened 45415dc3-14e3-48f5-925c-c83f8e476b1c with 0 items"}],"facts":{"detail":"opened 45415dc3-14e3-48f5-925c-c83f8e476b1c with 0 items"},"screenshots":[]}
