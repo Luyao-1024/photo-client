@@ -1,0 +1,67 @@
+test_binary_hashes_are_recorded_without_claiming_s14_bit_reproducibility (test_acceptance.ArtifactTests.test_binary_hashes_are_recorded_without_claiming_s14_bit_reproducibility) ... ok
+test_installed_bridge_must_equal_built_library (test_acceptance.ArtifactTests.test_installed_bridge_must_equal_built_library) ... ok
+test_missing_required_artifact_or_installed_bridge_cannot_pass (test_acceptance.ArtifactTests.test_missing_required_artifact_or_installed_bridge_cannot_pass) ... ok
+test_repeat_build_rejects_changed_added_or_removed_binding_profile_or_lock (test_acceptance.ArtifactTests.test_repeat_build_rejects_changed_added_or_removed_binding_profile_or_lock) ... ok
+test_snapshot_records_native_bundle_locks_profiles_and_all_bindings (test_acceptance.ArtifactTests.test_snapshot_records_native_bundle_locks_profiles_and_all_bindings) ... ok
+test_tampered_generated_profile_or_defines_cannot_pass (test_acceptance.ArtifactTests.test_tampered_generated_profile_or_defines_cannot_pass) ... ok
+test_commands_use_arrays_without_shell_and_have_bounded_waits (test_acceptance.CommandAndDisplayTests.test_commands_use_arrays_without_shell_and_have_bounded_waits) ... ok
+test_existing_display_is_used_directly (test_acceptance.CommandAndDisplayTests.test_existing_display_is_used_directly) ... ok
+test_no_display_and_no_xvfb_cannot_pass (test_acceptance.CommandAndDisplayTests.test_no_display_and_no_xvfb_cannot_pass) ... ok
+test_process_reap_timeout_is_bounded_and_cannot_pass (test_acceptance.CommandAndDisplayTests.test_process_reap_timeout_is_bounded_and_cannot_pass) ... ok
+test_start_failure_is_recorded_as_failure (test_acceptance.CommandAndDisplayTests.test_start_failure_is_recorded_as_failure) ... ok
+test_timeout_kills_command_process_group_and_never_passes (test_acceptance.CommandAndDisplayTests.test_timeout_kills_command_process_group_and_never_passes) ... ok
+test_xvfb_is_selected_only_when_display_is_absent (test_acceptance.CommandAndDisplayTests.test_xvfb_is_selected_only_when_display_is_absent) ... ok
+test_changed_binding_on_repeat_build_fails_c03 (test_acceptance.IntegrationWorkflowTests.test_changed_binding_on_repeat_build_fails_c03) ... ok
+test_default_never_builds_or_approves_gui (test_acceptance.IntegrationWorkflowTests.test_default_never_builds_or_approves_gui) ... ok
+test_failed_first_or_second_build_cannot_pass (test_acceptance.IntegrationWorkflowTests.test_failed_first_or_second_build_cannot_pass) ... ok
+test_integration_pass_requires_two_builds_and_three_semantic_smokes (test_acceptance.IntegrationWorkflowTests.test_integration_pass_requires_two_builds_and_three_semantic_smokes) ... ok
+test_malformed_smoke_output_with_exit_zero_cannot_approve_stage (test_acceptance.IntegrationWorkflowTests.test_malformed_smoke_output_with_exit_zero_cannot_approve_stage) ... ok
+test_missing_display_leaves_integration_incomplete (test_acceptance.IntegrationWorkflowTests.test_missing_display_leaves_integration_incomplete) ... ok
+test_missing_smoke_output_with_exit_zero_cannot_approve_stage (test_acceptance.IntegrationWorkflowTests.test_missing_smoke_output_with_exit_zero_cannot_approve_stage) ... ok
+test_nonzero_smoke_exit_cannot_pass_even_with_valid_record (test_acceptance.IntegrationWorkflowTests.test_nonzero_smoke_exit_cannot_pass_even_with_valid_record) ... ok
+test_rejection_after_initialization_fails_c02 (test_acceptance.IntegrationWorkflowTests.test_rejection_after_initialization_fails_c02) ... ok
+test_unknown_stage_with_integration_still_returns_not_implemented (test_acceptance.IntegrationWorkflowTests.test_unknown_stage_with_integration_still_returns_not_implemented) ... ok
+test_booleans_must_be_exactly_true (test_acceptance.SmokeContractTests.test_booleans_must_be_exactly_true) ... ok
+test_event_sequence_must_have_three_monotonic_integers (test_acceptance.SmokeContractTests.test_event_sequence_must_have_three_monotonic_integers) ... ok
+test_every_required_normal_field_must_be_present (test_acceptance.SmokeContractTests.test_every_required_normal_field_must_be_present) ... ok
+test_expected_rejections_require_exact_type_and_no_initialization (test_acceptance.SmokeContractTests.test_expected_rejections_require_exact_type_and_no_initialization) ... ok
+test_missing_malformed_ambiguous_or_non_object_json_cannot_pass (test_acceptance.SmokeContractTests.test_missing_malformed_ambiguous_or_non_object_json_cannot_pass) ... ok
+test_nonzero_exit_overrides_valid_smoke_output (test_acceptance.SmokeContractTests.test_nonzero_exit_overrides_valid_smoke_output) ... ok
+test_normal_record_requires_full_semantics (test_acceptance.SmokeContractTests.test_normal_record_requires_full_semantics) ... ok
+test_wrong_profile_digest_or_supplied_identity_cannot_pass (test_acceptance.SmokeContractTests.test_wrong_profile_digest_or_supplied_identity_cannot_pass) ... ok
+test_active_linux_rejects_wrong_host (test_platform.ProfileTests.test_active_linux_rejects_wrong_host) ... ok
+test_actual_profiles_preserve_all_design_values (test_platform.ProfileTests.test_actual_profiles_preserve_all_design_values) ... ok
+test_aliases_and_unsafe_yaml_tags_are_rejected (test_platform.ProfileTests.test_aliases_and_unsafe_yaml_tags_are_rejected) ... ok
+test_canonical_json_digest_and_generated_defines (test_platform.ProfileTests.test_canonical_json_digest_and_generated_defines) ... ok
+test_dependent_resource_limits (test_platform.ProfileTests.test_dependent_resource_limits) ... ok
+test_duplicate_keys_at_root_and_nested (test_platform.ProfileTests.test_duplicate_keys_at_root_and_nested) ... ok
+test_gallery_rows_limit_has_a_hard_bound_of_2000 (test_platform.ProfileTests.test_gallery_rows_limit_has_a_hard_bound_of_2000) ... ok
+test_malformed_yaml_and_multiple_documents (test_platform.ProfileTests.test_malformed_yaml_and_multiple_documents) ... ok
+test_missing_and_unknown_fields_at_every_level (test_platform.ProfileTests.test_missing_and_unknown_fields_at_every_level) ... ok
+test_non_string_mapping_keys_and_non_mapping_root (test_platform.ProfileTests.test_non_string_mapping_keys_and_non_mapping_root) ... ok
+test_numeric_limits_accept_u32_max_with_valid_dependent_limits (test_platform.ProfileTests.test_numeric_limits_accept_u32_max_with_valid_dependent_limits) ... ok
+test_numeric_limits_reject_u32_overflow (test_platform.ProfileTests.test_numeric_limits_reject_u32_overflow) ... ok
+test_planned_inspection_allowed_but_build_run_refused (test_platform.ProfileTests.test_planned_inspection_allowed_but_build_run_refused) ... ok
+test_profile_size_and_encoding_are_bounded (test_platform.ProfileTests.test_profile_size_and_encoding_are_bounded) ... ok
+test_strict_scalar_types (test_platform.ProfileTests.test_strict_scalar_types) ... ok
+test_target_adapter_packaging_and_layout_consistency (test_platform.ProfileTests.test_target_adapter_packaging_and_layout_consistency) ... ok
+test_actual_subprocess_uses_no_shell_and_does_not_print_env (test_platform.ToolTests.test_actual_subprocess_uses_no_shell_and_does_not_print_env) ... ok
+test_build_order_paths_and_shared_profile_values (test_platform.ToolTests.test_build_order_paths_and_shared_profile_values) ... {"bundle":"/tmp/tmp6772c1_2/app/build/linux/x64/debug/bundle","mode":"debug","native_library":"/tmp/tmp6772c1_2/target/debug/libphoto_bridge.so","packaging_acceptance":"NOT RUN","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","profile_id":"linux-x86_64"}
+{"bundle":"/tmp/tmp6772c1_2/app/build/linux/x64/release/bundle","mode":"release","native_library":"/tmp/tmp6772c1_2/target/release/libphoto_bridge.so","packaging_acceptance":"NOT RUN","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","profile_id":"linux-x86_64"}
+ok
+test_cargo_failure_stops_flutter (test_platform.ToolTests.test_cargo_failure_stops_flutter) ... ok
+test_flutter_path_discovery (test_platform.ToolTests.test_flutter_path_discovery) ... ok
+test_flutter_root_takes_precedence_and_bad_override_fails (test_platform.ToolTests.test_flutter_root_takes_precedence_and_bad_override_fails) ... ok
+test_launch_forwards_literal_arguments_without_shell (test_platform.ToolTests.test_launch_forwards_literal_arguments_without_shell) ... ok
+test_planned_build_and_run_stop_before_tool_discovery (test_platform.ToolTests.test_planned_build_and_run_stop_before_tool_discovery) ... ok
+test_profile_file_negative_cli (test_platform.ToolTests.test_profile_file_negative_cli) ... ok
+test_s01_evidence_cannot_claim_unexecuted_gui_pass (test_platform.ToolTests.test_s01_evidence_cannot_claim_unexecuted_gui_pass) ... ok
+test_unknown_profile_and_invalid_mode_are_rejected (test_platform.ToolTests.test_unknown_profile_and_invalid_mode_are_rejected) ... ok
+test_unknown_stages_never_create_pass_or_evidence (test_platform.ToolTests.test_unknown_stages_never_create_pass_or_evidence) ... ok
+
+----------------------------------------------------------------------
+Ran 58 tests in 1.686s
+
+OK
+S01 INCOMPLETE: /tmp/tmp0qzr2viv/evidence/report.json
+GPU visual/packaging acceptance NOT RUN; user review NOT RECORDED.

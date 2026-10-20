@@ -1,0 +1,133 @@
+{
+  "plan_version": 2,
+  "phase": "local",
+  "current_checkpoint": "S02",
+  "next_checkpoint": null,
+  "cloud_phase": "deferred_to_phase2",
+  "stages": [
+    {
+      "id": "S01",
+      "title": "共用工程与桥接",
+      "depends_on": [],
+      "implementation_status": "implemented",
+      "gate_status": "passed",
+      "user_review": "not_recorded",
+      "evidence_report": "docs/verification/S01/s01-linux-local-foundation/report.json"
+    },
+    {
+      "id": "S02",
+      "title": "独立本地图库",
+      "depends_on": [
+        "S01"
+      ],
+      "implementation_status": "in_progress",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "work_status": "paused",
+      "component_checks": "passed",
+      "end_to_end": "not_run"
+    },
+    {
+      "id": "S03",
+      "title": "来源与缩略图",
+      "depends_on": [
+        "S02"
+      ],
+      "implementation_status": "in_progress",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "work_status": "paused",
+      "component_checks": "passed",
+      "end_to_end": "not_run"
+    },
+    {
+      "id": "S04",
+      "title": "真实浏览与查看器",
+      "depends_on": [
+        "S03"
+      ],
+      "implementation_status": "in_progress",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "work_status": "paused",
+      "component_checks": "passed",
+      "end_to_end": "not_run"
+    },
+    {
+      "id": "S05",
+      "title": "十万图库前置性能",
+      "depends_on": [
+        "S04"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded"
+    },
+    {
+      "id": "S06",
+      "title": "组织与搜索",
+      "depends_on": [
+        "S05"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded"
+    },
+    {
+      "id": "S07",
+      "title": "文件管理",
+      "depends_on": [
+        "S06"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded"
+    },
+    {
+      "id": "S08",
+      "title": "本地编辑",
+      "depends_on": [
+        "S07"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded"
+    },
+    {
+      "id": "S09",
+      "title": "监听与恢复",
+      "depends_on": [
+        "S08"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded"
+    },
+    {
+      "id": "S10",
+      "title": "综合性能与玻璃UX",
+      "depends_on": [
+        "S09"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded"
+    },
+    {
+      "id": "S11",
+      "title": "Linux安装交付",
+      "depends_on": [
+        "S10"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded"
+    }
+  ],
+  "status": "paused_by_user",
+  "paused_by_user": true,
+  "resume_checkpoint": "S02",
+  "paused_after": "local_catalog_component_and_current_worker_checks",
+  "pause_record": "docs/local-first/progress.md",
+  "paused_at": "2026-10-20T12:55:23.262076+00:00"
+}

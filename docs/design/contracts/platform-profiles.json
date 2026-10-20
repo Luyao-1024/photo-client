@@ -1,0 +1,114 @@
+{
+  "contract_version": 1,
+  "purpose": "design_examples_not_build_inputs",
+  "profiles": [
+    {
+      "schema_version": 1,
+      "profile_id": "linux-x86_64",
+      "platform": "linux",
+      "status": "active",
+      "flutter_target": "linux",
+      "rust_target": "x86_64-unknown-linux-gnu",
+      "adapters": {
+        "storage": "linux_xdg",
+        "source": "linux_file_picker",
+        "secrets": "linux_secret_service",
+        "scheduler": "while_app_running",
+        "codec": "portable_image",
+        "instance_lock": "linux_process_lock"
+      },
+      "limits": {
+        "transfer_parallelism": 4,
+        "original_parallelism": 2,
+        "decoder_parallelism": 2,
+        "decoder_total_mib": 192,
+        "decoder_single_mib": 128,
+        "image_cache_mib": 128,
+        "viewer_cache_mib": 128,
+        "browse_index_mib": 16,
+        "gallery_rows_limit": 2000,
+        "disk_cache_mib": 2048
+      },
+      "ui": {
+        "layout": "adaptive",
+        "keyboard_mouse": true,
+        "touch": true
+      },
+      "packaging": {
+        "format": "linux_bundle"
+      }
+    },
+    {
+      "schema_version": 1,
+      "profile_id": "android-arm64",
+      "platform": "android",
+      "status": "planned",
+      "flutter_target": "android",
+      "rust_target": "aarch64-linux-android",
+      "adapters": {
+        "storage": "android_private",
+        "source": "android_content_uri",
+        "secrets": "android_protected_session",
+        "scheduler": "android_system_budget",
+        "codec": "android_media_codec",
+        "instance_lock": "android_process_lock"
+      },
+      "limits": {
+        "transfer_parallelism": 2,
+        "original_parallelism": 1,
+        "decoder_parallelism": 1,
+        "decoder_total_mib": 64,
+        "decoder_single_mib": 48,
+        "image_cache_mib": 64,
+        "viewer_cache_mib": 64,
+        "browse_index_mib": 16,
+        "gallery_rows_limit": 1000,
+        "disk_cache_mib": 512
+      },
+      "ui": {
+        "layout": "adaptive",
+        "keyboard_mouse": true,
+        "touch": true
+      },
+      "packaging": {
+        "format": "apk_aab"
+      }
+    },
+    {
+      "schema_version": 1,
+      "profile_id": "windows-x86_64",
+      "platform": "windows",
+      "status": "planned",
+      "flutter_target": "windows",
+      "rust_target": "x86_64-pc-windows-msvc",
+      "adapters": {
+        "storage": "windows_app_data",
+        "source": "windows_file_picker",
+        "secrets": "windows_credentials",
+        "scheduler": "while_app_running",
+        "codec": "portable_image",
+        "instance_lock": "windows_process_lock"
+      },
+      "limits": {
+        "transfer_parallelism": 4,
+        "original_parallelism": 2,
+        "decoder_parallelism": 2,
+        "decoder_total_mib": 192,
+        "decoder_single_mib": 128,
+        "image_cache_mib": 128,
+        "viewer_cache_mib": 128,
+        "browse_index_mib": 16,
+        "gallery_rows_limit": 2000,
+        "disk_cache_mib": 2048
+      },
+      "ui": {
+        "layout": "adaptive",
+        "keyboard_mouse": true,
+        "touch": true
+      },
+      "packaging": {
+        "format": "windows_installer"
+      }
+    }
+  ]
+}

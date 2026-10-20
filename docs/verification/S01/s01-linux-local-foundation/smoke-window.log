@@ -1,0 +1,4 @@
+
+(io.github.photo_client.photo_client:561392): Atk-CRITICAL **: 20:21:25.425: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+PHOTO_CLIENT_SMOKE {"result":"PASS","real_window":true,"profile_id":"linux-x86_64","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","bridge_protocol_version":1,"round_trip":true,"event_sequence":[1,2,3],"shutdown":true}

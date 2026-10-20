@@ -1,0 +1,102 @@
+{
+  "contract_version": 1,
+  "purpose": "design_tokens_not_implemented_theme",
+  "spacing": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32
+  ],
+  "radius": {
+    "photo": 8,
+    "control": 12,
+    "panel": 20,
+    "dialog": 24,
+    "pill": 999
+  },
+  "sizes": {
+    "toolbar_height": 56,
+    "touch_target_min": 48,
+    "mouse_target_min": 36,
+    "grid_gap": 8
+  },
+  "accent": {
+    "source": "system_when_available",
+    "fallback": "#4F8EFF"
+  },
+  "light": {
+    "background": "#EEF1F6",
+    "foreground": "#172033",
+    "glass_fill": "#FFFFFF",
+    "glass_alpha": 0.68,
+    "reading_fill": "#FFFFFF",
+    "reading_alpha_floor": 0.94,
+    "highlight": "#FFFFFF",
+    "highlight_alpha": 0.7,
+    "shadow": "#000000",
+    "shadow_alpha": 0.16,
+    "chrome_alpha_floor": 0.6
+  },
+  "dark": {
+    "background": "#121721",
+    "foreground": "#F3F6FC",
+    "glass_fill": "#17202E",
+    "glass_alpha": 0.76,
+    "reading_fill": "#17202E",
+    "reading_alpha_floor": 0.94,
+    "highlight": "#FFFFFF",
+    "highlight_alpha": 0.16,
+    "shadow": "#000000",
+    "shadow_alpha": 0.3,
+    "chrome_alpha_floor": 0.72
+  },
+  "photo_overlay": {
+    "foreground": "#FFFFFF",
+    "scrim": "#000000",
+    "scrim_alpha_floor": 0.58
+  },
+  "quality": {
+    "default": "auto",
+    "full": {
+      "blur_sigma": 12,
+      "max_live_surfaces": 3,
+      "max_normal_viewport_area_ratio": 0.2
+    },
+    "reduced": {
+      "blur_sigma": 6,
+      "max_live_surfaces": 2,
+      "max_normal_viewport_area_ratio": 0.15
+    },
+    "plain": {
+      "blur_sigma": 0,
+      "max_live_surfaces": 0,
+      "fill_alpha_floor": 0.96
+    }
+  },
+  "motion_ms": {
+    "hover": 120,
+    "press": 90,
+    "material": 180,
+    "panel": 220,
+    "reduced_fade_max": 80
+  },
+  "contrast_targets": {
+    "normal_text": 4.5,
+    "large_text_and_controls": 3.0
+  },
+  "performance": {
+    "adaptive_window_ms": 2000,
+    "bad_windows_before_degrade": 2,
+    "stable_ms_before_upgrade": 10000,
+    "min_switch_interval_ms": 5000
+  },
+  "transparency_mapping": {
+    "input_min": 0,
+    "input_max": 1,
+    "base_alpha_delta": 0.1,
+    "normal_max_alpha": 0.98,
+    "high_contrast_alpha": 1.0
+  }
+}

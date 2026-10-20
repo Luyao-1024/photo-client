@@ -1,0 +1,30 @@
+schema_version: 1
+profile_id: linux-x86_64
+platform: linux
+status: active
+flutter_target: linux
+rust_target: x86_64-unknown-linux-gnu
+adapters:
+  storage: linux_xdg
+  source: linux_file_picker
+  secrets: linux_secret_service
+  scheduler: while_app_running
+  codec: portable_image
+  instance_lock: linux_process_lock
+limits:
+  transfer_parallelism: 4
+  original_parallelism: 2
+  decoder_parallelism: 2
+  decoder_total_mib: 192
+  decoder_single_mib: 128
+  image_cache_mib: 128
+  viewer_cache_mib: 128
+  browse_index_mib: 16
+  gallery_rows_limit: 2000
+  disk_cache_mib: 2048
+ui:
+  layout: adaptive
+  keyboard_mouse: true
+  touch: true
+packaging:
+  format: linux_bundle

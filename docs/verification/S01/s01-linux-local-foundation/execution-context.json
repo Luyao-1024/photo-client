@@ -1,0 +1,31 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "-B",
+    "tools/acceptance",
+    "run",
+    "--stage",
+    "S01",
+    "--integration",
+    "--mode",
+    "release",
+    "--evidence-dir",
+    "docs/verification/S01/s01-linux-local-foundation"
+  ],
+  "cwd": "/home/luyao/workspace/Photo/client",
+  "exit_code": 0,
+  "explicit_environment": {
+    "FLUTTER_STORAGE_BASE_URL": "https://storage.flutter-io.cn",
+    "GDK_BACKEND": "x11",
+    "LIBGL_ALWAYS_SOFTWARE": "1",
+    "PHOTO_FLUTTER_ROOT": "/home/luyao/.local/share/photo-client/flutter"
+  },
+  "gpu_composited_visual_validation": "NOT RUN",
+  "note": "Invocation context records only explicit task environment overrides; inherited environment was not dumped. ATK plug_id warnings are preserved in the smoke logs.",
+  "path_prepended_in_order": [
+    "/home/luyao/.local/share/photo-client/flutter/bin",
+    "/home/luyao/workspace/Photo/client/.tooling/bin"
+  ],
+  "report_sha256": "46885c77a30e716f785c896a350add63140821c30dbfb40d557e1e0b789ad269",
+  "user_review": "NOT RECORDED"
+}

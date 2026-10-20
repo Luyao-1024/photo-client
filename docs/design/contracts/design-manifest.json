@@ -1,0 +1,365 @@
+{
+  "design_version": 1,
+  "scope": "linux_first_cloud_sync_100k_liquid_glass",
+  "status": "paused_by_user_local_first_v2",
+  "modules": [
+    {
+      "id": "M01",
+      "path": "modules/01-runtime-domain.md",
+      "title": "M01 运行时与领域边界",
+      "phase": "L0",
+      "implementation_status": "in_progress",
+      "depends_on": [],
+      "tests": [
+        "T01-01",
+        "T01-02",
+        "T01-03",
+        "T01-04"
+      ]
+    },
+    {
+      "id": "M02",
+      "path": "modules/02-platform-configuration.md",
+      "title": "M02 平台配置与能力",
+      "phase": "L0",
+      "implementation_status": "in_progress",
+      "depends_on": [],
+      "tests": [
+        "T02-01",
+        "T02-02",
+        "T02-03"
+      ]
+    },
+    {
+      "id": "M03",
+      "path": "modules/03-platform-adapters.md",
+      "title": "M03 平台适配器",
+      "phase": "L0",
+      "implementation_status": "in_progress",
+      "depends_on": [
+        "M01",
+        "M02"
+      ],
+      "tests": [
+        "T03-01",
+        "T03-02",
+        "T03-03",
+        "T03-04"
+      ]
+    },
+    {
+      "id": "M04",
+      "path": "modules/04-accounts-security.md",
+      "title": "M04 账号与会话",
+      "phase": "L0–L1",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M01",
+        "M03",
+        "M05",
+        "M06"
+      ],
+      "tests": [
+        "T04-01",
+        "T04-02",
+        "T04-03",
+        "T04-04",
+        "T04-05"
+      ]
+    },
+    {
+      "id": "M05",
+      "path": "modules/05-database.md",
+      "title": "M05 数据库与事务",
+      "phase": "L0–L2",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M01"
+      ],
+      "tests": [
+        "T05-01",
+        "T05-02",
+        "T05-03",
+        "T05-04",
+        "T05-05"
+      ]
+    },
+    {
+      "id": "M06",
+      "path": "modules/06-protocol-gateway.md",
+      "title": "M06 SyncServer 网关",
+      "phase": "L1",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M01"
+      ],
+      "tests": [
+        "T06-01",
+        "T06-02",
+        "T06-03",
+        "T06-04"
+      ]
+    },
+    {
+      "id": "M07",
+      "path": "modules/07-downlink.md",
+      "title": "M07 下行与冲突协调",
+      "phase": "L1",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M05",
+        "M06",
+        "M09"
+      ],
+      "tests": [
+        "T07-01",
+        "T07-02",
+        "T07-03",
+        "T07-04",
+        "T07-05",
+        "T07-06"
+      ]
+    },
+    {
+      "id": "M08",
+      "path": "modules/08-uplink.md",
+      "title": "M08 上行与租约",
+      "phase": "L2",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M09"
+      ],
+      "tests": [
+        "T08-01",
+        "T08-02",
+        "T08-03",
+        "T08-04",
+        "T08-05",
+        "T08-06"
+      ]
+    },
+    {
+      "id": "M09",
+      "path": "modules/09-assets-publication.md",
+      "title": "M09 资源传输、本地发布与回收",
+      "phase": "L1–L2",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M03",
+        "M05",
+        "M06"
+      ],
+      "tests": [
+        "T09-01",
+        "T09-02",
+        "T09-03",
+        "T09-04",
+        "T09-05"
+      ]
+    },
+    {
+      "id": "M10",
+      "path": "modules/10-media-import.md",
+      "title": "M10 导入与媒体准备",
+      "phase": "L2",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M03",
+        "M05",
+        "M09"
+      ],
+      "tests": [
+        "T10-01",
+        "T10-02",
+        "T10-03",
+        "T10-04",
+        "T10-05"
+      ]
+    },
+    {
+      "id": "M11",
+      "path": "modules/11-library.md",
+      "title": "M11 图库查询与照片操作",
+      "phase": "L1–L2",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M05",
+        "M09",
+        "M16"
+      ],
+      "tests": [
+        "T11-01",
+        "T11-02",
+        "T11-03",
+        "T11-04"
+      ]
+    },
+    {
+      "id": "M12",
+      "path": "modules/12-ffi-events.md",
+      "title": "M12 FFI 与事件合同",
+      "phase": "L0–L2",
+      "implementation_status": "in_progress",
+      "depends_on": [
+        "M01",
+        "M04",
+        "M07",
+        "M08",
+        "M10",
+        "M11",
+        "M14"
+      ],
+      "tests": [
+        "T12-01",
+        "T12-02",
+        "T12-03",
+        "T12-04"
+      ]
+    },
+    {
+      "id": "M13",
+      "path": "modules/13-flutter-ui.md",
+      "title": "M13 Flutter 界面与交互",
+      "phase": "L0–L3",
+      "implementation_status": "in_progress",
+      "depends_on": [
+        "M02",
+        "M12",
+        "M16",
+        "M17"
+      ],
+      "tests": [
+        "T13-01",
+        "T13-02",
+        "T13-03",
+        "T13-04"
+      ]
+    },
+    {
+      "id": "M14",
+      "path": "modules/14-scheduling-diagnostics.md",
+      "title": "M14 调度、配置生效与诊断",
+      "phase": "L0–L3",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M01",
+        "M04",
+        "M05",
+        "M07",
+        "M08",
+        "M10"
+      ],
+      "tests": [
+        "T14-01",
+        "T14-02",
+        "T14-03",
+        "T14-04"
+      ]
+    },
+    {
+      "id": "M15",
+      "path": "modules/15-delivery-validation.md",
+      "title": "M15 工程、验证与交付",
+      "phase": "L0–L3",
+      "implementation_status": "in_progress",
+      "depends_on": [
+        "M02",
+        "M03",
+        "M12",
+        "M13",
+        "M16",
+        "M17"
+      ],
+      "tests": [
+        "T15-01",
+        "T15-02",
+        "T15-03",
+        "T15-04"
+      ]
+    },
+    {
+      "id": "M16",
+      "path": "modules/16-performance.md",
+      "title": "M16 十万张图库性能设计",
+      "phase": "L0–L3",
+      "implementation_status": "not_started",
+      "depends_on": [
+        "M01",
+        "M05"
+      ],
+      "tests": [
+        "T16-01",
+        "T16-02",
+        "T16-03",
+        "T16-04",
+        "T16-05",
+        "T16-06"
+      ]
+    },
+    {
+      "id": "M17",
+      "path": "modules/17-liquid-glass.md",
+      "title": "M17 液态玻璃 UX 与视觉系统",
+      "phase": "L0–L3",
+      "implementation_status": "in_progress",
+      "depends_on": [
+        "M02"
+      ],
+      "tests": [
+        "T17-01",
+        "T17-02",
+        "T17-03",
+        "T17-04",
+        "T17-05",
+        "T17-06"
+      ]
+    }
+  ],
+  "contracts": [
+    "contracts/local-schema.sql",
+    "contracts/platform-profiles.json",
+    "ux/glass-tokens.json"
+  ],
+  "requirements": {
+    "linux_first": [
+      "M01",
+      "M02",
+      "M03",
+      "M15"
+    ],
+    "android_windows_configurable": [
+      "M02",
+      "M03",
+      "M12",
+      "M15"
+    ],
+    "reliable_cloud_sync": [
+      "M04",
+      "M05",
+      "M06",
+      "M07",
+      "M08",
+      "M09",
+      "M14"
+    ],
+    "100k_browsing": [
+      "M05",
+      "M09",
+      "M11",
+      "M12",
+      "M13",
+      "M16"
+    ],
+    "liquid_glass_ux": [
+      "M02",
+      "M13",
+      "M16",
+      "M17"
+    ]
+  },
+  "delivery_plan": "contracts/stage-plan.json"
+}

@@ -1,0 +1,2 @@
+# Used by the strict platform-profile tooling; no dependency on Flutter or Rust.
+PyYAML==6.0.3

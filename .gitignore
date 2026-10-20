@@ -1,0 +1,11 @@
+/target/
+/.build/
+/.tooling/
+__pycache__/
+*.pyc
+/app/.dart_tool/
+/app/.flutter-plugins
+/app/.flutter-plugins-dependencies
+/app/build/
+/app/linux/flutter/ephemeral/
+/app/coverage/

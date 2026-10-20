@@ -1,0 +1,76 @@
++ /home/luyao/.cargo/bin/cargo build --locked -p photo-bridge --release
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling version_check v0.9.5
+   Compiling generic-array v0.14.7
+   Compiling memchr v2.8.3
+   Compiling syn v3.0.9
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling typenum v1.20.1
+   Compiling serde_core v1.0.229
+   Compiling pin-project-lite v0.2.17
+   Compiling zmij v1.0.23
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling find-msvc-tools v0.1.15
+   Compiling object v0.37.3
+   Compiling futures-core v0.3.34
+   Compiling futures-sink v0.3.34
+   Compiling serde_json v1.0.154
+   Compiling shlex v2.0.1
+   Compiling serde v1.0.229
+   Compiling thiserror v2.0.21
+   Compiling cc v1.9.0
+   Compiling futures-channel v0.3.34
+   Compiling digest v0.10.7
+   Compiling futures-macro v0.3.34
+   Compiling thiserror-impl v2.0.21
+   Compiling serde_derive v1.0.229
+   Compiling slab v0.4.12
+   Compiling adler2 v2.0.1
+   Compiling gimli v0.32.3
+   Compiling cpufeatures v0.2.17
+   Compiling futures-io v0.3.34
+   Compiling itoa v1.0.18
+   Compiling getrandom v0.4.3
+   Compiling futures-task v0.3.34
+   Compiling anyhow v1.0.104
+   Compiling futures-util v0.3.34
+   Compiling addr2line v0.25.1
+   Compiling sha2 v0.10.9
+   Compiling miniz_oxide v0.8.9
+   Compiling dart-sys v4.1.5
+   Compiling tokio-macros v2.7.2
+   Compiling portable-atomic v1.15.0
+   Compiling rustc-demangle v0.1.28
+   Compiling build-target v0.4.0
+   Compiling flutter_rust_bridge v2.13.0
+   Compiling md-5 v0.10.6
+   Compiling tokio v1.54.0
+   Compiling backtrace v0.3.76
+   Compiling photo-domain v0.1.0 (/home/luyao/workspace/Photo/client/crates/photo-domain)
+   Compiling futures-executor v0.3.34
+   Compiling num_cpus v1.17.0
+   Compiling syn v2.0.119
+   Compiling hex v0.4.3
+   Compiling atomic v0.5.3
+   Compiling allo-isolate v0.1.27
+   Compiling threadpool v1.8.1
+   Compiling uuid v1.28.0
+   Compiling futures v0.3.34
+   Compiling delegate-attr v0.3.1
+   Compiling photo-bridge v0.1.0 (/home/luyao/workspace/Photo/client/crates/photo-bridge)
+   Compiling byteorder v1.5.0
+   Compiling lazy_static v1.5.1
+   Compiling log v0.4.34
+   Compiling flutter_rust_bridge_macros v2.13.0
+   Compiling photo-core v0.1.0 (/home/luyao/workspace/Photo/client/crates/photo-core)
+   Compiling platform-linux v0.1.0 (/home/luyao/workspace/Photo/client/crates/platform-linux)
+    Finished `release` profile [optimized] target(s) in 24.76s
++ /home/luyao/.local/share/photo-client/flutter/bin/flutter --no-version-check build linux --release --dart-define-from-file=/home/luyao/workspace/Photo/client/.build/linux-x86_64/dart-defines.json
+Flutter assets will be downloaded from https://storage.flutter-io.cn. Make sure you trust this source!
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/photo_client
+{"bundle":"/home/luyao/workspace/Photo/client/app/build/linux/x64/release/bundle","mode":"release","native_library":"/home/luyao/workspace/Photo/client/target/release/libphoto_bridge.so","packaging_acceptance":"NOT RUN","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","profile_id":"linux-x86_64"}

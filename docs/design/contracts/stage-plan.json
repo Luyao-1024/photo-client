@@ -1,0 +1,665 @@
+{
+  "plan_version": 1,
+  "design_version": 1,
+  "status": "superseded_by_local_first_v2_paused",
+  "current_checkpoint": "S01",
+  "next_checkpoint": null,
+  "baseline_checkpoint": "S00",
+  "next_stage_policy": "requires_dependencies_technical_pass_no_implicit_user_approval",
+  "stage_order": [
+    "S00",
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05",
+    "S06",
+    "S07",
+    "S08",
+    "S09",
+    "S10",
+    "S11",
+    "S12",
+    "S13",
+    "S14"
+  ],
+  "stages": [
+    {
+      "id": "S00",
+      "title": "设计合同就绪",
+      "phase": "DESIGN",
+      "depends_on": [],
+      "modules": [
+        "M01",
+        "M02",
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08",
+        "M09",
+        "M10",
+        "M11",
+        "M12",
+        "M13",
+        "M14",
+        "M15",
+        "M16",
+        "M17"
+      ],
+      "implementation_status": "not_applicable",
+      "gate_status": "passed_design_only",
+      "user_review": "not_applicable",
+      "primary_tests": [],
+      "check_ids": [
+        "S00-C01"
+      ],
+      "evidence_scope": "design_only",
+      "evidence_report": "review.md",
+      "build_id": null
+    },
+    {
+      "id": "S01",
+      "title": "Linux工程与配置",
+      "phase": "L0",
+      "depends_on": [
+        "S00"
+      ],
+      "modules": [
+        "M01",
+        "M02",
+        "M03",
+        "M12",
+        "M15"
+      ],
+      "implementation_status": "implemented",
+      "gate_status": "passed",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T02-01",
+        "T02-02"
+      ],
+      "check_ids": [
+        "S01-C01",
+        "S01-C02",
+        "S01-C03"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": "../verification/S01/s01-linux-local-foundation/report.json",
+      "build_id": "s01-linux-local-foundation"
+    },
+    {
+      "id": "S02",
+      "title": "数据库与运行时",
+      "phase": "L0",
+      "depends_on": [
+        "S01"
+      ],
+      "modules": [
+        "M01",
+        "M03",
+        "M05",
+        "M12"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T01-01",
+        "T03-01",
+        "T05-01",
+        "T05-03",
+        "T12-01"
+      ],
+      "check_ids": [
+        "S02-C01",
+        "S02-C02",
+        "S02-C03",
+        "S02-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S03",
+      "title": "本地图库与玻璃原型",
+      "phase": "L0",
+      "depends_on": [
+        "S02"
+      ],
+      "modules": [
+        "M09",
+        "M11",
+        "M12",
+        "M13",
+        "M17"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [],
+      "check_ids": [
+        "S03-C01",
+        "S03-C02",
+        "S03-C03",
+        "S03-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S04",
+      "title": "十万图库前置性能",
+      "phase": "L0",
+      "depends_on": [
+        "S03"
+      ],
+      "modules": [
+        "M05",
+        "M09",
+        "M11",
+        "M12",
+        "M13",
+        "M16",
+        "M17"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T11-01"
+      ],
+      "check_ids": [
+        "S04-C01",
+        "S04-C02",
+        "S04-C03",
+        "S04-C04",
+        "S04-C05"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S05",
+      "title": "账号与凭证",
+      "phase": "L1",
+      "depends_on": [
+        "S04"
+      ],
+      "modules": [
+        "M02",
+        "M03",
+        "M04",
+        "M06",
+        "M12",
+        "M13"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T02-03",
+        "T03-02",
+        "T04-01",
+        "T04-03",
+        "T04-05"
+      ],
+      "check_ids": [
+        "S05-C01",
+        "S05-C02",
+        "S05-C03",
+        "S05-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S06",
+      "title": "元数据可靠下行",
+      "phase": "L1",
+      "depends_on": [
+        "S05"
+      ],
+      "modules": [
+        "M05",
+        "M06",
+        "M07"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T06-01",
+        "T06-04",
+        "T07-01",
+        "T07-02"
+      ],
+      "check_ids": [
+        "S06-C01",
+        "S06-C02",
+        "S06-C03",
+        "S06-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S07",
+      "title": "双资源下行与浏览",
+      "phase": "L1",
+      "depends_on": [
+        "S06"
+      ],
+      "modules": [
+        "M06",
+        "M07",
+        "M09",
+        "M11",
+        "M12",
+        "M13"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T06-02",
+        "T07-03",
+        "T07-06",
+        "T09-01",
+        "T11-03"
+      ],
+      "check_ids": [
+        "S07-C01",
+        "S07-C02",
+        "S07-C03",
+        "S07-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S08",
+      "title": "下行/发布故障恢复",
+      "phase": "L1",
+      "depends_on": [
+        "S07"
+      ],
+      "modules": [
+        "M01",
+        "M03",
+        "M05",
+        "M07",
+        "M09"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T01-02",
+        "T01-04",
+        "T03-04",
+        "T07-05",
+        "T09-02",
+        "T09-03",
+        "T09-04",
+        "T09-05"
+      ],
+      "check_ids": [
+        "S08-C01",
+        "S08-C02",
+        "S08-C03",
+        "S08-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S09",
+      "title": "显式导入与准备",
+      "phase": "L2",
+      "depends_on": [
+        "S08"
+      ],
+      "modules": [
+        "M03",
+        "M09",
+        "M10",
+        "M11",
+        "M13"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T03-03",
+        "T10-01",
+        "T10-02",
+        "T10-03",
+        "T10-04",
+        "T10-05"
+      ],
+      "check_ids": [
+        "S09-C01",
+        "S09-C02",
+        "S09-C03",
+        "S09-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S10",
+      "title": "租约与成对上传",
+      "phase": "L2",
+      "depends_on": [
+        "S09"
+      ],
+      "modules": [
+        "M05",
+        "M06",
+        "M08",
+        "M09"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T05-04",
+        "T05-05",
+        "T06-03",
+        "T08-01",
+        "T08-02",
+        "T08-03",
+        "T08-05"
+      ],
+      "check_ids": [
+        "S10-C01",
+        "S10-C02",
+        "S10-C03",
+        "S10-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S11",
+      "title": "收藏并发与旧客户端互操作",
+      "phase": "L2",
+      "depends_on": [
+        "S10"
+      ],
+      "modules": [
+        "M04",
+        "M05",
+        "M07",
+        "M08",
+        "M11",
+        "M12",
+        "M15"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T05-02",
+        "T07-04",
+        "T08-04",
+        "T08-06",
+        "T11-02",
+        "T12-03",
+        "T15-02"
+      ],
+      "check_ids": [
+        "S11-C01",
+        "S11-C02",
+        "S11-C03",
+        "S11-C04"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S12",
+      "title": "完整设置与调度",
+      "phase": "L2",
+      "depends_on": [
+        "S11"
+      ],
+      "modules": [
+        "M01",
+        "M04",
+        "M05",
+        "M11",
+        "M12",
+        "M13",
+        "M14"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T01-03",
+        "T04-02",
+        "T04-04",
+        "T11-04",
+        "T12-02",
+        "T13-01",
+        "T13-02",
+        "T13-03",
+        "T14-01",
+        "T14-02",
+        "T14-03",
+        "T14-04"
+      ],
+      "check_ids": [
+        "S12-C01",
+        "S12-C02",
+        "S12-C03",
+        "S12-C04",
+        "S12-C05"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S13",
+      "title": "综合性能与玻璃UX",
+      "phase": "L3",
+      "depends_on": [
+        "S12"
+      ],
+      "modules": [
+        "M12",
+        "M13",
+        "M14",
+        "M15",
+        "M16",
+        "M17"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T12-04",
+        "T13-04",
+        "T15-03",
+        "T16-01",
+        "T16-02",
+        "T16-03",
+        "T16-04",
+        "T16-05",
+        "T16-06",
+        "T17-01",
+        "T17-02",
+        "T17-03",
+        "T17-04",
+        "T17-05"
+      ],
+      "check_ids": [
+        "S13-C01",
+        "S13-C02",
+        "S13-C03",
+        "S13-C04",
+        "S13-C05"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": false,
+      "evidence_report": null,
+      "build_id": null
+    },
+    {
+      "id": "S14",
+      "title": "最终Linux安装包",
+      "phase": "L3",
+      "depends_on": [
+        "S13"
+      ],
+      "modules": [
+        "M15",
+        "M17"
+      ],
+      "implementation_status": "not_started",
+      "gate_status": "not_run",
+      "user_review": "not_recorded",
+      "primary_tests": [
+        "T15-01",
+        "T15-04",
+        "T17-06"
+      ],
+      "check_ids": [
+        "S14-C01",
+        "S14-C02",
+        "S14-C03",
+        "S14-C04",
+        "S14-C05"
+      ],
+      "evidence_scope": "application_stage",
+      "mandatory_regression": "affected_previous_stages",
+      "final_all_tests": true,
+      "evidence_report": null,
+      "build_id": null
+    }
+  ],
+  "primary_test_owner": {
+    "T01-01": "S02",
+    "T01-02": "S08",
+    "T01-03": "S12",
+    "T01-04": "S08",
+    "T02-01": "S01",
+    "T02-02": "S01",
+    "T02-03": "S05",
+    "T03-01": "S02",
+    "T03-02": "S05",
+    "T03-03": "S09",
+    "T03-04": "S08",
+    "T04-01": "S05",
+    "T04-02": "S12",
+    "T04-03": "S05",
+    "T04-04": "S12",
+    "T04-05": "S05",
+    "T05-01": "S02",
+    "T05-02": "S11",
+    "T05-03": "S02",
+    "T05-04": "S10",
+    "T05-05": "S10",
+    "T06-01": "S06",
+    "T06-02": "S07",
+    "T06-03": "S10",
+    "T06-04": "S06",
+    "T07-01": "S06",
+    "T07-02": "S06",
+    "T07-03": "S07",
+    "T07-04": "S11",
+    "T07-05": "S08",
+    "T07-06": "S07",
+    "T08-01": "S10",
+    "T08-02": "S10",
+    "T08-03": "S10",
+    "T08-04": "S11",
+    "T08-05": "S10",
+    "T08-06": "S11",
+    "T09-01": "S07",
+    "T09-02": "S08",
+    "T09-03": "S08",
+    "T09-04": "S08",
+    "T09-05": "S08",
+    "T10-01": "S09",
+    "T10-02": "S09",
+    "T10-03": "S09",
+    "T10-04": "S09",
+    "T10-05": "S09",
+    "T11-01": "S04",
+    "T11-02": "S11",
+    "T11-03": "S07",
+    "T11-04": "S12",
+    "T12-01": "S02",
+    "T12-02": "S12",
+    "T12-03": "S11",
+    "T12-04": "S13",
+    "T13-01": "S12",
+    "T13-02": "S12",
+    "T13-03": "S12",
+    "T13-04": "S13",
+    "T14-01": "S12",
+    "T14-02": "S12",
+    "T14-03": "S12",
+    "T14-04": "S12",
+    "T15-01": "S14",
+    "T15-02": "S11",
+    "T15-03": "S13",
+    "T15-04": "S14",
+    "T16-01": "S13",
+    "T16-02": "S13",
+    "T16-03": "S13",
+    "T16-04": "S13",
+    "T16-05": "S13",
+    "T16-06": "S13",
+    "T17-01": "S13",
+    "T17-02": "S13",
+    "T17-03": "S13",
+    "T17-04": "S13",
+    "T17-05": "S13",
+    "T17-06": "S14"
+  },
+  "evidence_template": "templates/stage-report.md",
+  "development_plan": "development-plan.md",
+  "acceptance_handbook": "stage-acceptance.md",
+  "active_plan": "../../local-first/contracts/stage-plan.json"
+}

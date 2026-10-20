@@ -1,0 +1,7 @@
++ /home/luyao/.cargo/bin/cargo build --locked -p photo-bridge --release
+    Finished `release` profile [optimized] target(s) in 0.05s
++ /home/luyao/.local/share/photo-client/flutter/bin/flutter --no-version-check build linux --release --dart-define-from-file=/home/luyao/workspace/Photo/client/.build/linux-x86_64/dart-defines.json
+Flutter assets will be downloaded from https://storage.flutter-io.cn. Make sure you trust this source!
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/photo_client
+{"bundle":"/home/luyao/workspace/Photo/client/app/build/linux/x64/release/bundle","mode":"release","native_library":"/home/luyao/workspace/Photo/client/target/release/libphoto_bridge.so","packaging_acceptance":"NOT RUN","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","profile_id":"linux-x86_64"}

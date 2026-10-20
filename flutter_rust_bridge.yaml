@@ -1,0 +1,6 @@
+rust_input: crate::api
+rust_root: crates/photo-bridge/
+dart_output: app/lib/src/rust/
+add_mod_to_lib: false
+web: false
+dart_fix: false
