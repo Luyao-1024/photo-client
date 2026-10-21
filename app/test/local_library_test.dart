@@ -83,7 +83,7 @@ void main() {
     (tester) async {
       final gateway = FakeLocalGateway(imagePath: image);
       await mount(tester, gateway);
-      expect(find.text('Library is empty'), findsOneWidget);
+      expect(find.text('No photos yet'), findsOneWidget);
       // The empty state offers a live path into Settings (not a dead button);
       // the quiet overview with counts only renders once there is content.
       expect(
@@ -268,7 +268,7 @@ void main() {
       // An unmatched search is distinct from an empty library: the no-matches
       // state shows, and the empty-library state never does.
       expect(find.text('No matching photos'), findsOneWidget);
-      expect(find.text('Library is empty'), findsNothing);
+      expect(find.text('No photos yet'), findsNothing);
       await disposeApp(tester, gateway);
     },
   );
@@ -280,11 +280,11 @@ void main() {
       await mount(tester, gateway);
       expect(find.byKey(const ValueKey('library-error')), findsOneWidget);
       expect(find.textContaining('PRIVATE'), findsNothing);
-      expect(find.text('Library is empty'), findsNothing);
+      expect(find.text('No photos yet'), findsNothing);
       gateway.failOpen = false;
       await tester.tap(find.byKey(const ValueKey('retry-library')));
       await tester.pumpAndSettle();
-      expect(find.text('Library is empty'), findsOneWidget);
+      expect(find.text('No photos yet'), findsOneWidget);
       await disposeApp(tester, gateway);
     },
   );

@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/app.dart';
 import 'package:photo_client/services/core_gateway.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
+import 'package:photo_client/ui/local_library_pane.dart';
 import 'package:photo_client/ui/presentation_preferences.dart';
 import 'package:photo_client/ui/runtime_controller.dart';
 
@@ -150,14 +151,14 @@ void main() {
     await mount(tester, gateway);
     await tester.pumpAndSettle();
     final container = containerOf(tester);
-    expect(find.text('Library is empty'), findsOneWidget);
+    expect(find.text('No photos yet'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('sidebar-favorites')));
     await tester.pumpAndSettle();
     expect(container.read(localLibraryProvider).favoritesOnly, isTrue);
     // A filtered-away library is distinct from an empty one.
     expect(find.text('No matching photos'), findsOneWidget);
-    expect(find.text('Library is empty'), findsNothing);
+    expect(find.text('No photos yet'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('sidebar-trash')));
     await tester.pumpAndSettle();
@@ -166,7 +167,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('sidebar-photos')));
     await tester.pumpAndSettle();
     expect(container.read(localLibraryProvider).favoritesOnly, isFalse);
-    expect(find.text('Library is empty'), findsOneWidget);
+    expect(find.text('No photos yet'), findsOneWidget);
     expect(gateway.initializes, 1);
     expect(tester.takeException(), isNull);
     await disposeApp(tester, gateway);
@@ -298,14 +299,14 @@ void main() {
     final gateway = FakeLocalGateway(imagePath: image)
       ..pendingInitialize = Completer<CoreSnapshot>();
     await mount(tester, gateway);
-    expect(find.text('Loading the local library…'), findsOneWidget);
+    expect(find.text('Loading photos…'), findsOneWidget);
     expect(find.textContaining('core'), findsNothing);
     final container = containerOf(tester);
     expect(gateway.listens, 0);
 
     gateway.pendingInitialize!.complete(snapshot);
     await tester.pumpAndSettle();
-    expect(find.text('Library is empty'), findsOneWidget);
+    expect(find.text('No photos yet'), findsOneWidget);
     expect(gateway.listens, 1);
 
     gateway.events.add(const CoreRuntimeEvent(sequence: 9, status: 'running'));
@@ -326,7 +327,7 @@ void main() {
     final gateway = FakeLocalGateway(imagePath: image)..failInitialize = true;
     await mount(tester, gateway);
     await tester.pumpAndSettle();
-    expect(find.text('Library failed to load'), findsOneWidget);
+    expect(find.text('Photos failed to load'), findsOneWidget);
     expect(find.textContaining('PRIVATE'), findsNothing);
     expect(find.textContaining('core'), findsNothing);
     expect(gateway.initializes, 1);
@@ -339,7 +340,7 @@ void main() {
     expect(gateway.shutdowns, 1);
     expect(gateway.listens, 1);
     expect(find.textContaining('PRIVATE'), findsNothing);
-    expect(find.text('Library is empty'), findsOneWidget);
+    expect(find.text('No photos yet'), findsOneWidget);
     await disposeApp(tester, gateway);
   });
 
@@ -352,7 +353,7 @@ void main() {
     final runtime = containerOf(tester).read(runtimeProvider.notifier);
     gateway.events.addError(StateError('PRIVATE stream failure'));
     await tester.pumpAndSettle();
-    expect(find.text('Library failed to load'), findsOneWidget);
+    expect(find.text('Photos failed to load'), findsOneWidget);
     expect(find.textContaining('PRIVATE'), findsNothing);
     expect(find.byKey(const ValueKey('retry-runtime')), findsOneWidget);
     expect(gateway.cancellations, 1);
@@ -363,7 +364,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(gateway.listens, 2);
     expect(gateway.initializes, 2);
-    expect(find.text('Library is empty'), findsOneWidget);
+    expect(find.text('No photos yet'), findsOneWidget);
     await disposeApp(tester, gateway);
   });
 
@@ -507,6 +508,57 @@ void main() {
     expect(tester.takeException(), isNull);
     await gateway.changes.close();
     await gateway.events.close();
+  });
+
+  testWidgets('header puts the destination name left and search right', (
+    tester,
+  ) async {
+    for (final width in [390.0, 800.0, 1440.0, 1920.0]) {
+      final gateway = FakeLocalGateway(imagePath: image);
+      await mount(tester, gateway, width: width);
+      await tester.pumpAndSettle();
+
+      // The header title is the only Text carrying the photos label inside
+      // the content pane.
+      final title = find.descendant(
+        of: find.byType(LocalLibraryPane),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              w.data == 'Photos' &&
+              w.style?.fontWeight == FontWeight.w600,
+          description: 'photos header title',
+        ),
+      );
+      expect(title, findsOneWidget, reason: 'width $width');
+      final pane = tester.getRect(find.byType(LocalLibraryPane));
+      final titleRect = tester.getRect(title);
+
+      // The destination name hugs the left edge of the content pane.
+      expect(
+        titleRect.left - pane.left,
+        closeTo(12.0, 1.0),
+        reason: 'title is not left aligned at width $width',
+      );
+
+      // The search button sits at the far right of the same bar.
+      final search = find.byKey(const ValueKey('library-search'));
+      expect(search, findsOneWidget, reason: 'width $width');
+      final searchRect = tester.getRect(search);
+      expect(
+        pane.right - searchRect.right,
+        closeTo(12.0, 1.0),
+        reason: 'search is not flush right at width $width',
+      );
+      expect(
+        searchRect.left,
+        greaterThan(pane.center.dx),
+        reason: 'search is not on the right half at width $width',
+      );
+
+      expect(tester.takeException(), isNull);
+      await disposeApp(tester, gateway);
+    }
   });
 
   testWidgets('narrow layout remains usable with doubled text size', (

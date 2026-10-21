@@ -1484,36 +1484,22 @@ class _Header extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
+              // Left: where the user is — all photos, an album, or a filter.
               Expanded(
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Row(
                     children: [
-                      if (_showField)
-                        Flexible(
-                          child: _SearchField(
-                            controller: searchController,
-                            scope: scope,
-                            focusNode: searchFocus,
-                            onChanged: onSearchChanged,
-                            onClose: onCloseSearch,
-                            glass: glass,
-                            strings: strings,
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
                           ),
-                        )
-                      else
-                        _RoundSearchButton(
-                          onPressed: onOpenSearch,
-                          tooltip: strings.search,
                         ),
-                      if (_showField && !trashMode) ...[
-                        const SizedBox(width: 10),
-                        _ScopeSelector(
-                          scope: scope,
-                          onChanged: onScopeChanged,
-                          glass: glass,
-                        ),
-                      ],
+                      ),
                       if (selectionMode) ...[
                         const SizedBox(width: 10),
                         Flexible(
@@ -1547,25 +1533,48 @@ class _Header extends StatelessWidget {
                   ),
                 ),
               ),
-              if (!_showField || trashMode)
-                Flexible(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
+              // Right: search and the actions that belong to the page.
               Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: _trailing(context),
+                flex: _showField ? 2 : 1,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (_showField) ...[
+                      Flexible(
+                        flex: 2,
+                        child: _SearchField(
+                          controller: searchController,
+                          scope: scope,
+                          focusNode: searchFocus,
+                          onChanged: onSearchChanged,
+                          onClose: onCloseSearch,
+                          glass: glass,
+                          strings: strings,
+                        ),
+                      ),
+                      if (!trashMode) ...[
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: _ScopeSelector(
+                              scope: scope,
+                              onChanged: onScopeChanged,
+                              glass: glass,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ] else
+                      _RoundSearchButton(
+                        onPressed: onOpenSearch,
+                        tooltip: strings.search,
+                      ),
+                    if (_hasTrailing) ...[
+                      const SizedBox(width: 10),
+                      Flexible(child: _trailing(context)),
+                    ],
+                  ],
                 ),
               ),
             ],
@@ -1575,10 +1584,12 @@ class _Header extends StatelessWidget {
     );
   }
 
+  bool get _hasTrailing => (selectionMode && selectionCount > 0) || trashMode;
+
   Widget _trailing(BuildContext context) {
     if (selectionMode && selectionCount > 0) {
       return Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
             child: Text(
@@ -1894,47 +1905,50 @@ class _SearchField extends StatelessWidget {
       key: const ValueKey('library-search'),
       enabled: glass,
       radius: 20,
-      child: SizedBox(
-        height: 40,
-        width: 280,
-        child: Row(
-          children: [
-            const SizedBox(width: 12),
-            const Icon(Icons.search, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                keyboardType: scope == SearchScope.date
-                    ? TextInputType.datetime
-                    : TextInputType.text,
-                inputFormatters: scope == SearchScope.date
-                    ? [const _DateQueryFormatter()]
-                    : null,
-                focusNode: focusNode,
-                autofocus: true,
-                onChanged: onChanged,
-                onSubmitted: (_) => onClose?.call(),
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  hintText: strings.searchHint,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: SizedBox(
+          height: 40,
+          width: 280,
+          child: Row(
+            children: [
+              const SizedBox(width: 12),
+              const Icon(Icons.search, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  keyboardType: scope == SearchScope.date
+                      ? TextInputType.datetime
+                      : TextInputType.text,
+                  inputFormatters: scope == SearchScope.date
+                      ? [const _DateQueryFormatter()]
+                      : null,
+                  focusNode: focusNode,
+                  autofocus: true,
+                  onChanged: onChanged,
+                  onSubmitted: (_) => onClose?.call(),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    hintText: strings.searchHint,
+                  ),
                 ),
               ),
-            ),
-            if (onClose != null)
-              IconButton(
-                key: const ValueKey('library-search-close'),
-                tooltip: strings.close,
-                icon: const Icon(Icons.close, size: 18),
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(36, 36),
-                  padding: EdgeInsets.zero,
+              if (onClose != null)
+                IconButton(
+                  key: const ValueKey('library-search-close'),
+                  tooltip: strings.close,
+                  icon: const Icon(Icons.close, size: 18),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(36, 36),
+                    padding: EdgeInsets.zero,
+                  ),
+                  onPressed: onClose,
                 ),
-                onPressed: onClose,
-              ),
-            const SizedBox(width: 2),
-          ],
+              const SizedBox(width: 2),
+            ],
+          ),
         ),
       ),
     );

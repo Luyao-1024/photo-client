@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-21T16:18:42+08:00",
+  "scope": "Library header layout rework and 图库 → 照片 destination rename only",
+  "result": "PASS",
+  "automated_ux_test_added": true,
+  "change_request": [
+    "显示所有图片和视频的页面叫作照片,不叫图库",
+    "照片或者点开相册后的相册名显示在顶栏的左侧,搜索按钮显示在右侧,居中不好看"
+  ],
+  "defect_found_before_change": {
+    "summary": "标题用 Flexible 松约束,收缩成文字宽度后贴在中间三分之一的最左端,并非居中;剩余空间堆积在右侧,尾部操作区也没贴到右边缘",
+    "code": "app/lib/ui/local_library_pane.dart:_Header.build",
+    "widget_measurement_before": [
+      { "window_width": 1100, "pane_center_dx": 670.0, "title_center_dx": 599.2, "delta_px": -70.8 },
+      { "window_width": 1440, "pane_center_dx": 840.0, "title_center_dx": 712.5, "delta_px": -127.5 },
+      { "window_width": 1920, "pane_center_dx": 1080.0, "title_center_dx": 872.5, "delta_px": -207.5 }
+    ],
+    "user_screenshot_pixel_measurement": {
+      "source": "用户提供的启动后截图 1094x359",
+      "sidebar_divider_x": 237,
+      "content_pane_x": [240, 1094],
+      "content_pane_center_x": 667,
+      "title_glyph_x": [546, 576],
+      "title_center_x": 561,
+      "offset_px": -106
+    }
+  },
+  "after_change": {
+    "layout": "左侧为当前所在位置(照片/相册名/收藏/图片/视频),右侧为搜索按钮;搜索展开后右侧为搜索框、全部-名称-日期范围选择器与关闭按钮",
+    "rename_scope": [
+      "侧栏第一项与顶栏标题:图库 → 照片",
+      "空状态:图库为空 → 照片为空",
+      "加载中:正在读取本地图库… → 正在读取本地照片…",
+      "加载失败:图库加载失败 → 照片加载失败",
+      "重试按钮:刷新图库 → 刷新照片",
+      "退出确认:已加入图库的照片会保留 → 已加入的照片会保留"
+    ],
+    "rename_not_applied": "后端与设计文档中的「图库」指图库这一数据概念,不是界面标签,保持原样"
+  },
+  "real_window_evidence": {
+    "environment": "Xvfb :95 1440x900x24,GDK_BACKEND=x11,LIBGL_ALWAYS_SOFTWARE=1",
+    "bundle": "app/build/linux/x64/release/bundle/photo_client",
+    "app_window": { "x": [0, 1279], "y": [0, 719], "width": 1280, "height": 720 },
+    "content_pane_x": [240, 1280],
+    "photos_page": {
+      "screenshot": "photos-left-title.png",
+      "title_glyph_x": [253, 282],
+      "title_offset_from_pane_left_px": 13,
+      "search_icon_glyph_x": [1239, 1255],
+      "search_button_right_edge_x": 1268,
+      "search_offset_from_pane_right_px": 12
+    },
+    "album_page": {
+      "screenshot": "album-name-left.png",
+      "opened_album": "Screenshots",
+      "title_glyph_x": [253, 346],
+      "title_offset_from_pane_left_px": 13,
+      "search_icon_glyph_x": [1239, 1255]
+    }
+  },
+  "widget_measurement_after": [
+    { "window_width": 390, "title_left_offset_px": 12, "search_right_offset_px": 12 },
+    { "window_width": 800, "title_left_offset_px": 12, "search_right_offset_px": 12 },
+    { "window_width": 1440, "title_left_offset_px": 12, "search_right_offset_px": 12 }
+  ],
+  "narrow_search_overflow": {
+    "before": "旧实现展开搜索时范围选择器溢出 RenderFlex",
+    "after": "搜索框改为可收缩(ConstrainedBox maxWidth 280),范围选择器可横向滚动,搜索框优先占位;390/800/1440 展开态均无溢出"
+  },
+  "tests": {
+    "flutter_analyze": "PASS (No issues found)",
+    "flutter_test": "PASS (45 tests)",
+    "new_regression_test": "presentation_test.dart:header puts the destination name left and search right (390/800/1440/1920;改动前失败,改动后通过)",
+    "release_build": "PASS (tools/platform_cli.py build --mode release)"
+  },
+  "not_run": [
+    "cargo clippy / cargo test:本次无 Rust 改动,未复跑",
+    "完整 UX 旅程与十万张性能验收:按既定延期清单未复跑"
+  ]
+}

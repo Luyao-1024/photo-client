@@ -71,7 +71,7 @@ class _ApplicationState extends ConsumerState<_Application>
               title: Text(strings.pick('停止扫描并退出？', 'Stop scanning and close?')),
               content: Text(
                 strings.pick(
-                  '已加入图库的照片会保留，未完成的来源可以下次重新扫描。',
+                  '已加入的照片会保留，未完成的来源可以下次重新扫描。',
                   'Photos already added are kept. You can rescan unfinished sources next time.',
                 ),
               ),

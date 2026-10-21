@@ -9,7 +9,7 @@ class AppStrings {
   String pick(String zh, String en) => chinese ? zh : en;
 
   String get appTitle => 'PhotoViewer';
-  String get library => pick('图库', 'Library');
+  String get library => pick('照片', 'Photos');
   String get settings => pick('设置', 'Settings');
   String get appearance => pick('外观', 'Appearance');
   String get albums => pick('相册', 'Albums');
@@ -34,15 +34,15 @@ class AppStrings {
   String get indexing => pick('正在索引…', 'Indexing…');
   String get scanFailed => pick('扫描失败', 'Scan failed');
   String get retryScan => pick('重新扫描', 'Retry scan');
-  String get emptyLibrary => pick('图库为空', 'Library is empty');
+  String get emptyLibrary => pick('照片为空', 'No photos yet');
   String get openSettings => pick('打开设置', 'Open settings');
   String get scanFolders => pick('扫描目录', 'Scan folders');
   String photosCountLabel(int n) => pick('$n 张照片', '$n photos');
   String positionLabel(int cur, int total) => '$cur / $total';
-  String get libraryFailed => pick('图库加载失败', 'Library failed to load');
+  String get libraryFailed => pick('照片加载失败', 'Photos failed to load');
   String get libraryFailedBody => pick(
-    '无法打开本地图库。请重试；如果一直失败，请确认照片所在目录仍然可用。',
-    'The local library could not be opened. Try again; if it keeps failing, check that your photo folders are still available.',
+    '无法打开本地照片。请重试；如果一直失败，请确认照片所在目录仍然可用。',
+    'The photos could not be opened. Try again; if it keeps failing, check that your photo folders are still available.',
   );
   String get retry => pick('重试', 'Try again');
   String get theme => pick('主题', 'Theme');
@@ -80,8 +80,8 @@ class AppStrings {
   );
   String get searchPhotos => pick('搜索照片', 'Search photos');
   String get favorites => pick('仅收藏', 'Favorites only');
-  String get refresh => pick('刷新图库', 'Refresh library');
-  String get loadingLibrary => pick('正在读取本地图库…', 'Loading the local library…');
+  String get refresh => pick('刷新照片', 'Refresh photos');
+  String get loadingLibrary => pick('正在读取本地照片…', 'Loading photos…');
   String get selecting => pick('正在选择来源…', 'Choosing a source…');
   String get cancelScan => pick('停止扫描', 'Stop scan');
   String get cancellingScan => pick('正在停止扫描…', 'Stopping scan…');
@@ -108,8 +108,8 @@ class AppStrings {
   String get dimensions => pick('尺寸', 'Dimensions');
   String get unknown => pick('未知', 'Unknown');
   String get libraryUpdated => pick(
-    '图库已更新，返回后可继续浏览',
-    'The library changed. Return to continue browsing.',
+    '照片已更新，返回后可继续浏览',
+    'The photos changed. Return to continue browsing.',
   );
   String get folderFilter => pick('当前目录', 'Current folder');
   String photoCount(int count) => pick('$count 张照片', '$count photos');
@@ -241,10 +241,10 @@ class AppStrings {
       'The favorite change was not saved. Try again.',
     ),
     'events' => pick(
-      '图库更新通知已中断，请刷新。',
-      'Library updates stopped. Refresh to reconnect.',
+      '照片更新通知已中断，请刷新。',
+      'Photo updates stopped. Refresh to reconnect.',
     ),
     'nextPage' => pick('无法读取这一页，请重试。', 'This page could not load. Try again.'),
-    _ => pick('无法读取本地图库，请重试。', 'The local library could not load. Try again.'),
+    _ => pick('无法读取本地照片，请重试。', 'The photos could not load. Try again.'),
   };
 }
