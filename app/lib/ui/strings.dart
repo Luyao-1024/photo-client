@@ -10,7 +10,6 @@ class AppStrings {
 
   String get appTitle => 'PhotoViewer';
   String get library => pick('图库', 'Library');
-  String get connection => pick('核心连接', 'Core connection');
   String get settings => pick('设置', 'Settings');
   String get appearance => pick('外观', 'Appearance');
   String get albums => pick('相册', 'Albums');
@@ -40,46 +39,12 @@ class AppStrings {
   String get scanFolders => pick('扫描目录', 'Scan folders');
   String photosCountLabel(int n) => pick('$n 张照片', '$n photos');
   String positionLabel(int cur, int total) => '$cur / $total';
-  String get stage => pick('S01 · 工程验证', 'S01 · Foundation');
-  String get connecting => pick('正在连接本地核心…', 'Connecting to the local core…');
-  String get ready => pick('本地核心已连接', 'Local core connected');
-  String get failed => pick('本地核心连接中断', 'Local core unavailable');
-  String get stopped => pick('本地核心已停止', 'Local core stopped');
-  String get retry => pick('重试连接', 'Retry connection');
-  String get emptyTitle => pick('本地图库从这里开始', 'Your local library starts here');
-  String get emptyBody => pick(
-    '后续可通过导入本地文件或目录建立图库。当前 S01 仅验证本地核心连接，尚未提供照片导入和浏览。',
-    'Your library will use photos imported from local files or folders. This S01 preview verifies the local core connection; photo import and browsing are not available yet.',
+  String get libraryFailed => pick('图库加载失败', 'Library failed to load');
+  String get libraryFailedBody => pick(
+    '无法打开本地图库。请重试；如果一直失败，请确认照片所在目录仍然可用。',
+    'The local library could not be opened. Try again; if it keeps failing, check that your photo folders are still available.',
   );
-  String get openConnection => pick('查看核心连接', 'Inspect core connection');
-  String get foundationHint =>
-      pick('本次预览尚未读取照片', 'This preview has not loaded any photos');
-  String get connectionBody => pick(
-    '这里展示当前核心会话的真实信息。连接成功仅代表本地桥接可用。',
-    'These details come from the current core session. A connection verifies the local bridge only.',
-  );
-  String get initializeError => pick(
-    '无法初始化本地核心。请检查启动配置和本地运行环境，然后重试。',
-    'The local core could not initialize. Check the launch configuration and local runtime, then retry.',
-  );
-  String get streamError => pick(
-    '运行时事件订阅已中断，当前状态可能过期。请重新连接。',
-    'The runtime event stream ended. Its state may be stale; reconnect to continue.',
-  );
-  String get probeError =>
-      pick('往返调用失败，可以再次尝试。', 'The round trip failed. You can try again.');
-  String get shutdownError =>
-      pick('核心未确认正常关闭。', 'The core did not confirm a clean shutdown.');
-  String get profile => pick('平台配置', 'Platform profile');
-  String get digest => pick('配置摘要', 'Profile digest');
-  String get protocol => pick('桥接协议', 'Bridge protocol');
-  String get session => pick('会话 ID', 'Session ID');
-  String get event => pick('最新事件序号', 'Latest event sequence');
-  String get waitingEvent => pick('等待事件', 'Waiting for an event');
-  String get runtimeStatus => pick('运行时状态码', 'Runtime status code');
-  String get probe => pick('验证往返调用', 'Verify round trip');
-  String get probing => pick('正在验证…', 'Verifying…');
-  String get reply => pick('核心返回', 'Core reply');
+  String get retry => pick('重试', 'Try again');
   String get theme => pick('主题', 'Theme');
   String get system => pick('跟随系统', 'System');
   String get light => pick('浅色', 'Light');
@@ -161,6 +126,103 @@ class AppStrings {
     '${cancelled ? '扫描已取消' : '扫描已结束'}：发现 $discovered，跳过 $skipped，失败 $failed',
     '${cancelled ? 'Scan cancelled' : 'Scan finished'}: $discovered discovered, $skipped skipped, $failed failed',
   );
+  // --- Sidebar sections -------------------------------------------------
+  String get mediaTypes => pick('媒体类型', 'Media types');
+  String get images => pick('图片', 'Images');
+  String get videos => pick('视频', 'Videos');
+  String get keyboardShortcuts => pick('键盘快捷键', 'Keyboard shortcuts');
+  String get shortcutBrowse => pick('浏览', 'Browsing');
+  String get shortcutViewer => pick('查看器', 'Viewer');
+  String get shortcutGlobal => pick('全局', 'Global');
+
+  // --- Search -----------------------------------------------------------
+  String get search => pick('搜索', 'Search');
+  String get searchAll => pick('全部', 'All');
+  String get searchByName => pick('名称', 'Name');
+  String get searchByDate => pick('日期', 'Date');
+  String get searchPrompt => pick('输入关键词开始搜索', 'Type a keyword to search');
+  String get searching => pick('正在搜索…', 'Searching…');
+
+  // --- Multi-select / batch --------------------------------------------
+  String get restore => pick('恢复', 'Restore');
+  String get deletePermanently => pick('彻底删除', 'Delete permanently');
+  String get emptyTrash => pick('清空回收站', 'Empty trash');
+  String get copyToAlbum => pick('复制到相册', 'Copy to album');
+  String get moveToAlbum => pick('移动到相册', 'Move to album');
+  String get rename => pick('重命名', 'Rename');
+  String get renamePhoto => pick('重命名照片', 'Rename photo');
+  String get setAsCover => pick('设为封面', 'Set as cover');
+  String get albumCover => pick('相册封面', 'Album cover');
+  String get chooseAlbum => pick('选择目标相册', 'Choose a destination album');
+  String get newAlbum => pick('新建相册…', 'New album…');
+  String get noAlbums =>
+      pick('还没有相册，先添加一个目录。', 'No albums yet. Add a folder first.');
+  String get copy => pick('复制', 'Copy');
+  String get move => pick('移动', 'Move');
+  String get save => pick('保存', 'Save');
+  String get cancel => pick('取消', 'Cancel');
+  String get delete => pick('删除', 'Delete');
+
+  // --- Dialogs / confirmations -----------------------------------------
+  String confirmTrashTitle(int n) =>
+      pick('将 $n 项移到回收站？', 'Move $n item(s) to trash?');
+  String get confirmTrashBody => pick(
+    '照片会移到回收站，可稍后恢复。',
+    'Photos move to trash and can be restored later.',
+  );
+  String confirmPurgeTitle(int n) =>
+      pick('彻底删除 $n 项？', 'Delete $n item(s) permanently?');
+  String get confirmPurgeBody => pick(
+    '此操作无法撤销，文件将从磁盘删除。',
+    'This cannot be undone. The files are removed from disk.',
+  );
+  String get confirmEmptyTrashTitle => pick('清空回收站？', 'Empty trash?');
+  String get confirmEmptyTrashBody => pick(
+    '回收站中的所有照片都会被彻底删除，无法撤销。',
+    'Every photo in trash is removed from disk. This cannot be undone.',
+  );
+  String get actionFailed => pick('操作失败，请重试。', 'The action failed. Try again.');
+  String trashedCount(int n) =>
+      pick('已将 $n 项移到回收站', '$n item(s) moved to trash');
+  String restoredCount(int n) => pick('已恢复 $n 项', '$n item(s) restored');
+  String purgedCount(int n) => pick('已彻底删除 $n 项', '$n item(s) deleted');
+  String addedToAlbumCount(int n) => pick('已添加 $n 项', '$n item(s) added');
+
+  // --- Viewer extras ----------------------------------------------------
+  String get rotateLeft => pick('向左旋转', 'Rotate left');
+  String get rotateRight => pick('向右旋转', 'Rotate right');
+  String get fullscreen => pick('全屏预览', 'Fullscreen preview');
+  String get captureTime => pick('拍摄时间', 'Captured');
+  String get mediaType => pick('类型', 'Type');
+  String get state => pick('状态', 'State');
+  String get trashed => pick('已删除', 'Trashed');
+  String get active => pick('正常', 'Active');
+
+  // --- Editing ----------------------------------------------------------
+  String get edit => pick('编辑', 'Edit');
+  String get editPhoto => pick('编辑照片', 'Edit photo');
+  String get reset => pick('重置', 'Reset');
+  String get saveCopy => pick('另存为副本', 'Save a copy');
+  String get saveOverwrite => pick('覆盖原图', 'Overwrite original');
+  String get rotation => pick('旋转', 'Rotation');
+  String get crop => pick('裁剪', 'Crop');
+  String get brightness => pick('亮度', 'Brightness');
+  String get contrast => pick('对比度', 'Contrast');
+  String get saturation => pick('饱和度', 'Saturation');
+  String get noPendingEdits => pick('还没有修改', 'No changes yet');
+  String get discardEditsTitle => pick('放弃未保存的修改？', 'Discard unsaved changes?');
+  String get discardEditsBody => pick(
+    '关闭编辑器会丢失当前调整。',
+    'Closing the editor discards the current adjustments.',
+  );
+  String get discard => pick('放弃', 'Discard');
+  String get continueEditing => pick('继续编辑', 'Keep editing');
+  String get savedCopy => pick('已保存副本', 'Saved a copy');
+  String get overwriting => pick('正在覆盖原图…', 'Overwriting the original…');
+  String get saving => pick('正在保存…', 'Saving…');
+  String get appliedEdits => pick('已应用修改', 'Changes applied');
+  String get editorFailed => pick('保存失败，请重试。', 'Save failed. Try again.');
+
   String libraryError(String kind) => switch (kind) {
     'picker' => pick(
       '无法打开文件选择器，请重试。',

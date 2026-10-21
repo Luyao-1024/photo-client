@@ -1,4 +1,10 @@
 /// Native local-library contract. Paths are resolved by the platform/core adapter.
+enum SearchScope { all, name, date }
+
+extension SearchScopeWire on SearchScope {
+  String get wire => name;
+}
+
 abstract interface class LocalLibraryGateway {
   Future<LocalLibraryInfo> openLibrary();
   Future<LocalPhotoPage> listPhotos({
@@ -6,8 +12,23 @@ abstract interface class LocalLibraryGateway {
     int limit = 100,
     bool favoritesOnly = false,
     String search = '',
+    SearchScope searchScope = SearchScope.all,
     String? folder,
+    String? mediaKind,
+    bool trashed = false,
   });
+  Future<List<LocalAlbum>> listAlbums();
+  Future<int> trashMedia(List<String> mediaIds);
+  Future<int> restoreMedia(List<String> mediaIds);
+  Future<int> purgeMedia(List<String> mediaIds);
+  Future<int> emptyTrash();
+  Future<int> addToAlbum(
+    List<String> mediaIds,
+    String targetFolder, {
+    required bool moveFiles,
+  });
+  Future<LocalPhoto> renameMedia(String mediaId, String name);
+  Future<LocalPhoto> saveEdited(String mediaId, EditOptions options);
   Future<LocalScanResult> addPaths(List<String> paths);
   Future<void> cancelScan();
   Future<String> thumbnail(String mediaId, {int sizeClass = 512});
@@ -29,6 +50,81 @@ int thumbnailSizeClassFor(double devicePixels) {
     if (devicePixels <= sizeClass) return sizeClass;
   }
   return kThumbnailSizeClasses.last;
+}
+
+class LocalAlbum {
+  const LocalAlbum({
+    required this.path,
+    required this.name,
+    required this.count,
+    this.coverMediaId,
+  });
+  final String path;
+  final String name;
+  final int count;
+  final String? coverMediaId;
+}
+
+/// A pixel crop rectangle in the rotated image's coordinate space.
+class CropBox {
+  const CropBox({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+  final int x;
+  final int y;
+  final int width;
+  final int height;
+}
+
+/// Editor adjustments; all values are the same ranges the UI exposes.
+class EditOptions {
+  const EditOptions({
+    this.rotationDegrees = 0,
+    this.brightness = 0,
+    this.contrast = 0,
+    this.saturation = 0,
+    this.crop,
+    this.saveCopy = false,
+  });
+
+  /// Clockwise 0 / 90 / 180 / 270.
+  final int rotationDegrees;
+
+  /// -100..100, 0 keeps the original.
+  final int brightness;
+  final int contrast;
+  final int saturation;
+  final CropBox? crop;
+
+  /// Write a new sibling file instead of overwriting the original.
+  final bool saveCopy;
+
+  bool get isIdentity =>
+      rotationDegrees % 360 == 0 &&
+      brightness == 0 &&
+      contrast == 0 &&
+      saturation == 0 &&
+      crop == null;
+
+  EditOptions copyWith({
+    int? rotationDegrees,
+    int? brightness,
+    int? contrast,
+    int? saturation,
+    CropBox? crop,
+    bool clearCrop = false,
+    bool? saveCopy,
+  }) => EditOptions(
+    rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+    brightness: brightness ?? this.brightness,
+    contrast: contrast ?? this.contrast,
+    saturation: saturation ?? this.saturation,
+    crop: clearCrop ? null : crop ?? this.crop,
+    saveCopy: saveCopy ?? this.saveCopy,
+  );
 }
 
 class LocalLibraryInfo {
@@ -54,6 +150,13 @@ class LocalPhoto {
     this.width,
     this.height,
     required this.favorite,
+    this.mediaKind = 'image',
+    this.mimeType = 'image/jpeg',
+    this.orientation = 1,
+    this.captureTimeMs,
+    this.sortTimeMs,
+    this.state = 'active',
+    this.trashedAtMs,
   });
   final String id;
   final String path;
@@ -65,6 +168,13 @@ class LocalPhoto {
   final int? width;
   final int? height;
   final bool favorite;
+  final String mediaKind;
+  final String mimeType;
+  final int orientation;
+  final int? captureTimeMs;
+  final int? sortTimeMs;
+  final String state;
+  final int? trashedAtMs;
 
   LocalPhoto withFavorite(bool value) => LocalPhoto(
     id: id,
@@ -77,6 +187,13 @@ class LocalPhoto {
     width: width,
     height: height,
     favorite: value,
+    mediaKind: mediaKind,
+    mimeType: mimeType,
+    orientation: orientation,
+    captureTimeMs: captureTimeMs,
+    sortTimeMs: sortTimeMs,
+    state: state,
+    trashedAtMs: trashedAtMs,
   );
 }
 

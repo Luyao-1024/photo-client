@@ -11,28 +11,32 @@ enum GroupMode { year, month, day }
 
 /// Largest tile edge per mode; Day is the densest layout.
 double gridMaxCrossAxisExtent(GroupMode mode) => switch (mode) {
-  GroupMode.year => 300,
-  GroupMode.month => 220,
-  GroupMode.day => 150,
+  GroupMode.year => 90,
+  GroupMode.month => 180,
+  GroupMode.day => 270,
 };
 
 double gridSpacing(GroupMode mode) => switch (mode) {
   GroupMode.year => 8,
-  GroupMode.month => 6,
-  GroupMode.day => 4,
+  GroupMode.month => 8,
+  GroupMode.day => 8,
 };
 
 /// One calendar bucket of the loaded window: a header plus its tiles.
 class PhotoSection {
-  PhotoSection({required this.bucket, required this.date});
+  PhotoSection({required this.bucket, required this.date, this.label});
   final int bucket;
   final DateTime date;
+
+  /// Overrides the date-derived header title when set (search media sections).
+  final String? label;
   final List<SectionItem> items = [];
 }
 
 class SectionItem {
   const SectionItem(this.photo, this.index);
   final LocalPhoto photo;
+
   /// Rank in the controller's flat paged window; feeds the viewer.
   final int index;
 }
@@ -41,13 +45,17 @@ int bucketOf(DateTime date, GroupMode mode) => switch (mode) {
   GroupMode.year => date.year,
   GroupMode.month => date.year * 12 + date.month,
   GroupMode.day =>
-      DateTime.utc(date.year, date.month, date.day).millisecondsSinceEpoch ~/
-          Duration.millisecondsPerDay,
+    DateTime.utc(date.year, date.month, date.day).millisecondsSinceEpoch ~/
+        Duration.millisecondsPerDay,
 };
 
 /// Today/Yesterday for the last two local days, a locale date otherwise;
 /// Year/Month modes use the coarser locale label.
-String sectionLabel(BuildContext context, PhotoSection section, GroupMode mode) {
+String sectionLabel(
+  BuildContext context,
+  PhotoSection section,
+  GroupMode mode,
+) {
   final strings = AppStrings.of(context);
   final localizations = MaterialLocalizations.of(context);
   switch (mode) {
@@ -86,11 +94,16 @@ class PhotoTile extends StatefulWidget {
     required this.onEnterSelection,
     required this.onToggleFavorite,
     required this.onShowDetails,
+    this.onRename,
+    this.onMoveToTrash,
+    this.onCopyToAlbum,
+    this.onMoveToAlbum,
   });
 
   final LocalPhoto photo;
   final LocalLibraryGateway gateway;
   final bool selected;
+
   /// True while grid-wide multi-select is active.
   final bool multiSelect;
   final VoidCallback onOpen;
@@ -98,6 +111,10 @@ class PhotoTile extends StatefulWidget {
   final VoidCallback onEnterSelection;
   final VoidCallback onToggleFavorite;
   final VoidCallback onShowDetails;
+  final VoidCallback? onRename;
+  final VoidCallback? onMoveToTrash;
+  final VoidCallback? onCopyToAlbum;
+  final VoidCallback? onMoveToAlbum;
 
   @override
   State<PhotoTile> createState() => _PhotoTileState();
@@ -105,6 +122,7 @@ class PhotoTile extends StatefulWidget {
 
 class _PhotoTileState extends State<PhotoTile> {
   late final FocusNode _focusNode = FocusNode(onKeyEvent: _onKeyEvent);
+
   /// One in-flight request per bounded cache class, reused across rebuilds.
   final Map<int, Future<String>> _requests = {};
   String? _identity;
@@ -138,8 +156,7 @@ class _PhotoTileState extends State<PhotoTile> {
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.space) {
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
       if (widget.multiSelect) {
         widget.onSelectToggle();
       } else {
@@ -149,6 +166,7 @@ class _PhotoTileState extends State<PhotoTile> {
     }
     return KeyEventResult.ignored;
   }
+
   Future<void> _openMenu(Offset globalPosition) async {
     _focusNode.requestFocus();
     final strings = AppStrings.of(context);
@@ -175,10 +193,24 @@ class _PhotoTileState extends State<PhotoTile> {
                 : strings.markFavorite,
           ),
         ),
-        PopupMenuItem<String>(
-          value: 'details',
-          child: Text(strings.details),
-        ),
+        PopupMenuItem<String>(value: 'details', child: Text(strings.details)),
+        if (widget.onRename != null)
+          PopupMenuItem<String>(value: 'rename', child: Text(strings.rename)),
+        if (widget.onCopyToAlbum != null)
+          PopupMenuItem<String>(
+            value: 'copy-album',
+            child: Text(strings.copyToAlbum),
+          ),
+        if (widget.onMoveToAlbum != null)
+          PopupMenuItem<String>(
+            value: 'move-album',
+            child: Text(strings.moveToAlbum),
+          ),
+        if (widget.onMoveToTrash != null)
+          PopupMenuItem<String>(
+            value: 'trash',
+            child: Text(strings.moveToTrash),
+          ),
       ],
     );
     if (!mounted || action == null) return;
@@ -193,6 +225,14 @@ class _PhotoTileState extends State<PhotoTile> {
         widget.onToggleFavorite();
       case 'details':
         widget.onShowDetails();
+      case 'rename':
+        widget.onRename?.call();
+      case 'copy-album':
+        widget.onCopyToAlbum?.call();
+      case 'move-album':
+        widget.onMoveToAlbum?.call();
+      case 'trash':
+        widget.onMoveToTrash?.call();
     }
   }
 
@@ -309,7 +349,8 @@ class _PhotoTileState extends State<PhotoTile> {
     color: Theme.of(context).colorScheme.surfaceContainerHighest,
     child: LayoutBuilder(
       builder: (context, constraints) {
-        final pixels = constraints.maxWidth * MediaQuery.devicePixelRatioOf(context);
+        final pixels =
+            constraints.maxWidth * MediaQuery.devicePixelRatioOf(context);
         final sizeClass = thumbnailSizeClassFor(pixels);
         final target = pixels.ceil().clamp(64, 1024);
         return FutureBuilder<String>(
@@ -366,7 +407,7 @@ Future<void> showPhotoDetails(BuildContext context, LocalPhoto photo) {
           _detailRow(
             strings.modified,
             '${localizations.formatFullDate(modified)} '
-                '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(modified))}',
+            '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(modified))}',
           ),
           _detailRow(
             strings.dimensions,

@@ -1,6 +1,7 @@
 //! Account-free local library RPC. Blocking SQLite/filesystem work stays off Tokio.
 use photo_core::{
-    local_library::{LocalLibrary, MediaInput, PhotoFilter},
+    edit::{CropRect, EditAdjustments},
+    local_library::{AlbumInfo, LocalLibrary, MediaInput, PhotoFilter},
     media,
 };
 use std::{
@@ -28,6 +29,19 @@ pub struct LocalPhoto {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub favorite: bool,
+    pub media_kind: String,
+    pub mime_type: String,
+    pub orientation: u8,
+    pub capture_time_ms: Option<i64>,
+    pub sort_time_ms: i64,
+    pub state: String,
+    pub trashed_at_ms: Option<i64>,
+}
+pub struct LocalAlbum {
+    pub path: String,
+    pub name: String,
+    pub count: u64,
+    pub cover_media_id: Option<String>,
 }
 pub struct LocalPhotoPage {
     pub items: Vec<LocalPhoto>,
@@ -35,6 +49,18 @@ pub struct LocalPhotoPage {
     pub total: u64,
     pub revision: u64,
 }
+pub struct EditRequest {
+    pub rotation_degrees: i32,
+    pub brightness: i32,
+    pub contrast: i32,
+    pub saturation: i32,
+    pub crop_x: Option<u32>,
+    pub crop_y: Option<u32>,
+    pub crop_width: Option<u32>,
+    pub crop_height: Option<u32>,
+    pub save_copy: bool,
+}
+
 pub struct LocalScanResult {
     pub discovered: u64,
     pub skipped: u64,
@@ -85,6 +111,15 @@ fn root_path(override_path: Option<String>) -> Result<PathBuf, String> {
     }
     Ok(base.join("photo-client/library"))
 }
+fn crop_rect(x: u32, y: u32, width: u32, height: u32) -> CropRect {
+    CropRect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
 fn join_error(_: tokio::task::JoinError) -> String {
     "LocalWorkerFailed".into()
 }
@@ -125,7 +160,10 @@ pub async fn list_photos(
     limit: u32,
     favorites_only: bool,
     search: String,
+    search_scope: String,
     folder: Option<String>,
+    media_kind: Option<String>,
+    trashed: bool,
 ) -> Result<LocalPhotoPage, String> {
     let active = service()?;
     tokio::task::spawn_blocking(move || {
@@ -133,7 +171,10 @@ pub async fn list_photos(
             PhotoFilter {
                 favorites_only,
                 search,
+                search_scope,
                 folder,
+                media_kind,
+                trashed,
             },
             cursor,
             limit,
@@ -153,12 +194,191 @@ pub async fn list_photos(
                     width: p.width,
                     height: p.height,
                     favorite: p.favorite,
+                    media_kind: p.media_kind,
+                    mime_type: p.mime_type,
+                    orientation: p.orientation,
+                    capture_time_ms: p.capture_time_ms,
+                    sort_time_ms: p.sort_time_ms,
+                    state: p.state,
+                    trashed_at_ms: p.trashed_at_ms,
                 })
                 .collect(),
             next_cursor: page.next_cursor,
             total: page.total,
             revision: page.revision,
         })
+    })
+    .await
+    .map_err(join_error)?
+}
+
+pub async fn list_albums() -> Result<Vec<LocalAlbum>, String> {
+    let active = service()?;
+    tokio::task::spawn_blocking(move || {
+        Ok(active
+            .store
+            .list_albums()?
+            .into_iter()
+            .map(|album: AlbumInfo| LocalAlbum {
+                path: album.path,
+                name: album.name,
+                count: album.count,
+                cover_media_id: album.cover_media_id,
+            })
+            .collect())
+    })
+    .await
+    .map_err(join_error)?
+}
+
+pub async fn trash_media(media_ids: Vec<String>) -> Result<u64, String> {
+    let active = service()?;
+    tokio::task::spawn_blocking(move || {
+        let changed_count = active.store.trash_media(media_ids)?;
+        if changed_count > 0 {
+            changed();
+        }
+        Ok(changed_count)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+pub async fn restore_media(media_ids: Vec<String>) -> Result<u64, String> {
+    let active = service()?;
+    tokio::task::spawn_blocking(move || {
+        let changed_count = active.store.restore_media(media_ids)?;
+        if changed_count > 0 {
+            changed();
+        }
+        Ok(changed_count)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+pub async fn purge_media(media_ids: Vec<String>) -> Result<u64, String> {
+    let active = service()?;
+    tokio::task::spawn_blocking(move || {
+        let changed_count = active.store.purge_media(media_ids)?;
+        if changed_count > 0 {
+            changed();
+        }
+        Ok(changed_count)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+pub async fn empty_trash() -> Result<u64, String> {
+    let active = service()?;
+    tokio::task::spawn_blocking(move || {
+        let changed_count = active.store.empty_trash()?;
+        if changed_count > 0 {
+            changed();
+        }
+        Ok(changed_count)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+pub async fn add_to_album(
+    media_ids: Vec<String>,
+    target_folder: String,
+    move_files: bool,
+) -> Result<u64, String> {
+    let active = service()?;
+    tokio::task::spawn_blocking(move || {
+        let changed_count = active
+            .store
+            .add_to_album(media_ids, target_folder, move_files)?;
+        if changed_count > 0 {
+            changed();
+        }
+        Ok(changed_count)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+pub async fn rename_media(media_id: String, name: String) -> Result<LocalPhoto, String> {
+    let active = service()?;
+    tokio::task::spawn_blocking(move || {
+        let photo = active.store.rename_media(media_id, name)?;
+        changed();
+        Ok(LocalPhoto {
+            id: photo.id,
+            path: photo.path,
+            name: photo.name,
+            parent: photo.parent,
+            size_bytes: photo.size_bytes,
+            modified_ms: photo.modified_ms,
+            content_version: photo.content_version,
+            width: photo.width,
+            height: photo.height,
+            favorite: photo.favorite,
+            media_kind: photo.media_kind,
+            mime_type: photo.mime_type,
+            orientation: photo.orientation,
+            capture_time_ms: photo.capture_time_ms,
+            sort_time_ms: photo.sort_time_ms,
+            state: photo.state,
+            trashed_at_ms: photo.trashed_at_ms,
+        })
+    })
+    .await
+    .map_err(join_error)?
+}
+
+fn to_local_photo(photo: photo_core::local_library::LocalPhoto) -> LocalPhoto {
+    LocalPhoto {
+        id: photo.id,
+        path: photo.path,
+        name: photo.name,
+        parent: photo.parent,
+        size_bytes: photo.size_bytes,
+        modified_ms: photo.modified_ms,
+        content_version: photo.content_version,
+        width: photo.width,
+        height: photo.height,
+        favorite: photo.favorite,
+        media_kind: photo.media_kind,
+        mime_type: photo.mime_type,
+        orientation: photo.orientation,
+        capture_time_ms: photo.capture_time_ms,
+        sort_time_ms: photo.sort_time_ms,
+        state: photo.state,
+        trashed_at_ms: photo.trashed_at_ms,
+    }
+}
+
+pub async fn save_edited(media_id: String, request: EditRequest) -> Result<LocalPhoto, String> {
+    let active = service()?;
+    tokio::task::spawn_blocking(move || {
+        let crop = match (
+            request.crop_x,
+            request.crop_y,
+            request.crop_width,
+            request.crop_height,
+        ) {
+            (Some(x), Some(y), Some(width), Some(height)) if width > 0 && height > 0 => {
+                Some(crop_rect(x, y, width, height))
+            }
+            _ => None,
+        };
+        let adjustments = EditAdjustments {
+            rotation_degrees: request.rotation_degrees,
+            brightness: request.brightness,
+            contrast: request.contrast,
+            saturation: request.saturation,
+            crop,
+        };
+        let photo = active
+            .store
+            .save_edited(media_id, adjustments, request.save_copy)?;
+        changed();
+        Ok(to_local_photo(photo))
     })
     .await
     .map_err(join_error)?

@@ -18,11 +18,23 @@ import 'strings.dart';
 /// overview, a date-sectioned square-tile grid, and the floating Year/Month/Day
 /// capsule. See photoViewer/docs/modules/ui-design.md "Photos Page".
 class LocalLibraryPane extends ConsumerStatefulWidget {
-  const LocalLibraryPane({super.key, this.onOpenSettings});
+  const LocalLibraryPane({
+    super.key,
+    this.onOpenSettings,
+    this.onRequestSearch,
+    this.trashMode = false,
+    this.searchMode = false,
+  });
 
   /// Supplied by the shell once Settings owns source management; null keeps
   /// the empty-state button honestly disabled.
   final VoidCallback? onOpenSettings;
+
+  /// Asks the shell to switch to the dedicated search destination. When null
+  /// the pane falls back to an inline search field.
+  final VoidCallback? onRequestSearch;
+  final bool trashMode;
+  final bool searchMode;
 
   @override
   ConsumerState<LocalLibraryPane> createState() => _LocalLibraryPaneState();
@@ -84,6 +96,16 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(LocalLibraryPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.searchMode && !oldWidget.searchMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
+  }
+
   KeyEventResult _onSearchKey(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape) {
@@ -93,10 +115,17 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     return KeyEventResult.ignored;
   }
 
-  void _openSearch() => setState(() {
-    _searchOpen = true;
-    _searchFocus.requestFocus();
-  });
+  void _openSearch() {
+    final request = widget.onRequestSearch;
+    if (request != null) {
+      request();
+      return;
+    }
+    setState(() {
+      _searchOpen = true;
+      _searchFocus.requestFocus();
+    });
+  }
 
   void _closeSearch() {
     if (!mounted) return;
@@ -167,21 +196,259 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     }
   }
 
+  // --- Destructive / structural batch operations -------------------------
+
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<bool> _confirm({
+    required String title,
+    required String body,
+    required String confirmLabel,
+    bool danger = false,
+  }) async {
+    final strings = AppStrings.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(strings.cancel),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-action'),
+            style: danger
+                ? FilledButton.styleFrom(
+                    backgroundColor: scheme.error,
+                    foregroundColor: scheme.onError,
+                  )
+                : null,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _runBatch(
+    Future<int> Function() operation,
+    String Function(int) message,
+  ) async {
+    final strings = AppStrings.of(context);
+    setState(() {
+      _selectionMode = false;
+      _selected.clear();
+    });
+    try {
+      final count = await operation();
+      _notify(message(count));
+    } catch (_) {
+      _notify(strings.actionFailed);
+    }
+  }
+
+  String _folderLabel(String path) {
+    final trimmed = path.replaceAll(RegExp(r'/+$'), '');
+    final name = trimmed.split('/').where((p) => p.isNotEmpty).lastOrNull;
+    return name == null || name.isEmpty ? path : name;
+  }
+
+  List<String> _selectedIds(LibraryViewState state) =>
+      _selectedPhotos(state).map((photo) => photo.id).toList(growable: false);
+
+  Future<void> _batchTrash() async {
+    final state = ref.read(localLibraryProvider);
+    final ids = _selectedIds(state);
+    if (ids.isEmpty) return;
+    final strings = AppStrings.of(context);
+    final ok = await _confirm(
+      title: strings.confirmTrashTitle(ids.length),
+      body: strings.confirmTrashBody,
+      confirmLabel: strings.moveToTrash,
+      danger: true,
+    );
+    if (!ok) return;
+    await _runBatch(
+      () => ref.read(localLibraryProvider.notifier).trashPhotos(ids),
+      strings.trashedCount,
+    );
+  }
+
+  Future<void> _batchRestore() async {
+    final state = ref.read(localLibraryProvider);
+    final ids = _selectedIds(state);
+    if (ids.isEmpty) return;
+    final strings = AppStrings.of(context);
+    await _runBatch(
+      () => ref.read(localLibraryProvider.notifier).restorePhotos(ids),
+      strings.restoredCount,
+    );
+  }
+
+  Future<void> _batchPurge() async {
+    final state = ref.read(localLibraryProvider);
+    final ids = _selectedIds(state);
+    if (ids.isEmpty) return;
+    final strings = AppStrings.of(context);
+    final ok = await _confirm(
+      title: strings.confirmPurgeTitle(ids.length),
+      body: strings.confirmPurgeBody,
+      confirmLabel: strings.deletePermanently,
+      danger: true,
+    );
+    if (!ok) return;
+    await _runBatch(
+      () => ref.read(localLibraryProvider.notifier).purgePhotos(ids),
+      strings.purgedCount,
+    );
+  }
+
+  Future<void> _emptyTrash() async {
+    final strings = AppStrings.of(context);
+    final ok = await _confirm(
+      title: strings.confirmEmptyTrashTitle,
+      body: strings.confirmEmptyTrashBody,
+      confirmLabel: strings.emptyTrash,
+      danger: true,
+    );
+    if (!ok) return;
+    await _runBatch(
+      ref.read(localLibraryProvider.notifier).emptyTrash,
+      strings.purgedCount,
+    );
+  }
+
+  Future<void> _addToAlbum({required bool move}) async {
+    final state = ref.read(localLibraryProvider);
+    final ids = _selectedIds(state);
+    if (ids.isEmpty) return;
+    final strings = AppStrings.of(context);
+    final target = await _pickAlbumTarget(state.albums);
+    if (target == null || !mounted) return;
+    await _runBatch(
+      () => ref
+          .read(localLibraryProvider.notifier)
+          .addPhotosToAlbum(ids, target, moveFiles: move),
+      strings.addedToAlbumCount,
+    );
+  }
+
+  Future<String?> _pickAlbumTarget(List<LocalAlbum> albums) async {
+    final selection = await showDialog<String>(
+      context: context,
+      builder: (context) => _AlbumPickerDialog(albums: albums),
+    );
+    if (selection != _AlbumPickerDialog.newAlbumSentinel) return selection;
+    final picker = ref.read(sourcePickerProvider);
+    if (picker == null) return null;
+    final directory = await picker.chooseDirectory();
+    return directory;
+  }
+
+  Future<void> _trashOne(LocalPhoto photo) async {
+    final strings = AppStrings.of(context);
+    final ok = await _confirm(
+      title: strings.confirmTrashTitle(1),
+      body: strings.confirmTrashBody,
+      confirmLabel: strings.moveToTrash,
+      danger: true,
+    );
+    if (!ok || !mounted) return;
+    try {
+      await ref.read(localLibraryProvider.notifier).trashPhotos([photo.id]);
+      _notify(strings.trashedCount(1));
+    } catch (_) {
+      _notify(strings.actionFailed);
+    }
+  }
+
+  Future<void> _addOneToAlbum(LocalPhoto photo, {required bool move}) async {
+    final strings = AppStrings.of(context);
+    final target = await _pickAlbumTarget(
+      ref.read(localLibraryProvider).albums,
+    );
+    if (target == null || !mounted) return;
+    try {
+      await ref
+          .read(localLibraryProvider.notifier)
+          .addPhotosToAlbum([photo.id], target, moveFiles: move);
+      _notify(strings.addedToAlbumCount(1));
+    } catch (_) {
+      _notify(strings.actionFailed);
+    }
+  }
+
+  Future<void> _renamePhoto(LocalPhoto photo) async {
+    final strings = AppStrings.of(context);
+    final controller = TextEditingController(text: photo.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(strings.renamePhoto),
+        content: TextField(
+          key: const ValueKey('rename-field'),
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(hintText: photo.name),
+          onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(strings.cancel),
+          ),
+          FilledButton(
+            key: const ValueKey('rename-confirm'),
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(strings.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty || name == photo.name) return;
+    try {
+      await ref.read(localLibraryProvider.notifier).renamePhoto(photo.id, name);
+    } catch (_) {
+      _notify(strings.actionFailed);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final preferences = ref.watch(presentationProvider);
     final runtime = ref.watch(runtimeProvider);
     if (runtime.phase != ConnectionPhase.ready) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            runtime.phase == ConnectionPhase.connecting
-                ? strings.connecting
-                : strings.failed,
-          ),
-        ),
+      // The runtime is an implementation detail: users see library loading and
+      // a retry, never a "core" status they cannot act on.
+      final failed =
+          runtime.phase == ConnectionPhase.failed ||
+          runtime.phase == ConnectionPhase.stopped;
+      return _StatusPage(
+        titleKey: const ValueKey('library-runtime'),
+        title: failed ? strings.libraryFailed : strings.loadingLibrary,
+        body: failed ? strings.libraryFailedBody : null,
+        spinner: !failed,
+        action: failed
+            ? FilledButton.icon(
+                key: const ValueKey('retry-runtime'),
+                onPressed: () =>
+                    ref.read(runtimeProvider.notifier).initialize(),
+                icon: const Icon(Icons.refresh),
+                label: Text(strings.retry),
+              )
+            : null,
       );
     }
     final state = ref.watch(localLibraryProvider);
@@ -203,11 +470,28 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       }
     }
     final hasContent = state.extent > 0 || state.hasNext;
+    final title = widget.searchMode
+        ? strings.search
+        : widget.trashMode
+        ? strings.trash
+        : state.favoritesOnly
+        ? strings.albumFavorites
+        : state.folder != null
+        ? _folderLabel(state.folder!)
+        : state.mediaKind == 'image'
+        ? strings.images
+        : state.mediaKind == 'video'
+        ? strings.videos
+        : strings.library;
     return Column(
       children: [
         _Header(
           glass: preferences.glass,
-          title: state.favoritesOnly ? strings.albumFavorites : strings.library,
+          title: title,
+          trashMode: widget.trashMode,
+          searchMode: widget.searchMode,
+          scope: state.searchScope,
+          onScopeChanged: controller.setSearchScope,
           searchOpen: _searchOpen,
           searchController: _search,
           searchFocus: _searchFocus,
@@ -222,6 +506,12 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           onExitSelection: _exitSelection,
           selectedPhotos: _selectionMode ? _selectedPhotos(state) : const [],
           onBatchFavorite: () => _batchFavorite(state),
+          onBatchTrash: _batchTrash,
+          onBatchRestore: _batchRestore,
+          onBatchPurge: _batchPurge,
+          onBatchAddToAlbum: (move) => _addToAlbum(move: move),
+          onEmptyTrash: _emptyTrash,
+          emptyTrashEnabled: state.extent > 0 || state.hasNext,
           strings: strings,
         ),
         Expanded(
@@ -230,7 +520,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
               Positioned.fill(
                 child: _body(strings, state, controller, gateway, preferences),
               ),
-              if (hasContent)
+              if (hasContent && !widget.searchMode)
                 Align(
                   alignment: Alignment.bottomCenter,
                   child: Padding(
@@ -259,8 +549,8 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final bindings = <ShortcutActivator, VoidCallback>{
       // While the search field is open, Ctrl+A belongs to text editing.
       if (!_searchOpen)
-        const SingleActivator(LogicalKeyboardKey.keyA, control: true):
-            () => _selectAll(state),
+        const SingleActivator(LogicalKeyboardKey.keyA, control: true): () =>
+            _selectAll(state),
       if (_selectionMode)
         const SingleActivator(LogicalKeyboardKey.escape): _exitSelection,
     };
@@ -288,29 +578,27 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       return CustomScrollView(
         key: const ValueKey('local-photo-grid'),
         controller: _scroll,
-        slivers: [
-          SliverFillRemaining(hasScrollBody: false, child: status),
-        ],
+        slivers: [SliverFillRemaining(hasScrollBody: false, child: status)],
       );
     }
-    final sections = _sections(state);
+    final sections = widget.searchMode
+        ? _searchSections(state, strings)
+        : _sections(state);
     return CustomScrollView(
       key: const ValueKey('local-photo-grid'),
       controller: _scroll,
       slivers: [
-        SliverToBoxAdapter(
-          child: _overview(strings, state, controller),
-        ),
+        SliverToBoxAdapter(child: _overview(strings, state, controller)),
         for (final section in sections) ...[
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 18, 24, 10),
               child: Text(
-                sectionLabel(context, section, _mode),
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 22,
-                ),
+                widget.searchMode
+                    ? section.label ?? ''
+                    : sectionLabel(context, section, _mode),
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700, fontSize: 22),
               ),
             ),
           ),
@@ -323,35 +611,42 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 crossAxisSpacing: gridSpacing(_mode),
                 childAspectRatio: 1,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, tileIndex) {
-                  final item = section.items[tileIndex];
-                  // Builders only run for children in (or just outside) the
-                  // viewport, so page loading stays lazy and bounded.
-                  _ensureNear(item.index);
-                  return PhotoTile(
-                    key: ValueKey('photo-${item.photo.id}'),
-                    photo: item.photo,
-                    gateway: gateway,
-                    selected: _selected.contains(item.photo.id),
-                    multiSelect: _selectionMode,
-                    onOpen: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => LocalPhotoViewer(
-                          photo: item.photo,
-                          initialIndex: item.index,
-                        ),
+              delegate: SliverChildBuilderDelegate((context, tileIndex) {
+                final item = section.items[tileIndex];
+                // Builders only run for children in (or just outside) the
+                // viewport, so page loading stays lazy and bounded.
+                _ensureNear(item.index);
+                return PhotoTile(
+                  key: ValueKey('photo-${item.photo.id}'),
+                  photo: item.photo,
+                  gateway: gateway,
+                  selected: _selected.contains(item.photo.id),
+                  multiSelect: _selectionMode,
+                  onOpen: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => LocalPhotoViewer(
+                        photo: item.photo,
+                        initialIndex: item.index,
                       ),
                     ),
-                    onSelectToggle: () => _toggleSelection(item.photo.id),
-                    onEnterSelection: () => _enterSelection(item.photo.id),
-                    onToggleFavorite: () =>
-                        unawaited(controller.setFavorite(item.photo)),
-                    onShowDetails: () => showPhotoDetails(context, item.photo),
-                  );
-                },
-                childCount: section.items.length,
-              ),
+                  ),
+                  onSelectToggle: () => _toggleSelection(item.photo.id),
+                  onEnterSelection: () => _enterSelection(item.photo.id),
+                  onToggleFavorite: () =>
+                      unawaited(controller.setFavorite(item.photo)),
+                  onShowDetails: () => showPhotoDetails(context, item.photo),
+                  onRename: () => _renamePhoto(item.photo),
+                  onMoveToTrash: widget.trashMode
+                      ? null
+                      : () => _trashOne(item.photo),
+                  onCopyToAlbum: widget.trashMode
+                      ? null
+                      : () => _addOneToAlbum(item.photo, move: false),
+                  onMoveToAlbum: widget.trashMode
+                      ? null
+                      : () => _addOneToAlbum(item.photo, move: true),
+                );
+              }, childCount: section.items.length),
             ),
           ),
         ],
@@ -389,7 +684,9 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       if (photo == null) continue;
       // A loaded page can be evicted later; allow another request on return.
       _scheduledPages.remove(index ~/ LocalLibraryController.pageSize);
-      final date = DateTime.fromMillisecondsSinceEpoch(photo.modifiedMs);
+      final date = DateTime.fromMillisecondsSinceEpoch(
+        photo.captureTimeMs ?? photo.modifiedMs,
+      );
       final bucket = bucketOf(date, _mode);
       grouped
           .putIfAbsent(bucket, () => PhotoSection(bucket: bucket, date: date))
@@ -401,6 +698,29 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     return ordered;
   }
 
+  /// Search results split by media type (matching photoViewer's search page);
+  /// the date-bucket mode selector does not apply here.
+  List<PhotoSection> _searchSections(
+    LibraryViewState state,
+    AppStrings strings,
+  ) {
+    final now = DateTime.now();
+    final images = PhotoSection(bucket: 1, date: now, label: strings.images);
+    final videos = PhotoSection(bucket: 0, date: now, label: strings.videos);
+    for (var index = 0; index < state.extent; index += 1) {
+      final photo = state.photoAt(index);
+      if (photo == null) continue;
+      _scheduledPages.remove(index ~/ LocalLibraryController.pageSize);
+      (photo.mediaKind == 'video' ? videos : images).items.add(
+        SectionItem(photo, index),
+      );
+    }
+    return [
+      if (images.items.isNotEmpty) images,
+      if (videos.items.isNotEmpty) videos,
+    ];
+  }
+
   /// Three distinct empty states, never one "no photos" sentence: indexing,
   /// scan failed (with retry), and empty library (Open Settings).
   Widget? _statusPage(
@@ -409,10 +729,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     LocalLibraryController controller,
   ) {
     if (state.scanning && state.extent == 0) {
-      return _StatusPage(
-        title: strings.scanning,
-        spinner: true,
-      );
+      return _StatusPage(title: strings.scanning, spinner: true);
     }
     if (state.problem == LibraryProblem.scan) {
       return _StatusPage(
@@ -451,13 +768,32 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     if (state.loading && state.extent == 0) {
       return _StatusPage(title: strings.loadingLibrary, spinner: true);
     }
+    if (widget.trashMode) {
+      if (state.extent == 0 && !state.hasNext) {
+        return _StatusPage(
+          title: strings.trashEmpty,
+          titleKey: const ValueKey('trash-empty'),
+        );
+      }
+      return null;
+    }
+    if (widget.searchMode && state.extent == 0 && !state.hasNext) {
+      return _StatusPage(
+        title: state.search.isEmpty ? strings.searchPrompt : strings.noMatches,
+        body: state.search.isEmpty ? null : strings.noMatchesBody,
+      );
+    }
     if (state.extent == 0 && !state.hasNext) {
       final filtered =
           state.favoritesOnly ||
           state.search.isNotEmpty ||
-          state.folder != null;
+          state.folder != null ||
+          state.mediaKind != null;
       if (filtered) {
-        return _StatusPage(title: strings.noMatches, body: strings.noMatchesBody);
+        return _StatusPage(
+          title: strings.noMatches,
+          body: strings.noMatchesBody,
+        );
       }
       return _StatusPage(
         title: strings.emptyLibrary,
@@ -550,6 +886,10 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.glass,
     required this.title,
+    required this.trashMode,
+    required this.searchMode,
+    required this.scope,
+    required this.onScopeChanged,
     required this.searchOpen,
     required this.searchController,
     required this.searchFocus,
@@ -564,11 +904,21 @@ class _Header extends StatelessWidget {
     required this.onExitSelection,
     required this.selectedPhotos,
     required this.onBatchFavorite,
+    required this.onBatchTrash,
+    required this.onBatchRestore,
+    required this.onBatchPurge,
+    required this.onBatchAddToAlbum,
+    required this.onEmptyTrash,
+    required this.emptyTrashEnabled,
     required this.strings,
   });
 
   final bool glass;
   final String title;
+  final bool trashMode;
+  final bool searchMode;
+  final SearchScope scope;
+  final ValueChanged<SearchScope> onScopeChanged;
   final bool searchOpen;
   final TextEditingController searchController;
   final FocusNode searchFocus;
@@ -583,7 +933,15 @@ class _Header extends StatelessWidget {
   final VoidCallback onExitSelection;
   final List<LocalPhoto> selectedPhotos;
   final VoidCallback onBatchFavorite;
+  final VoidCallback onBatchTrash;
+  final VoidCallback onBatchRestore;
+  final VoidCallback onBatchPurge;
+  final ValueChanged<bool> onBatchAddToAlbum;
+  final VoidCallback onEmptyTrash;
+  final bool emptyTrashEnabled;
   final AppStrings strings;
+
+  bool get _showField => searchOpen || searchMode;
 
   @override
   Widget build(BuildContext context) {
@@ -602,13 +960,13 @@ class _Header extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Row(
                     children: [
-                      if (searchOpen)
+                      if (_showField)
                         Flexible(
                           child: _SearchField(
                             controller: searchController,
                             focusNode: searchFocus,
                             onChanged: onSearchChanged,
-                            onClose: onCloseSearch,
+                            onClose: searchMode ? null : onCloseSearch,
                             glass: glass,
                             strings: strings,
                           ),
@@ -616,10 +974,18 @@ class _Header extends StatelessWidget {
                       else
                         _RoundSearchButton(
                           onPressed: onOpenSearch,
-                          tooltip: strings.searchHint,
+                          tooltip: strings.search,
                         ),
+                      if (_showField && !trashMode) ...[
+                        const SizedBox(width: 10),
+                        _ScopeSelector(
+                          scope: scope,
+                          onChanged: onScopeChanged,
+                          glass: glass,
+                        ),
+                      ],
                       if (selectionMode) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         Flexible(
                           child: TextButton(
                             key: const ValueKey('select-all'),
@@ -635,7 +1001,6 @@ class _Header extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 4),
                         Flexible(
                           child: TextButton(
                             key: const ValueKey('exit-selection'),
@@ -652,43 +1017,25 @@ class _Header extends StatelessWidget {
                   ),
                 ),
               ),
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+              if (!_showField || trashMode)
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              ),
               Expanded(
                 child: Align(
                   alignment: Alignment.centerRight,
-                  child: selectionMode && selectionCount > 0
-                      ? Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                strings.selectedCountLabel(selectionCount),
-                                key: const ValueKey('selection-count'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            _batchActions(context),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
+                  child: _trailing(context),
                 ),
               ),
             ],
@@ -698,7 +1045,67 @@ class _Header extends StatelessWidget {
     );
   }
 
+  Widget _trailing(BuildContext context) {
+    if (selectionMode && selectionCount > 0) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Flexible(
+            child: Text(
+              strings.selectedCountLabel(selectionCount),
+              key: const ValueKey('selection-count'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _batchActions(context),
+        ],
+      );
+    }
+    if (trashMode) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: TextButton.icon(
+          key: const ValueKey('empty-trash'),
+          onPressed: emptyTrashEnabled ? onEmptyTrash : null,
+          icon: const Icon(Icons.delete_forever_outlined, size: 18),
+          label: Text(strings.emptyTrash),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   Widget _batchActions(BuildContext context) {
+    if (trashMode) {
+      return Row(
+        children: [
+          Tooltip(
+            message: strings.restore,
+            child: _GlassActionButton(
+              key: const ValueKey('batch-restore'),
+              glass: glass,
+              icon: Icons.restore_from_trash_outlined,
+              onPressed: selectedPhotos.isEmpty ? null : onBatchRestore,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: strings.deletePermanently,
+            child: _GlassActionButton(
+              key: const ValueKey('batch-purge'),
+              glass: glass,
+              icon: Icons.delete_forever_outlined,
+              color: Theme.of(context).colorScheme.error,
+              onPressed: selectedPhotos.isEmpty ? null : onBatchPurge,
+            ),
+          ),
+        ],
+      );
+    }
     final allFavorite =
         selectedPhotos.isNotEmpty &&
         selectedPhotos.every((photo) => photo.favorite);
@@ -707,12 +1114,26 @@ class _Header extends StatelessWidget {
       children: [
         Tooltip(
           message: strings.addToAlbum,
-          child: _GlassActionButton(
+          child: PopupMenuButton<bool>(
             key: const ValueKey('batch-add-to-album'),
-            glass: glass,
-            icon: Icons.add,
-            // Album management is not part of this local-first phase.
-            onPressed: null,
+            tooltip: strings.addToAlbum,
+            enabled: selectedPhotos.isNotEmpty,
+            onSelected: onBatchAddToAlbum,
+            itemBuilder: (context) => [
+              PopupMenuItem<bool>(
+                value: false,
+                child: Text(strings.copyToAlbum),
+              ),
+              PopupMenuItem<bool>(
+                value: true,
+                child: Text(strings.moveToAlbum),
+              ),
+            ],
+            child: _GlassActionButton(
+              glass: glass,
+              icon: Icons.add,
+              onPressed: selectedPhotos.isEmpty ? null : null,
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -738,9 +1159,136 @@ class _Header extends StatelessWidget {
             key: const ValueKey('batch-trash'),
             glass: glass,
             icon: Icons.delete_outline,
-            // Trash has no backend yet in this local-first phase.
-            onPressed: null,
+            onPressed: selectedPhotos.isEmpty ? null : onBatchTrash,
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// All / Name / Date segmented scope control for the search field.
+class _ScopeSelector extends StatelessWidget {
+  const _ScopeSelector({
+    required this.scope,
+    required this.onChanged,
+    required this.glass,
+  });
+
+  final SearchScope scope;
+  final ValueChanged<SearchScope> onChanged;
+  final bool glass;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final entries = <(SearchScope, String)>[
+      (SearchScope.all, strings.searchAll),
+      (SearchScope.name, strings.searchByName),
+      (SearchScope.date, strings.searchByDate),
+    ];
+    return GlassSurface(
+      key: const ValueKey('search-scope'),
+      enabled: glass,
+      radius: 18,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (value, label) in entries)
+            _ScopeChip(
+              key: ValueKey('search-scope-${value.name}'),
+              label: label,
+              selected: scope == value,
+              onTap: () => onChanged(value),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScopeChip extends StatelessWidget {
+  const _ScopeChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.primary.withValues(alpha: .16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            color: selected ? scheme.primary : scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Destination chooser for copy/move-to-album. Returns a folder path, or
+/// [newAlbumSentinel] to ask the caller to run the directory picker.
+class _AlbumPickerDialog extends StatelessWidget {
+  const _AlbumPickerDialog({required this.albums});
+
+  static const String newAlbumSentinel = '__photo_client_new_album__';
+  final List<LocalAlbum> albums;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return AlertDialog(
+      title: Text(strings.chooseAlbum),
+      content: SizedBox(
+        width: 360,
+        child: albums.isEmpty
+            ? Text(strings.noAlbums)
+            : SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final album in albums)
+                      ListTile(
+                        key: ValueKey('album-target-${album.path}'),
+                        leading: const Icon(Icons.photo_album_outlined),
+                        title: Text(album.name),
+                        subtitle: Text(strings.photosCountLabel(album.count)),
+                        onTap: () => Navigator.of(context).pop(album.path),
+                      ),
+                  ],
+                ),
+              ),
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('album-picker-new'),
+          onPressed: () =>
+              Navigator.of(context).pop(_AlbumPickerDialog.newAlbumSentinel),
+          child: Text(strings.newAlbum),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(strings.cancel),
         ),
       ],
     );
@@ -766,19 +1314,20 @@ class _RoundSearchButton extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onPressed,
       icon: const Icon(Icons.search),
-      style: IconButton.styleFrom(
-        minimumSize: const Size(40, 40),
-        padding: const EdgeInsets.all(8),
-        shape: const CircleBorder(),
-      ).copyWith(
-        backgroundColor: WidgetStateProperty.resolveWith(
-          (states) =>
-              states.contains(WidgetState.hovered) ||
+      style:
+          IconButton.styleFrom(
+            minimumSize: const Size(40, 40),
+            padding: const EdgeInsets.all(8),
+            shape: const CircleBorder(),
+          ).copyWith(
+            backgroundColor: WidgetStateProperty.resolveWith(
+              (states) =>
+                  states.contains(WidgetState.hovered) ||
                       states.contains(WidgetState.focused)
                   ? capsule
                   : Colors.transparent,
-        ),
-      ),
+            ),
+          ),
     );
   }
 }
@@ -796,7 +1345,7 @@ class _SearchField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
-  final VoidCallback onClose;
+  final VoidCallback? onClose;
   final bool glass;
   final AppStrings strings;
 
@@ -820,7 +1369,7 @@ class _SearchField extends StatelessWidget {
                 focusNode: focusNode,
                 autofocus: true,
                 onChanged: onChanged,
-                onSubmitted: (_) => onClose(),
+                onSubmitted: (_) => onClose?.call(),
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
@@ -828,16 +1377,17 @@ class _SearchField extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
-              key: const ValueKey('library-search-close'),
-              tooltip: strings.close,
-              icon: const Icon(Icons.close, size: 18),
-              style: IconButton.styleFrom(
-                minimumSize: const Size(36, 36),
-                padding: EdgeInsets.zero,
+            if (onClose != null)
+              IconButton(
+                key: const ValueKey('library-search-close'),
+                tooltip: strings.close,
+                icon: const Icon(Icons.close, size: 18),
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(36, 36),
+                  padding: EdgeInsets.zero,
+                ),
+                onPressed: onClose,
               ),
-              onPressed: onClose,
-            ),
             const SizedBox(width: 2),
           ],
         ),

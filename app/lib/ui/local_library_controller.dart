@@ -26,7 +26,11 @@ class LibraryViewState {
     this.hasNext = false,
     this.favoritesOnly = false,
     this.search = '',
+    this.searchScope = SearchScope.all,
     this.folder,
+    this.mediaKind,
+    this.trashed = false,
+    this.albums = const [],
     this.scanning = false,
     this.selecting = false,
     this.cancelRequested = false,
@@ -40,7 +44,11 @@ class LibraryViewState {
   final bool loading, loadingNext, hasNext, favoritesOnly, scanning, selecting;
   final bool cancelRequested;
   final String search;
+  final SearchScope searchScope;
   final String? folder;
+  final String? mediaKind;
+  final bool trashed;
+  final List<LocalAlbum> albums;
   final Set<String> favoritePending;
   final LocalScanResult? scanResult;
   final LibraryProblem? problem;
@@ -73,8 +81,13 @@ class LibraryViewState {
     bool? hasNext,
     bool? favoritesOnly,
     String? search,
+    SearchScope? searchScope,
     String? folder,
     bool clearFolder = false,
+    String? mediaKind,
+    bool clearMediaKind = false,
+    bool? trashed,
+    List<LocalAlbum>? albums,
     bool? scanning,
     bool? selecting,
     bool? cancelRequested,
@@ -95,7 +108,11 @@ class LibraryViewState {
     hasNext: hasNext ?? this.hasNext,
     favoritesOnly: favoritesOnly ?? this.favoritesOnly,
     search: search ?? this.search,
+    searchScope: searchScope ?? this.searchScope,
     folder: clearFolder ? null : folder ?? this.folder,
+    mediaKind: clearMediaKind ? null : mediaKind ?? this.mediaKind,
+    trashed: trashed ?? this.trashed,
+    albums: albums ?? this.albums,
     scanning: scanning ?? this.scanning,
     selecting: selecting ?? this.selecting,
     cancelRequested: cancelRequested ?? this.cancelRequested,
@@ -114,6 +131,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
   Timer? _searchTimer;
   bool _disposed = false;
   bool _eventsFailed = false;
+  bool _started = false;
   int _generation = 0;
   Future<void>? _refreshing;
   bool _refreshAgain = false;
@@ -133,7 +151,15 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       final subscription = _events;
       if (subscription != null) unawaited(_cancelEvents(subscription));
     });
-    scheduleMicrotask(refresh);
+    // The catalog lives in the same native session as the runtime, so opening
+    // it before `initialize()` resolves fails with NotInitialized. Gate the
+    // first read on the runtime reporting ready instead of racing it.
+    ref.listen(runtimeProvider, (previous, next) {
+      if (next.phase == ConnectionPhase.ready && !_started) {
+        _started = true;
+        scheduleMicrotask(refresh);
+      }
+    }, fireImmediately: true);
     return const LibraryViewState();
   }
 
@@ -222,8 +248,14 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         limit: pageSize,
         favoritesOnly: query.favoritesOnly,
         search: query.search,
+        searchScope: query.searchScope,
         folder: query.folder,
+        mediaKind: query.mediaKind,
+        trashed: query.trashed,
       );
+      final albums = query.trashed
+          ? const <LocalAlbum>[]
+          : await _gateway.listAlbums();
       if (_disposed || generation != _generation) return;
       if (page.revision < state.revision) {
         // A newer snapshot is already published; an older in-flight read must
@@ -247,6 +279,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         revision: page.revision,
         loading: false,
         hasNext: page.nextCursor != null,
+        albums: albums,
         queryEpoch: state.queryEpoch + 1,
       );
     } catch (_) {
@@ -265,19 +298,40 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
     });
   }
 
+  void setSearchScope(SearchScope value) {
+    if (state.searchScope == value) return;
+    _changeQuery(searchScope: value);
+  }
+
   void setFavorites(bool value) {
     if (state.favoritesOnly == value) return;
     _changeQuery(favoritesOnly: value);
   }
 
-  void setFolder(String? folder) =>
-      _changeQuery(folder: folder, clearFolder: folder == null);
+  void setFolder(String? folder) {
+    if (state.folder == folder) return;
+    _changeQuery(folder: folder, clearFolder: folder == null);
+  }
+
+  void setMediaKind(String? mediaKind) {
+    if (state.mediaKind == mediaKind) return;
+    _changeQuery(mediaKind: mediaKind, clearMediaKind: mediaKind == null);
+  }
+
+  void setTrashed(bool value) {
+    if (state.trashed == value) return;
+    _changeQuery(trashed: value);
+  }
 
   void _changeQuery({
     String? search,
+    SearchScope? searchScope,
     bool? favoritesOnly,
     String? folder,
     bool clearFolder = false,
+    String? mediaKind,
+    bool clearMediaKind = false,
+    bool? trashed,
   }) {
     ++_generation;
     _cursors
@@ -287,9 +341,13 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
     _requests.clear();
     state = state.copyWith(
       search: search,
+      searchScope: searchScope,
       favoritesOnly: favoritesOnly,
       folder: folder,
       clearFolder: clearFolder,
+      mediaKind: mediaKind,
+      clearMediaKind: clearMediaKind,
+      trashed: trashed,
       pages: {},
       extent: 0,
       hasNext: false,
@@ -331,7 +389,10 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         limit: pageSize,
         favoritesOnly: query.favoritesOnly,
         search: query.search,
+        searchScope: query.searchScope,
         folder: query.folder,
+        mediaKind: query.mediaKind,
+        trashed: query.trashed,
       );
       if (_disposed || generation != _generation) return;
       if (page.revision != state.revision) {
@@ -476,5 +537,63 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         );
       }
     }
+  }
+
+  Future<int> trashPhotos(Iterable<String> mediaIds) async {
+    final ids = mediaIds.toList(growable: false);
+    if (ids.isEmpty) return 0;
+    final count = await _gateway.trashMedia(ids);
+    await refresh(force: true);
+    return count;
+  }
+
+  Future<int> restorePhotos(Iterable<String> mediaIds) async {
+    final ids = mediaIds.toList(growable: false);
+    if (ids.isEmpty) return 0;
+    final count = await _gateway.restoreMedia(ids);
+    await refresh(force: true);
+    return count;
+  }
+
+  Future<int> purgePhotos(Iterable<String> mediaIds) async {
+    final ids = mediaIds.toList(growable: false);
+    if (ids.isEmpty) return 0;
+    final count = await _gateway.purgeMedia(ids);
+    await refresh(force: true);
+    return count;
+  }
+
+  Future<int> emptyTrash() async {
+    final count = await _gateway.emptyTrash();
+    await refresh(force: true);
+    return count;
+  }
+
+  Future<int> addPhotosToAlbum(
+    Iterable<String> mediaIds,
+    String targetFolder, {
+    required bool moveFiles,
+  }) async {
+    final ids = mediaIds.toList(growable: false);
+    if (ids.isEmpty) return 0;
+    final count = await _gateway.addToAlbum(
+      ids,
+      targetFolder,
+      moveFiles: moveFiles,
+    );
+    await refresh(force: true);
+    return count;
+  }
+
+  Future<LocalPhoto> saveEdited(String mediaId, EditOptions options) async {
+    final photo = await _gateway.saveEdited(mediaId, options);
+    await refresh(force: true);
+    return photo;
+  }
+
+  Future<LocalPhoto> renamePhoto(String mediaId, String name) async {
+    final photo = await _gateway.renameMedia(mediaId, name);
+    await refresh(force: true);
+    return photo;
   }
 }

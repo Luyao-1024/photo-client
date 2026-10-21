@@ -99,7 +99,11 @@ class _Segment extends StatelessWidget {
                   fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                   color: active ? activeColor : inactiveColor,
                 ),
-                child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(height: 6),
               AnimatedContainer(

@@ -42,6 +42,8 @@ CREATE TABLE media (
   favorite INTEGER NOT NULL DEFAULT 0 CHECK(favorite IN (0,1)),
   state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','trashed','missing','unsupported')),
   error_code TEXT,
+  original_uri TEXT,
+  trashed_at_ms INTEGER,
   PRIMARY KEY(library_id,media_id), UNIQUE(library_id,source_uri),
   FOREIGN KEY(library_id,source_id) REFERENCES sources(library_id,source_id)
 ) STRICT;

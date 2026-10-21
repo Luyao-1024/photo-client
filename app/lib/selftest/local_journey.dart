@@ -427,13 +427,11 @@ final class LocalJourney {
       // position so the real pointer tap aims at the live close control.
       Offset? previous;
       await _waitFor(() {
-        final render = _elementByKey(
-          const ValueKey('viewer-details-panel'),
-        )?.findRenderObject();
+        final render = _elementByKey(const ValueKey('viewer-details-panel'))
+            ?.findRenderObject();
         if (render is! RenderBox || !render.hasSize) return false;
         final position = render.localToGlobal(Offset.zero);
-        final stable =
-            previous != null && (position - previous!).distance < .5;
+        final stable = previous != null && (position - previous!).distance < .5;
         previous = position;
         return stable;
       }, reason: 'the details panel never came to rest');
@@ -797,12 +795,7 @@ final class LocalJourney {
   /// line: a flush binds the sink, and the next write would then throw.
   void _trace(String id, String status, [Object? detail]) {
     final line =
-        '${jsonEncode({
-          'id': id,
-          'status': status,
-          'at': DateTime.now().toUtc().toIso8601String(),
-          if (detail != null) 'detail': '$detail',
-        })}\n';
+        '${jsonEncode({'id': id, 'status': status, 'at': DateTime.now().toUtc().toIso8601String(), if (detail != null) 'detail': '$detail'})}\n';
     final target = _traceFile;
     if (target != null) {
       target.writeAsStringSync(line, mode: FileMode.append, flush: true);

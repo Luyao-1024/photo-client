@@ -113,14 +113,20 @@ final class NativeCoreGateway implements CoreGateway, LocalLibraryGateway {
     int limit = 100,
     bool favoritesOnly = false,
     String search = '',
+    SearchScope searchScope = SearchScope.all,
     String? folder,
+    String? mediaKind,
+    bool trashed = false,
   }) async {
     final page = await native_library.listPhotos(
       cursor: cursor,
       limit: limit,
       favoritesOnly: favoritesOnly,
       search: search,
+      searchScope: searchScope.wire,
       folder: folder,
+      mediaKind: mediaKind,
+      trashed: trashed,
     );
     return LocalPhotoPage(
       items: [
@@ -136,11 +142,122 @@ final class NativeCoreGateway implements CoreGateway, LocalLibraryGateway {
             width: photo.width,
             height: photo.height,
             favorite: photo.favorite,
+            mediaKind: photo.mediaKind,
+            mimeType: photo.mimeType,
+            orientation: photo.orientation,
+            captureTimeMs: photo.captureTimeMs?.toInt(),
+            sortTimeMs: photo.sortTimeMs.toInt(),
+            state: photo.state,
+            trashedAtMs: photo.trashedAtMs?.toInt(),
           ),
       ],
       nextCursor: page.nextCursor,
       total: page.total.toInt(),
       revision: page.revision.toInt(),
+    );
+  }
+
+  @override
+  Future<List<LocalAlbum>> listAlbums() async {
+    final albums = await native_library.listAlbums();
+    return [
+      for (final album in albums)
+        LocalAlbum(
+          path: album.path,
+          name: album.name,
+          count: album.count.toInt(),
+          coverMediaId: album.coverMediaId,
+        ),
+    ];
+  }
+
+  @override
+  Future<int> trashMedia(List<String> mediaIds) async =>
+      (await native_library.trashMedia(mediaIds: mediaIds)).toInt();
+
+  @override
+  Future<int> restoreMedia(List<String> mediaIds) async =>
+      (await native_library.restoreMedia(mediaIds: mediaIds)).toInt();
+
+  @override
+  Future<int> purgeMedia(List<String> mediaIds) async =>
+      (await native_library.purgeMedia(mediaIds: mediaIds)).toInt();
+
+  @override
+  Future<int> emptyTrash() async => (await native_library.emptyTrash()).toInt();
+
+  @override
+  Future<int> addToAlbum(
+    List<String> mediaIds,
+    String targetFolder, {
+    required bool moveFiles,
+  }) async => (await native_library.addToAlbum(
+    mediaIds: mediaIds,
+    targetFolder: targetFolder,
+    moveFiles: moveFiles,
+  )).toInt();
+
+  @override
+  Future<LocalPhoto> renameMedia(String mediaId, String name) async {
+    final photo = await native_library.renameMedia(
+      mediaId: mediaId,
+      name: name,
+    );
+    return LocalPhoto(
+      id: photo.id,
+      path: photo.path,
+      name: photo.name,
+      parent: photo.parent,
+      sizeBytes: photo.sizeBytes.toInt(),
+      modifiedMs: photo.modifiedMs.toInt(),
+      contentVersion: photo.contentVersion.toInt(),
+      width: photo.width,
+      height: photo.height,
+      favorite: photo.favorite,
+      mediaKind: photo.mediaKind,
+      mimeType: photo.mimeType,
+      orientation: photo.orientation,
+      captureTimeMs: photo.captureTimeMs?.toInt(),
+      sortTimeMs: photo.sortTimeMs.toInt(),
+      state: photo.state,
+      trashedAtMs: photo.trashedAtMs?.toInt(),
+    );
+  }
+
+  @override
+  Future<LocalPhoto> saveEdited(String mediaId, EditOptions options) async {
+    final photo = await native_library.saveEdited(
+      mediaId: mediaId,
+      request: native_library.EditRequest(
+        rotationDegrees: options.rotationDegrees,
+        brightness: options.brightness,
+        contrast: options.contrast,
+        saturation: options.saturation,
+        cropX: options.crop?.x,
+        cropY: options.crop?.y,
+        cropWidth: options.crop?.width,
+        cropHeight: options.crop?.height,
+        saveCopy: options.saveCopy,
+      ),
+    );
+    return LocalPhoto(
+      id: photo.id,
+      path: photo.path,
+      name: photo.name,
+      parent: photo.parent,
+      sizeBytes: photo.sizeBytes.toInt(),
+      modifiedMs: photo.modifiedMs.toInt(),
+      contentVersion: photo.contentVersion.toInt(),
+      width: photo.width,
+      height: photo.height,
+      favorite: photo.favorite,
+      mediaKind: photo.mediaKind,
+      mimeType: photo.mimeType,
+      orientation: photo.orientation,
+      captureTimeMs: photo.captureTimeMs?.toInt(),
+      sortTimeMs: photo.sortTimeMs.toInt(),
+      state: photo.state,
+      trashedAtMs: photo.trashedAtMs?.toInt(),
     );
   }
 

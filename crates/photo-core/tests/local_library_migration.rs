@@ -7,6 +7,10 @@ use tempfile::TempDir;
 
 const SCHEMA: &str = include_str!("../src/storage/local-schema.sql");
 
+/// Mirrors `photo_core::local_library::SCHEMA_VERSION`; the pre-release build
+/// refuses any database written by a different version.
+const CURRENT_SCHEMA_VERSION: i64 = 2;
+
 fn input(folder: &std::path::Path, name: &str, ns: i64) -> MediaInput {
     let path = folder.join(name);
     fs::write(&path, b"catalog fixture").unwrap();
@@ -195,9 +199,13 @@ fn newer_schema_rejects_old_writer_without_wiping_the_library() {
     assert_eq!((count, favorite), (1, 1), "rows survive the refusal");
     drop(connection);
 
-    // Once the future writer restores the known version, all data is intact.
+    // Once the future writer restores the current version, all data is intact.
+    // The pre-release schema has no downgrade path, so only the exact version
+    // the writer was built for is accepted.
     let connection = Connection::open(&database).unwrap();
-    connection.pragma_update(None, "user_version", 1).unwrap();
+    connection
+        .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)
+        .unwrap();
     drop(connection);
     let restored = LocalLibrary::open(root.path()).unwrap();
     assert_eq!(restored.library_id, library_id);

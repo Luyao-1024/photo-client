@@ -97,12 +97,39 @@ setup_display
 display_label="${WAYLAND_DISPLAY:-$DISPLAY}"
 
 if [ "$mode" = "dev" ]; then
+  # `flutter run` alone cannot bring the app up: the Dart side requires the
+  # generated PHOTO_PROFILE_* dart-defines (otherwise the core refuses to
+  # initialize with BuildProfileMissing), and the runner only installs whatever
+  # target/debug/libphoto_bridge.so already exists. Mirror the declarative
+  # profile steps from tools/platform, then hand off to `flutter run` so hot
+  # reload keeps working.
+  python3 -B "$ROOT/tools/platform" generate --profile linux-x86_64 >/dev/null
+  defines_file="$ROOT/.build/linux-x86_64/dart-defines.json"
+  # The native library embeds the profile digest at compile time and the Dart
+  # side embeds the same values, so both must be built from one profile.
+  eval "$(python3 -B - "$defines_file" <<'PY'
+import json, shlex, sys
+
+for key, value in json.load(open(sys.argv[1], encoding="utf-8")).items():
+    print(f"export {key}={shlex.quote(value)}")
+PY
+)"
+  native_library="$ROOT/target/debug/libphoto_bridge.so"
+  echo "run_app: dev building native core (cargo build -p photo-bridge)"
+  if ! (cd "$ROOT" && cargo build --locked -p photo-bridge); then
+    echo "run_app: dev native core build failed" >&2
+    exit 1
+  fi
+  if [ ! -f "$native_library" ]; then
+    echo "run_app: dev missing native library: $native_library" >&2
+    exit 1
+  fi
   cd "$ROOT/app"
   echo "run_app: dev (flutter run -d linux) data-root=$data_root_label display=$display_label"
   if [ -n "$data_root" ]; then
-    exec flutter run -d linux -- --data-root="$data_root"
+    exec flutter run -d linux --dart-define-from-file="$defines_file" -- --data-root="$data_root"
   fi
-  exec flutter run -d linux
+  exec flutter run -d linux --dart-define-from-file="$defines_file"
 fi
 
 if [ "$do_build" = 1 ] || [ ! -x "$BUNDLE" ]; then

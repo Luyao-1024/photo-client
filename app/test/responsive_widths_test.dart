@@ -115,9 +115,7 @@ void main() {
         expectVisibleAndSized(tester, 'viewer-favorite');
         expectVisibleAndSized(tester, 'viewer-close');
         expect(
-          tester
-              .widget<Text>(find.byKey(const ValueKey('viewer-name')))
-              .data,
+          tester.widget<Text>(find.byKey(const ValueKey('viewer-name'))).data,
           'Photo 0.png',
         );
 
@@ -127,9 +125,7 @@ void main() {
         expect(gateway.favorites, 1);
         expect(
           tester
-              .widget<IconButton>(
-                find.byKey(const ValueKey('viewer-favorite')),
-              )
+              .widget<IconButton>(find.byKey(const ValueKey('viewer-favorite')))
               .isSelected,
           isTrue,
         );

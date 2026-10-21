@@ -118,70 +118,72 @@ void main() {
     },
   );
 
-  testWidgets(
-    'immersive mode toggles with the button and the F and I keys',
-    (tester) async {
-      final gateway = FakeLocalGateway(imagePath: image, count: 2);
-      await mount(tester, gateway);
-      await openViewer(tester, 'p0');
-      expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-filmstrip')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsNothing);
+  testWidgets('immersive toggles with the button and F; I opens details', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 2);
+    await mount(tester, gateway);
+    await openViewer(tester, 'p0');
+    expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-filmstrip')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsNothing);
 
-      // Enter immersive via the header button: header, filmstrip, and the
-      // bottom-right nav pair fold away; only the exit control remains.
-      await tester.tap(find.byKey(const ValueKey('viewer-immersive')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-close')), findsNothing);
-      expect(find.byKey(const ValueKey('viewer-name')), findsNothing);
-      expect(find.byKey(const ValueKey('viewer-filmstrip')), findsNothing);
-      expect(find.byKey(const ValueKey('viewer-previous')), findsNothing);
-      expect(find.byKey(const ValueKey('viewer-next')), findsNothing);
-      // The media stage itself survives immersion.
-      expect(find.byType(InteractiveViewer), findsOneWidget);
+    // Enter immersive via the header button: header, filmstrip, and the
+    // bottom-right nav pair fold away; only the exit control remains.
+    await tester.tap(find.byKey(const ValueKey('viewer-immersive')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-close')), findsNothing);
+    expect(find.byKey(const ValueKey('viewer-name')), findsNothing);
+    expect(find.byKey(const ValueKey('viewer-filmstrip')), findsNothing);
+    expect(find.byKey(const ValueKey('viewer-previous')), findsNothing);
+    expect(find.byKey(const ValueKey('viewer-next')), findsNothing);
+    // The media stage itself survives immersion.
+    expect(find.byType(InteractiveViewer), findsOneWidget);
 
-      // Exit with the F key restores the chrome.
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-filmstrip')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsNothing);
+    // Exit with the F key restores the chrome.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-filmstrip')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsNothing);
 
-      // Enter with the F key, exit with the dedicated button.
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('viewer-immersive-exit')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
+    // Enter with the F key, exit with the dedicated button.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('viewer-immersive-exit')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
 
-      // The I key keeps working as the legacy immersive toggle.
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
+    // The I key opens the details panel (as in the original viewer) rather
+    // than the legacy immersive toggle.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-details-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-details-panel')), findsNothing);
+    expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
 
-      // Escape leaves immersive first and only pops on a second press.
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
-      await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer')), findsOneWidget);
-      expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer')), findsNothing);
+    // Escape leaves immersive first and only pops on a second press.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer')), findsNothing);
 
-      expect(tester.takeException(), isNull);
-      await disposeApp(tester, gateway);
-    },
-  );
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester, gateway);
+  });
 
   testWidgets(
     'rapid Right/Left bursts keep viewer-name, position counter, and the '
@@ -269,11 +271,11 @@ void _expectViewerConsistent(
   CommonFinders find, {
   required int total,
 }) {
-  final name =
-      tester.widget<Text>(find.byKey(const ValueKey('viewer-name'))).data!;
-  final match = RegExp('^(\\d+) / $total\$').firstMatch(
-    tester.widget<Text>(find.textContaining('/ $total')).data!,
-  );
+  final name = tester
+      .widget<Text>(find.byKey(const ValueKey('viewer-name')))
+      .data!;
+  final match = RegExp('^(\\d+) / $total\$')
+      .firstMatch(tester.widget<Text>(find.textContaining('/ $total')).data!);
   expect(match, isNotNull, reason: 'position counter not found');
   final index = int.parse(match!.group(1)!) - 1;
   expect(name, 'Photo $index.png');

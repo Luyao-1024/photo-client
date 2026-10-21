@@ -137,8 +137,6 @@ void main() {
     expect(find.byKey(const ValueKey('add-folder')), findsNothing);
   }
 
-  Finder connectionStatus() => find.byKey(const ValueKey('connection-status'));
-
   testWidgets('sidebar navigation switches photos, favorites and trash', (
     tester,
   ) async {
@@ -191,7 +189,6 @@ void main() {
       expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
     }
     await openSettings(tester);
-    expect(connectionStatus(), findsOneWidget);
     expect(gateway.initializes, 1);
 
     tester.view.physicalSize = const Size(1440, 900);
@@ -202,30 +199,30 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
-  testWidgets('settings dialog owns connection status, appearance and sources', (
-    tester,
-  ) async {
-    final gateway = FakeLocalGateway(imagePath: image);
-    await mount(tester, gateway);
-    await tester.pumpAndSettle();
-    // The old persistent connection card is gone from the shell chrome.
-    expect(connectionStatus(), findsNothing);
-    await openSettings(tester);
-    expect(tester.widget<Text>(connectionStatus()).data, 'Local core connected');
-    expect(find.byType(ChoiceChip), findsWidgets);
-    expect(find.widgetWithText(ChoiceChip, 'Dark'), findsOneWidget);
-    expect(find.byType(SwitchListTile), findsOneWidget);
-    expect(find.byKey(const ValueKey('add-files')), findsOneWidget);
-    // No picker was supplied: the source buttons stay honestly disabled.
-    expect(
-      tester
-          .widget<FilledButton>(find.byKey(const ValueKey('add-folder')))
-          .onPressed,
-      isNull,
-    );
-    await closeSettings(tester);
-    await disposeApp(tester, gateway);
-  });
+  testWidgets(
+    'settings dialog owns appearance and sources',
+    (tester) async {
+      final gateway = FakeLocalGateway(imagePath: image);
+      await mount(tester, gateway);
+      await tester.pumpAndSettle();
+      await openSettings(tester);
+      // Runtime plumbing stays internal: no "core" status is user-facing.
+      expect(find.textContaining('core'), findsNothing);
+      expect(find.byType(ChoiceChip), findsWidgets);
+      expect(find.widgetWithText(ChoiceChip, 'Dark'), findsOneWidget);
+      expect(find.byType(SwitchListTile), findsOneWidget);
+      expect(find.byKey(const ValueKey('add-files')), findsOneWidget);
+      // No picker was supplied: the source buttons stay honestly disabled.
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('add-folder')))
+            .onPressed,
+        isNull,
+      );
+      await closeSettings(tester);
+      await disposeApp(tester, gateway);
+    },
+  );
 
   testWidgets('theme, language and glass persist via presentationProvider', (
     tester,
@@ -248,7 +245,10 @@ void main() {
 
     await tester.tap(find.widgetWithText(ChoiceChip, '简体中文'));
     await tester.pumpAndSettle();
-    expect(container.read(presentationProvider).locale, const Locale('zh', 'CN'));
+    expect(
+      container.read(presentationProvider).locale,
+      const Locale('zh', 'CN'),
+    );
     expect(find.text('语言'), findsOneWidget);
 
     await tester.ensureVisible(find.byType(SwitchListTile));
@@ -281,24 +281,20 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
-  testWidgets('pending initialization never reports a connection or an event', (
+  testWidgets('pending initialization shows loading and no stale event', (
     tester,
   ) async {
     final gateway = FakeLocalGateway(imagePath: image)
       ..pendingInitialize = Completer<CoreSnapshot>();
     await mount(tester, gateway);
-    expect(find.text('Connecting to the local core…'), findsOneWidget);
-    await openSettings(tester);
+    expect(find.text('Loading the local library…'), findsOneWidget);
+    expect(find.textContaining('core'), findsNothing);
     final container = containerOf(tester);
-    expect(
-      tester.widget<Text>(connectionStatus()).data,
-      'Connecting to the local core…',
-    );
     expect(gateway.listens, 0);
 
     gateway.pendingInitialize!.complete(snapshot);
     await tester.pumpAndSettle();
-    expect(tester.widget<Text>(connectionStatus()).data, 'Local core connected');
+    expect(find.text('Library is empty'), findsOneWidget);
     expect(gateway.listens, 1);
 
     gateway.events.add(const CoreRuntimeEvent(sequence: 9, status: 'running'));
@@ -319,32 +315,24 @@ void main() {
     final gateway = FakeLocalGateway(imagePath: image)..failInitialize = true;
     await mount(tester, gateway);
     await tester.pumpAndSettle();
-    expect(find.text('Local core unavailable'), findsOneWidget);
+    expect(find.text('Library failed to load'), findsOneWidget);
     expect(find.textContaining('PRIVATE'), findsNothing);
-    await openSettings(tester);
-    expect(
-      tester.widget<Text>(connectionStatus()).data,
-      'Local core unavailable',
-    );
-    final runtime = containerOf(tester).read(runtimeProvider.notifier);
-    // Retry with the dialog closed: the shell must never keep a stale surface
-    // open across a connection transition.
-    await closeSettings(tester);
+    expect(find.textContaining('core'), findsNothing);
+    expect(gateway.initializes, 1);
 
+    // Retry is offered on the library surface itself, not buried in settings.
     gateway.failInitialize = false;
-    await runtime.initialize();
+    await tester.tap(find.byKey(const ValueKey('retry-runtime')));
     await tester.pumpAndSettle();
     expect(gateway.initializes, 2);
     expect(gateway.shutdowns, 1);
     expect(gateway.listens, 1);
     expect(find.textContaining('PRIVATE'), findsNothing);
-    await openSettings(tester);
-    expect(tester.widget<Text>(connectionStatus()).data, 'Local core connected');
-    await closeSettings(tester);
+    expect(find.text('Library is empty'), findsOneWidget);
     await disposeApp(tester, gateway);
   });
 
-  testWidgets('stream failure marks stale connection and retry rerescribes', (
+  testWidgets('stream failure recovers through the library retry', (
     tester,
   ) async {
     final gateway = FakeLocalGateway(imagePath: image);
@@ -353,15 +341,10 @@ void main() {
     final runtime = containerOf(tester).read(runtimeProvider.notifier);
     gateway.events.addError(StateError('PRIVATE stream failure'));
     await tester.pumpAndSettle();
-    expect(find.text('Local core unavailable'), findsOneWidget);
+    expect(find.text('Library failed to load'), findsOneWidget);
     expect(find.textContaining('PRIVATE'), findsNothing);
+    expect(find.byKey(const ValueKey('retry-runtime')), findsOneWidget);
     expect(gateway.cancellations, 1);
-    await openSettings(tester);
-    expect(
-      tester.widget<Text>(connectionStatus()).data,
-      'Local core unavailable',
-    );
-    await closeSettings(tester);
 
     // Cancelling the errored broadcast subscription completes on the real
     // event loop, so the retry runs outside fake async.
@@ -369,9 +352,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(gateway.listens, 2);
     expect(gateway.initializes, 2);
-    await openSettings(tester);
-    expect(tester.widget<Text>(connectionStatus()).data, 'Local core connected');
-    await closeSettings(tester);
+    expect(find.text('Library is empty'), findsOneWidget);
     await disposeApp(tester, gateway);
   });
 
@@ -402,30 +383,31 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
-  testWidgets('failed probe clears a previous reply instead of implying success', (
-    tester,
-  ) async {
-    final gateway = FakeLocalGateway(imagePath: image);
-    await mount(tester, gateway);
-    await tester.pumpAndSettle();
-    final container = containerOf(tester);
-    final runtime = container.read(runtimeProvider.notifier);
-    await runtime.probe();
-    expect(container.read(runtimeProvider).reply, 'core:photo-client:s01');
+  testWidgets(
+    'failed probe clears a previous reply instead of implying success',
+    (tester) async {
+      final gateway = FakeLocalGateway(imagePath: image);
+      await mount(tester, gateway);
+      await tester.pumpAndSettle();
+      final container = containerOf(tester);
+      final runtime = container.read(runtimeProvider.notifier);
+      await runtime.probe();
+      expect(container.read(runtimeProvider).reply, 'core:photo-client:s01');
 
-    gateway.pendingProbe = Completer<String>();
-    unawaited(runtime.probe());
-    await tester.pump();
-    // The stale reply is cleared before the outcome is known.
-    expect(container.read(runtimeProvider).reply, isNull);
-    gateway.pendingProbe!.completeError(StateError('PRIVATE failed probe'));
-    await tester.pumpAndSettle();
-    final state = container.read(runtimeProvider);
-    expect(state.problem, RuntimeProblem.roundTrip);
-    expect(state.reply, isNull);
-    expect(state.phase, ConnectionPhase.ready);
-    await disposeApp(tester, gateway);
-  });
+      gateway.pendingProbe = Completer<String>();
+      unawaited(runtime.probe());
+      await tester.pump();
+      // The stale reply is cleared before the outcome is known.
+      expect(container.read(runtimeProvider).reply, isNull);
+      gateway.pendingProbe!.completeError(StateError('PRIVATE failed probe'));
+      await tester.pumpAndSettle();
+      final state = container.read(runtimeProvider);
+      expect(state.problem, RuntimeProblem.roundTrip);
+      expect(state.reply, isNull);
+      expect(state.phase, ConnectionPhase.ready);
+      await disposeApp(tester, gateway);
+    },
+  );
 
   testWidgets('backgrounding keeps core, detach and teardown clean up once', (
     tester,
@@ -453,48 +435,50 @@ void main() {
     await gateway.events.close();
   });
 
-  testWidgets('teardown waits for pending initialization and releases session', (
-    tester,
-  ) async {
-    final gateway = FakeLocalGateway(imagePath: image)
-      ..pendingInitialize = Completer<CoreSnapshot>();
-    await mount(tester, gateway);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-    expect(gateway.shutdowns, 0);
-    gateway.pendingInitialize!.complete(snapshot);
-    await tester.pump();
-    await tester.pump();
-    expect(gateway.shutdowns, 1);
-    expect(gateway.listens, 0);
-    expect(tester.takeException(), isNull);
-    await gateway.changes.close();
-    await gateway.events.close();
-  });
+  testWidgets(
+    'teardown waits for pending initialization and releases session',
+    (tester) async {
+      final gateway = FakeLocalGateway(imagePath: image)
+        ..pendingInitialize = Completer<CoreSnapshot>();
+      await mount(tester, gateway);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(gateway.shutdowns, 0);
+      gateway.pendingInitialize!.complete(snapshot);
+      await tester.pump();
+      await tester.pump();
+      expect(gateway.shutdowns, 1);
+      expect(gateway.listens, 0);
+      expect(tester.takeException(), isNull);
+      await gateway.changes.close();
+      await gateway.events.close();
+    },
+  );
 
-  testWidgets('closing during retry cleanup does not initialize or close twice', (
-    tester,
-  ) async {
-    final gateway = FakeLocalGateway(imagePath: image)..failInitialize = true;
-    await mount(tester, gateway);
-    await tester.pumpAndSettle();
-    final runtime = containerOf(tester).read(runtimeProvider.notifier);
-    gateway.pendingShutdown = Completer<void>();
-    gateway.failInitialize = false;
-    unawaited(runtime.initialize());
-    await tester.pump();
-    expect(gateway.shutdowns, 1);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-    gateway.pendingShutdown!.complete();
-    await tester.pump();
-    await tester.pump();
-    expect(gateway.initializes, 1);
-    expect(gateway.shutdowns, 1);
-    expect(tester.takeException(), isNull);
-    await gateway.changes.close();
-    await gateway.events.close();
-  });
+  testWidgets(
+    'closing during retry cleanup does not initialize or close twice',
+    (tester) async {
+      final gateway = FakeLocalGateway(imagePath: image)..failInitialize = true;
+      await mount(tester, gateway);
+      await tester.pumpAndSettle();
+      final runtime = containerOf(tester).read(runtimeProvider.notifier);
+      gateway.pendingShutdown = Completer<void>();
+      gateway.failInitialize = false;
+      unawaited(runtime.initialize());
+      await tester.pump();
+      expect(gateway.shutdowns, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      gateway.pendingShutdown!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(gateway.initializes, 1);
+      expect(gateway.shutdowns, 1);
+      expect(tester.takeException(), isNull);
+      await gateway.changes.close();
+      await gateway.events.close();
+    },
+  );
 
   testWidgets('shutdown failure does not escape asynchronous teardown', (
     tester,
@@ -523,7 +507,7 @@ void main() {
     await mount(tester, gateway, width: 390);
     await tester.pumpAndSettle();
     await openSettings(tester);
-    expect(connectionStatus(), findsOneWidget);
+    expect(find.text('Settings'), findsWidgets);
     expect(tester.takeException(), isNull);
     await disposeApp(tester, gateway);
   });

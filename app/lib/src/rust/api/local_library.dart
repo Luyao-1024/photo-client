@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `changed`, `global`, `join_error`, `root_path`, `service`
+// These functions are ignored because they are not marked as `pub`: `changed`, `crop_rect`, `global`, `join_error`, `root_path`, `service`, `to_local_photo`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ScanGuard`, `Service`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`
 
@@ -19,13 +19,60 @@ Future<LocalPhotoPage> listPhotos({
   required int limit,
   required bool favoritesOnly,
   required String search,
+  required String searchScope,
   String? folder,
+  String? mediaKind,
+  required bool trashed,
 }) => RustLib.instance.api.crateApiLocalLibraryListPhotos(
   cursor: cursor,
   limit: limit,
   favoritesOnly: favoritesOnly,
   search: search,
+  searchScope: searchScope,
   folder: folder,
+  mediaKind: mediaKind,
+  trashed: trashed,
+);
+
+Future<List<LocalAlbum>> listAlbums() =>
+    RustLib.instance.api.crateApiLocalLibraryListAlbums();
+
+Future<BigInt> trashMedia({required List<String> mediaIds}) =>
+    RustLib.instance.api.crateApiLocalLibraryTrashMedia(mediaIds: mediaIds);
+
+Future<BigInt> restoreMedia({required List<String> mediaIds}) =>
+    RustLib.instance.api.crateApiLocalLibraryRestoreMedia(mediaIds: mediaIds);
+
+Future<BigInt> purgeMedia({required List<String> mediaIds}) =>
+    RustLib.instance.api.crateApiLocalLibraryPurgeMedia(mediaIds: mediaIds);
+
+Future<BigInt> emptyTrash() =>
+    RustLib.instance.api.crateApiLocalLibraryEmptyTrash();
+
+Future<BigInt> addToAlbum({
+  required List<String> mediaIds,
+  required String targetFolder,
+  required bool moveFiles,
+}) => RustLib.instance.api.crateApiLocalLibraryAddToAlbum(
+  mediaIds: mediaIds,
+  targetFolder: targetFolder,
+  moveFiles: moveFiles,
+);
+
+Future<LocalPhoto> renameMedia({
+  required String mediaId,
+  required String name,
+}) => RustLib.instance.api.crateApiLocalLibraryRenameMedia(
+  mediaId: mediaId,
+  name: name,
+);
+
+Future<LocalPhoto> saveEdited({
+  required String mediaId,
+  required EditRequest request,
+}) => RustLib.instance.api.crateApiLocalLibrarySaveEdited(
+  mediaId: mediaId,
+  request: request,
 );
 
 Future<LocalScanResult> addPaths({required List<String> paths}) =>
@@ -48,6 +95,85 @@ Future<void> setFavorite({required String mediaId, required bool favorite}) =>
 
 Future<void> closeLibrary() =>
     RustLib.instance.api.crateApiLocalLibraryCloseLibrary();
+
+class EditRequest {
+  final int rotationDegrees;
+  final int brightness;
+  final int contrast;
+  final int saturation;
+  final int? cropX;
+  final int? cropY;
+  final int? cropWidth;
+  final int? cropHeight;
+  final bool saveCopy;
+
+  const EditRequest({
+    required this.rotationDegrees,
+    required this.brightness,
+    required this.contrast,
+    required this.saturation,
+    this.cropX,
+    this.cropY,
+    this.cropWidth,
+    this.cropHeight,
+    required this.saveCopy,
+  });
+
+  @override
+  int get hashCode =>
+      rotationDegrees.hashCode ^
+      brightness.hashCode ^
+      contrast.hashCode ^
+      saturation.hashCode ^
+      cropX.hashCode ^
+      cropY.hashCode ^
+      cropWidth.hashCode ^
+      cropHeight.hashCode ^
+      saveCopy.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EditRequest &&
+          runtimeType == other.runtimeType &&
+          rotationDegrees == other.rotationDegrees &&
+          brightness == other.brightness &&
+          contrast == other.contrast &&
+          saturation == other.saturation &&
+          cropX == other.cropX &&
+          cropY == other.cropY &&
+          cropWidth == other.cropWidth &&
+          cropHeight == other.cropHeight &&
+          saveCopy == other.saveCopy;
+}
+
+class LocalAlbum {
+  final String path;
+  final String name;
+  final BigInt count;
+  final String? coverMediaId;
+
+  const LocalAlbum({
+    required this.path,
+    required this.name,
+    required this.count,
+    this.coverMediaId,
+  });
+
+  @override
+  int get hashCode =>
+      path.hashCode ^ name.hashCode ^ count.hashCode ^ coverMediaId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LocalAlbum &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          name == other.name &&
+          count == other.count &&
+          coverMediaId == other.coverMediaId;
+}
 
 class LocalLibraryInfo {
   final String libraryId;
@@ -84,6 +210,13 @@ class LocalPhoto {
   final int? width;
   final int? height;
   final bool favorite;
+  final String mediaKind;
+  final String mimeType;
+  final int orientation;
+  final PlatformInt64? captureTimeMs;
+  final PlatformInt64 sortTimeMs;
+  final String state;
+  final PlatformInt64? trashedAtMs;
 
   const LocalPhoto({
     required this.id,
@@ -96,6 +229,13 @@ class LocalPhoto {
     this.width,
     this.height,
     required this.favorite,
+    required this.mediaKind,
+    required this.mimeType,
+    required this.orientation,
+    this.captureTimeMs,
+    required this.sortTimeMs,
+    required this.state,
+    this.trashedAtMs,
   });
 
   @override
@@ -109,7 +249,14 @@ class LocalPhoto {
       contentVersion.hashCode ^
       width.hashCode ^
       height.hashCode ^
-      favorite.hashCode;
+      favorite.hashCode ^
+      mediaKind.hashCode ^
+      mimeType.hashCode ^
+      orientation.hashCode ^
+      captureTimeMs.hashCode ^
+      sortTimeMs.hashCode ^
+      state.hashCode ^
+      trashedAtMs.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -125,7 +272,14 @@ class LocalPhoto {
           contentVersion == other.contentVersion &&
           width == other.width &&
           height == other.height &&
-          favorite == other.favorite;
+          favorite == other.favorite &&
+          mediaKind == other.mediaKind &&
+          mimeType == other.mimeType &&
+          orientation == other.orientation &&
+          captureTimeMs == other.captureTimeMs &&
+          sortTimeMs == other.sortTimeMs &&
+          state == other.state &&
+          trashedAtMs == other.trashedAtMs;
 }
 
 class LocalPhotoPage {

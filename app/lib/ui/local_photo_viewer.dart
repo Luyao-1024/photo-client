@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/local_library_gateway.dart';
 import 'glass_surface.dart';
 import 'local_library_controller.dart';
+import 'local_photo_editor.dart';
 import 'local_photo_image.dart';
 import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
@@ -83,9 +84,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     final library = ref.read(localLibraryProvider);
     if (target < 0 || target >= library.total) return;
     setState(() => _navigating = true);
-    final photo = await ref
-        .read(localLibraryProvider.notifier)
-        .photoAt(target);
+    final photo = await ref.read(localLibraryProvider.notifier).photoAt(target);
     if (!mounted) return;
     setState(() {
       _navigating = false;
@@ -107,6 +106,121 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     // Immersion folds every chrome region away; inspection does not survive it.
     if (_immersive) _detailsOpen = false;
   });
+
+  LocalPhoto get _currentPhoto {
+    final library = ref.read(localLibraryProvider);
+    final index = library.indexOf(_photo.id);
+    return index == null ? _photo : library.photoAt(index) ?? _photo;
+  }
+
+  void _toggleDetails() => setState(() => _detailsOpen = !_detailsOpen);
+
+  void _toggleFavorite() {
+    final library = ref.read(localLibraryProvider);
+    final photo = _currentPhoto;
+    if (library.favoritePending.contains(photo.id)) return;
+    unawaited(ref.read(localLibraryProvider.notifier).setFavorite(photo));
+  }
+
+  Future<void> _openEditor() async {
+    final strings = AppStrings.of(context);
+    final photo = _currentPhoto;
+    if (photo.mediaKind != 'image') return;
+    final saved = await Navigator.of(context).push<LocalPhoto>(
+      MaterialPageRoute<LocalPhoto>(
+        builder: (_) => LocalPhotoEditor(photo: photo),
+      ),
+    );
+    if (!mounted || saved == null) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(strings.savedCopy)));
+  }
+
+  void _openFullscreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => _FullscreenPreview(photo: _currentPhoto),
+      ),
+    );
+  }
+
+  /// Move to trash, then continue on the neighbour the user would expect:
+  /// the photo now occupying this slot, otherwise the previous one.
+  Future<void> _deleteCurrent() async {
+    final library = ref.read(localLibraryProvider);
+    final photo = _currentPhoto;
+    final index = library.indexOf(photo.id) ?? 0;
+    try {
+      await ref.read(localLibraryProvider.notifier).trashPhotos([photo.id]);
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    final after = ref.read(localLibraryProvider);
+    if (after.total == 0) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    final targetIndex = index.clamp(0, after.total - 1);
+    final next = await ref
+        .read(localLibraryProvider.notifier)
+        .photoAt(targetIndex);
+    if (!mounted) return;
+    if (next == null) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {
+      _photo = next;
+      _transform.value = Matrix4.identity();
+    });
+  }
+
+  Future<void> _renameCurrent() async {
+    final strings = AppStrings.of(context);
+    final photo = _currentPhoto;
+    final controller = TextEditingController(text: photo.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(strings.renamePhoto),
+        content: TextField(
+          key: const ValueKey('viewer-rename-field'),
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(hintText: photo.name),
+          onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(strings.cancel),
+          ),
+          FilledButton(
+            key: const ValueKey('viewer-rename-confirm'),
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(strings.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty || name == photo.name) return;
+    try {
+      final updated = await ref
+          .read(localLibraryProvider.notifier)
+          .renamePhoto(photo.id, name);
+      if (!mounted) return;
+      setState(() => _photo = updated);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(strings.actionFailed)));
+    }
+  }
 
   void _escape() {
     // Escape leaves immersive first and only pops the page on a second press.
@@ -144,9 +258,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   String _dateLabel(BuildContext context, AppStrings strings, int modifiedMs) {
     final date = DateTime.fromMillisecondsSinceEpoch(modifiedMs).toLocal();
     final now = DateTime.now();
-    final days = DateTime(now.year, now.month, now.day)
-        .difference(DateTime(date.year, date.month, date.day))
-        .inDays;
+    final days = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime(date.year, date.month, date.day)).inDays;
     if (days == 0) return strings.today;
     if (days == 1) return strings.yesterday;
     return MaterialLocalizations.of(context).formatFullDate(date);
@@ -154,24 +270,27 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
 
   /// Hover-only glass (`.viewer-chrome` rule): bare icon at rest, glass
   /// capsule on hover/focus/press.
-  ButtonStyle get _chromeStyle => IconButton.styleFrom(
-    foregroundColor: Colors.white,
-    disabledForegroundColor: Colors.white,
-    backgroundColor: Colors.transparent,
-    minimumSize: const Size(34, 34),
-    padding: const EdgeInsets.all(7),
-    shape: const StadiumBorder(),
-  ).copyWith(
-    backgroundColor: WidgetStateProperty.resolveWith(
-      (states) =>
-          states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.focused) ||
-              states.contains(WidgetState.pressed)
-          ? Colors.white.withValues(alpha: .18)
-          : Colors.transparent,
-    ),
-    overlayColor: WidgetStatePropertyAll(Colors.white.withValues(alpha: .10)),
-  );
+  ButtonStyle get _chromeStyle =>
+      IconButton.styleFrom(
+        foregroundColor: Colors.white,
+        disabledForegroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        minimumSize: const Size(34, 34),
+        padding: const EdgeInsets.all(7),
+        shape: const StadiumBorder(),
+      ).copyWith(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.hovered) ||
+                  states.contains(WidgetState.focused) ||
+                  states.contains(WidgetState.pressed)
+              ? Colors.white.withValues(alpha: .18)
+              : Colors.transparent,
+        ),
+        overlayColor: WidgetStatePropertyAll(
+          Colors.white.withValues(alpha: .10),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -191,8 +310,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       _scheduledPages.clear();
       _stripCentered = null;
     }
-    if (index != null &&
-        (_stripCentered != photo.id || !_strip.hasClients)) {
+    if (index != null && (_stripCentered != photo.id || !_strip.hasClients)) {
       _stripCentered = photo.id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _centerStripOn(index);
@@ -203,22 +321,26 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     // header, filmstrip, and details panel match regardless of app theme.
     // Shrink-wrap tap targets keep the compact hover-glass button geometry.
     return Theme(
-      data: photoTheme(Brightness.dark).copyWith(
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
+      data: photoTheme(Brightness.dark)
+          .copyWith(materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
       child: CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.escape): _escape,
           const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _move(-1),
           const SingleActivator(LogicalKeyboardKey.arrowRight): () => _move(1),
           const SingleActivator(LogicalKeyboardKey.keyF): _toggleImmersive,
-          const SingleActivator(LogicalKeyboardKey.keyI): _toggleImmersive,
+          const SingleActivator(LogicalKeyboardKey.keyF, shift: true):
+              _openFullscreen,
+          const SingleActivator(LogicalKeyboardKey.keyI): _toggleDetails,
+          const SingleActivator(LogicalKeyboardKey.keyH): _toggleFavorite,
+          const SingleActivator(LogicalKeyboardKey.keyE): () =>
+              unawaited(_openEditor()),
+          const SingleActivator(LogicalKeyboardKey.delete): () =>
+              unawaited(_deleteCurrent()),
           const SingleActivator(LogicalKeyboardKey.equal): () =>
               _applyZoom(1.25),
-          const SingleActivator(LogicalKeyboardKey.add): () =>
-              _applyZoom(1.25),
-          const SingleActivator(LogicalKeyboardKey.minus): () =>
-              _applyZoom(.8),
+          const SingleActivator(LogicalKeyboardKey.add): () => _applyZoom(1.25),
+          const SingleActivator(LogicalKeyboardKey.minus): () => _applyZoom(.8),
           const SingleActivator(LogicalKeyboardKey.digit0): _resetZoom,
         },
         child: Focus(
@@ -317,9 +439,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
             ),
           );
           return InteractiveViewer(
-            key: ValueKey(
-              'viewer-image-${photo.id}-${photo.contentVersion}',
-            ),
+            key: ValueKey('viewer-image-${photo.id}-${photo.contentVersion}'),
             transformationController: _transform,
             minScale: _minScale,
             maxScale: _maxScale,
@@ -488,29 +608,21 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                   ? null
                   : () => controller.setFavorite(photo),
             ),
-            // Honest placeholders: no editor or trash backend exists yet.
-            Opacity(
-              opacity: .38,
-              child: IconButton(
-                key: const ValueKey('viewer-edit'),
-                style: _chromeStyle,
-                tooltip: strings.pick('编辑（暂不可用）', 'Edit (not available yet)'),
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: null,
-              ),
+            IconButton(
+              key: const ValueKey('viewer-edit'),
+              style: _chromeStyle,
+              tooltip: strings.edit,
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: photo.mediaKind == 'image'
+                  ? () => unawaited(_openEditor())
+                  : null,
             ),
-            Opacity(
-              opacity: .38,
-              child: IconButton(
-                key: const ValueKey('viewer-trash'),
-                style: _chromeStyle,
-                tooltip: strings.pick(
-                  '移到回收站（暂不可用）',
-                  'Move to trash (not available yet)',
-                ),
-                icon: const Icon(Icons.delete_outline),
-                onPressed: null,
-              ),
+            IconButton(
+              key: const ValueKey('viewer-trash'),
+              style: _chromeStyle,
+              tooltip: strings.moveToTrash,
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => unawaited(_deleteCurrent()),
             ),
             IconButton(
               key: const ValueKey('viewer-details'),
@@ -519,8 +631,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
               isSelected: _detailsOpen,
               selectedIcon: const Icon(Icons.info),
               icon: const Icon(Icons.info_outline),
-              onPressed: () =>
-                  setState(() => _detailsOpen = !_detailsOpen),
+              onPressed: () => setState(() => _detailsOpen = !_detailsOpen),
             ),
             IconButton(
               key: const ValueKey('viewer-immersive'),
@@ -629,7 +740,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                               width: active ? 2 : 1,
                             ),
                           ),
-                          child: _FilmstripThumb(photo: photo, gateway: gateway),
+                          child: _FilmstripThumb(
+                            photo: photo,
+                            gateway: gateway,
+                          ),
                         ),
                       ),
                     ),
@@ -646,9 +760,8 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   /// Overlay glass side panel sliding over the stage's right side; the media
   /// stays visible behind it and the stage is never re-laid-out.
   Widget _detailsPanel(AppStrings strings, LocalPhoto photo, bool glass) {
-    final modified = DateTime.fromMillisecondsSinceEpoch(
-      photo.modifiedMs,
-    ).toLocal();
+    final modified = DateTime.fromMillisecondsSinceEpoch(photo.modifiedMs)
+        .toLocal();
     final localizations = MaterialLocalizations.of(context);
     return Positioned(
       top: _headerInset,
@@ -663,8 +776,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
             tween: Tween(begin: 0, end: 1),
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
-            builder: (context, t, child) =>
-                Transform.translate(offset: Offset((1 - t) * 380, 0), child: child),
+            builder: (context, t, child) => Transform.translate(
+              offset: Offset((1 - t) * 380, 0),
+              child: child,
+            ),
             child: SizedBox(
               width: 340,
               child: GlassSurface(
@@ -685,6 +800,13 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
+                          ),
+                          IconButton(
+                            key: const ValueKey('viewer-details-rename'),
+                            tooltip: strings.rename,
+                            icon: const Icon(Icons.drive_file_rename_outline),
+                            color: Colors.white,
+                            onPressed: () => unawaited(_renameCurrent()),
                           ),
                           TextButton(
                             key: const ValueKey('viewer-details-close'),
@@ -720,13 +842,29 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                             _detailRow(
                               strings.modified,
                               '${localizations.formatFullDate(modified)} '
-                                  '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(modified))}',
+                              '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(modified))}',
                             ),
                             _detailRow(
                               strings.dimensions,
                               photo.width != null && photo.height != null
                                   ? '${photo.width} × ${photo.height}'
                                   : strings.unknown,
+                            ),
+                            _detailRow(
+                              strings.captureTime,
+                              _formatStamp(localizations, photo.captureTimeMs),
+                            ),
+                            _detailRow(
+                              strings.mediaType,
+                              photo.mediaKind == 'video'
+                                  ? strings.videos
+                                  : strings.images,
+                            ),
+                            _detailRow(
+                              strings.state,
+                              photo.state == 'trashed'
+                                  ? strings.trashed
+                                  : strings.active,
                             ),
                           ],
                         ),
@@ -740,6 +878,13 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
         ),
       ),
     );
+  }
+
+  String _formatStamp(MaterialLocalizations localizations, int? ms) {
+    if (ms == null) return AppStrings.of(context).unknown;
+    final date = DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
+    return '${localizations.formatFullDate(date)} '
+        '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
   }
 
   Widget _detailRow(String label, String value) => Padding(
@@ -759,6 +904,60 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       ],
     ),
   );
+}
+
+/// Shift+F opens a chrome-free preview in its own route, mirroring the
+/// original viewer's separate fullscreen window.
+class _FullscreenPreview extends StatelessWidget {
+  const _FullscreenPreview({required this.photo});
+
+  final LocalPhoto photo;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Scaffold(
+      key: const ValueKey('viewer-fullscreen'),
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          InteractiveViewer(
+            maxScale: 8,
+            child: Center(
+              child: Image(
+                image: LocalPhotoImage(photo.path, photo),
+                fit: BoxFit.contain,
+                semanticLabel: photo.name,
+                errorBuilder: (context, error, stack) => Center(
+                  child: Text(
+                    strings.imageUnavailable,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: SafeArea(
+              child: IconButton(
+                key: const ValueKey('viewer-fullscreen-close'),
+                tooltip: strings.close,
+                style: IconButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white.withValues(alpha: .14),
+                ),
+                icon: const Icon(Icons.fullscreen_exit),
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _FilmstripThumb extends StatefulWidget {
@@ -804,13 +1003,18 @@ class _FilmstripThumbState extends State<_FilmstripThumb> {
           final path = snapshot.data;
           if (path == null) {
             return const Center(
-              child: Icon(Icons.photo_outlined, color: Colors.white24, size: 20),
+              child: Icon(
+                Icons.photo_outlined,
+                color: Colors.white24,
+                size: 20,
+              ),
             );
           }
-          final target = (_LocalPhotoViewerState._stripThumb *
-                  MediaQuery.devicePixelRatioOf(context))
-              .ceil()
-              .clamp(64, 1024);
+          final target =
+              (_LocalPhotoViewerState._stripThumb *
+                      MediaQuery.devicePixelRatioOf(context))
+                  .ceil()
+                  .clamp(64, 1024);
           return Image(
             image: ResizeImage.resizeIfNeeded(
               target,
