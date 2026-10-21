@@ -23,5 +23,7 @@ notify = "6"
 tempfile = "3"
 gio = "0.19"
 libc = "0.2"
+jpeg-decoder = "0.3"
+png = "0.18"
 
 [dev-dependencies]

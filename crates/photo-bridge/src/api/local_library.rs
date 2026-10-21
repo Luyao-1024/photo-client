@@ -674,7 +674,8 @@ pub async fn thumbnail(media_id: String, size_class: u32) -> Result<String, Stri
             .root
             .join("cache")
             .join(&photo.id)
-            .join(photo.content_version.to_string());
+            .join(photo.content_version.to_string())
+            .join(format!("r{}", media::THUMBNAIL_CACHE_REVISION));
         std::fs::create_dir_all(&directory).map_err(|_| "CacheUnavailable")?;
         let destination = directory.join(format!("thumbnail-{size_class}.jpg"));
         if !destination.is_file() {
@@ -777,6 +778,13 @@ pub async fn library_tools(command: String) -> Result<String, String> {
                 let path=dir.join("motion.mp4");
                 if !path.is_file(){let stage=dir.join("motion.tmp");media::motion_photo::extract_video_to(std::path::Path::new(&photo.path),&info,&stage).map_err(|_|"MotionExtractFailed")?;std::fs::rename(&stage,&path).map_err(|_|"MotionExtractFailed")?;}
                 serde_json::json!(path.to_str().ok_or("UnsupportedPathEncoding")?)
+            }
+            "animatedFrames"=>{
+                let photo=active.store.photo(string("id")?)?;
+                let dir=active.store.root.join("cache").join(&photo.id).join(photo.content_version.to_string())
+                    .join(format!("r{}", media::THUMBNAIL_CACHE_REVISION)).join("frames");
+                let frames=media::animated::frames_or_extract(std::path::Path::new(&photo.path),&dir,2560)?;
+                serde_json::to_value(frames).map_err(|_|"LocalMappingFailed")?
             }
             "clearLogs"=>{active.store.clear_logs()?;serde_json::Value::Null}
             "cacheUsage"=>serde_json::json!(active.store.cache_usage()?),

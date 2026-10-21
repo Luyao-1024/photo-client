@@ -14,10 +14,10 @@ use uuid::Uuid;
 
 const SCHEMA: &str = include_str!("storage/local-schema.sql");
 const SCHEMA_VERSION: i64 = 3;
+mod migrations;
 mod save;
 mod system_trash;
 mod tools;
-mod migrations;
 pub use tools::{BrowseIndex, SourceInfo};
 type Job = Box<dyn FnOnce(&mut Connection) + Send>;
 enum Message {
@@ -272,6 +272,11 @@ impl LocalLibrary {
             root,
             library_id,
             browse_index: Arc::new(Mutex::new(None)),
+        })
+        .inspect(|store| {
+            // Thumbnails written by an older encoder are rebuilt on demand, so
+            // the stale entries are dropped instead of piling up.
+            let _ = store.prune_thumbnail_cache();
         })
     }
 

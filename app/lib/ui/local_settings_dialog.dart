@@ -260,8 +260,22 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               },
             ),
           ]),
-          section(strings.pick('照片来源', 'Sources'), [
-            Consumer(
+          section(strings.pick('动态照片', 'Motion photos'), [
+            SwitchListTile(
+              key: const ValueKey('settings-auto-play-motion'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(strings.pick('立即播放动态照片', 'Play motion photos automatically')),
+              subtitle: Text(
+                strings.pick(
+                  '打开动态照片时直接播放动态片段',
+                  'Play the motion clip as soon as a dynamic photo opens',
+                ),
+              ),
+              value: preferences.autoPlayMotionPhoto,
+              onChanged: controller.setAutoPlayMotionPhoto,
+            ),
+          ]),
+          section(strings.pick('照片来源', 'Sources'), [            Consumer(
               builder: (context, ref, _) {
                 final picker = ref.watch(sourcePickerProvider);
                 final state = ref.watch(localLibraryProvider);

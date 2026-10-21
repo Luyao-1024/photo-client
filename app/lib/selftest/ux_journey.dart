@@ -277,9 +277,16 @@ extension UxJourney on LocalJourney {
       await _tapKey('settings-rescan');
       final result = await _uxWaitForScan(previous, 'rescan');
       await _uxWaitTotal(7, 'the rescan changed the library count');
-      if (result.discovered != 7) {
+      // The scan is incremental: an unchanged file is stat'ed and skipped
+      // instead of being indexed a second time.
+      if (result.discovered != 0) {
         throw JourneyFailure(
-          'the rescan discovered ${result.discovered}, expected 7 indexed items',
+          'the rescan rediscovered ${result.discovered} unchanged items, expected 0',
+        );
+      }
+      if (result.skipped < 7) {
+        throw JourneyFailure(
+          'the rescan skipped ${result.skipped} items, expected the 7 indexed ones',
         );
       }
       _uxRecord('rescan', {
@@ -331,7 +338,7 @@ extension UxJourney on LocalJourney {
       }.entries) {
         await _tapKey(entry.key);
         await _settle();
-        final tiles = _elementsWithKeyPrefix('photo-');
+        final tiles = _photoTileElements();
         if (tiles.isEmpty) {
           throw JourneyFailure('${entry.value} grouping rendered no tiles');
         }
@@ -1466,7 +1473,7 @@ extension UxJourney on LocalJourney {
         'local-photo-grid',
         reason: 'the grid is missing before the keyboard journey',
       );
-      final tiles = _elementsWithKeyPrefix('photo-');
+      final tiles = _photoTileElements();
       if (tiles.length < 2) {
         throw JourneyFailure('the grid has fewer than two tiles for traversal');
       }
@@ -1709,6 +1716,62 @@ extension UxJourney on LocalJourney {
         'played': true,
       });
     });
+    await _step('ux-motion-auto-play-preference', () async {
+      await _tapKey('sidebar-settings');
+      await _waitForElement(
+        'settings-close',
+        reason: 'the settings did not open for the motion preference',
+      );
+      await _tapKey('settings-category-2');
+      await _uxScrollToKey(
+        'settings-auto-play-motion',
+        container: 'settings-content',
+      );
+      await _tapKey('settings-auto-play-motion');
+      await _waitFor(
+        () => _uxPreferences.autoPlayMotionPhoto,
+        reason: 'the motion auto-play switch did not turn on',
+      );
+      await _tapKey('settings-close');
+      await _uxWaitGone('settings-close', 'the settings did not close');
+      final motion = await _uxWaitMediaPhoto('motion.jpg');
+      await _tapKey('photo-${motion.id}');
+      await _waitForElement('viewer', reason: 'the motion photo did not reopen');
+      await _waitForElement(
+        'viewer-motion-video',
+        reason: 'the motion clip did not start on its own',
+      );
+      await _uxWaitVideoPlaying(
+        'viewer-motion-video',
+        true,
+        'the auto-played motion clip never played',
+      );
+      await _tapKey('viewer-motion-toggle');
+      await _uxWaitGone(
+        'viewer-motion-video',
+        'Show photo did not stop the auto-played motion clip',
+      );
+      await _tapKey('viewer-close');
+      await _uxWaitGone('viewer', 'the motion viewer did not close');
+      await _tapKey('sidebar-settings');
+      await _waitForElement(
+        'settings-close',
+        reason: 'the settings did not reopen to restore the motion preference',
+      );
+      await _tapKey('settings-category-2');
+      await _uxScrollToKey(
+        'settings-auto-play-motion',
+        container: 'settings-content',
+      );
+      await _tapKey('settings-auto-play-motion');
+      await _waitFor(
+        () => !_uxPreferences.autoPlayMotionPhoto,
+        reason: 'the motion auto-play switch did not turn off',
+      );
+      await _tapKey('settings-close');
+      await _uxWaitGone('settings-close', 'the settings did not close');
+      _uxRecord('motion_auto_play', true);
+    });
     await _step('ux-media-kind-heic-and-gif', () async {
       final heic = await _uxWaitMediaPhoto('still.heic');
       await _tapKey('photo-${heic.id}');
@@ -1750,6 +1813,16 @@ extension UxJourney on LocalJourney {
       if (details?['animated'] != true) {
         throw JourneyFailure('the GIF was not flagged as animated');
       }
+      final frames = Directory(
+        '$_uxDataRoot/cache/${gif.id}/${gif.contentVersion}',
+      ).listSync(recursive: true).whereType<File>();
+      final decoded = frames
+          .where((file) => file.path.contains('/frames/frame-'))
+          .toList();
+      if (decoded.isEmpty) {
+        throw JourneyFailure('the animated GIF was not decoded into frames');
+      }
+      _uxRecord('gif_frames', decoded.length);
       await _tapKey('viewer-close');
       await _uxWaitGone('viewer', 'the GIF viewer did not close');
       _uxRecord('heic_preview', {
@@ -2016,7 +2089,7 @@ extension UxJourney on LocalJourney {
     Element? first;
     await _uxWaitUntil(
       () {
-        final tiles = _elementsWithKeyPrefix('photo-');
+        final tiles = _photoTileElements();
         if (tiles.isEmpty) return false;
         first = tiles.first;
         return true;

@@ -2,14 +2,21 @@
 //!
 //! Run these blocking operations on the application's bounded media workers.
 //! Scanning reads container headers/EXIF, never decodes pixels or hashes originals.
+pub mod animated;
 pub mod details;
 mod external;
 mod headers;
 mod heif;
 pub mod motion_photo;
+mod scaled;
 mod thumbnail;
 
 pub use thumbnail::prepare_thumbnail;
+
+/// Published thumbnail encoding revision. Bump it whenever the thumbnail
+/// encoder changes, so entries written by an older encoder are rebuilt
+/// instead of reused.
+pub const THUMBNAIL_CACHE_REVISION: u32 = 3;
 
 use std::collections::HashMap;
 use std::fs::{self, File, Metadata};

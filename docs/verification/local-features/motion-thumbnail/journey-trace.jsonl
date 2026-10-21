@@ -1,0 +1,631 @@
+{"id":"journey","status":"START","at":"2026-10-21T18:30:31.098373Z","detail":"ux"}
+{"id":"runtime-ready","status":"START","at":"2026-10-21T18:30:31.242924Z"}
+{"id":"runtime-ready","status":"PASS","at":"2026-10-21T18:30:31.294903Z","detail":"51ms"}
+{"id":"library-open","status":"START","at":"2026-10-21T18:30:31.295030Z"}
+{"id":"library-open","status":"PASS","at":"2026-10-21T18:30:31.295124Z","detail":"0ms"}
+{"id":"ux-empty-library","status":"START","at":"2026-10-21T18:30:31.295153Z"}
+{"id":"ux-empty-library","status":"PASS","at":"2026-10-21T18:30:31.405192Z","detail":"110ms"}
+{"id":"ux-open-settings-button","status":"START","at":"2026-10-21T18:30:31.405261Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:31.457756Z","detail":"open-settings at 836.0,572.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:31.897799Z","detail":"open-settings"}
+{"id":"screenshot-ux-01-settings","status":"START","at":"2026-10-21T18:30:32.070707Z"}
+{"id":"screenshot-ux-01-settings","status":"PASS","at":"2026-10-21T18:30:32.507476Z","detail":"436ms"}
+{"id":"ux-open-settings-button","status":"PASS","at":"2026-10-21T18:30:32.507533Z","detail":"1102ms"}
+{"id":"ux-settings-shortcuts","status":"START","at":"2026-10-21T18:30:32.507583Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:32.560018Z","detail":"settings-shortcuts at 810.5,464.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:32.953890Z","detail":"settings-shortcuts"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:33.205982Z","detail":"shortcuts-close at 952.0,831.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:33.592615Z","detail":"shortcuts-close"}
+{"id":"ux-settings-shortcuts","status":"PASS","at":"2026-10-21T18:30:33.790318Z","detail":"1282ms"}
+{"id":"ux-settings-appearance","status":"START","at":"2026-10-21T18:30:33.790434Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:33.846470Z","detail":"settings-category-0 at 360.0,226.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:34.235828Z","detail":"settings-category-0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:34.473048Z","detail":"settings-language-en at 651.2702655792236,331.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:34.858921Z","detail":"settings-language-en"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:35.081031Z","detail":"settings-category-0 at 360.0,226.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:35.466680Z","detail":"settings-category-0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:35.884259Z","detail":"settings-theme-dark at 712.2843732833862,597.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:36.269922Z","detail":"settings-theme-dark"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:36.514653Z","detail":"settings-category-1 at 360.0,282.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:36.862917Z","detail":"settings-category-1"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:37.798482Z","detail":"settings-follow-scroll at 810.5,616.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:38.185938Z","detail":"settings-follow-scroll"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:38.428131Z","detail":"settings-follow-scroll at 810.5,616.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:38.810901Z","detail":"settings-follow-scroll"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:39.020830Z","detail":"settings-category-0 at 360.0,226.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:39.405916Z","detail":"settings-category-0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:39.816107Z","detail":"settings-reduce-motion at 810.5,730.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:40.202861Z","detail":"settings-reduce-motion"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:40.420084Z","detail":"settings-category-0 at 360.0,226.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:40.802982Z","detail":"settings-category-0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:41.015053Z","detail":"settings-language-zh at 536.199878692627,331.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:41.396945Z","detail":"settings-language-zh"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:41.602038Z","detail":"settings-language-en at 651.2702655792236,331.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:41.983947Z","detail":"settings-language-en"}
+{"id":"ux-settings-appearance","status":"PASS","at":"2026-10-21T18:30:42.144642Z","detail":"8354ms"}
+{"id":"ux-settings-grid-controls","status":"START","at":"2026-10-21T18:30:42.144747Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:42.200051Z","detail":"settings-category-2 at 360.0,342.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:42.588024Z","detail":"settings-category-2"}
+{"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:30:44.455007Z","detail":"\"Name: ascending\" at 558.79296875,504.0"}
+{"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:30:45.463561Z","detail":"\"Date: newest first\" at 559.5096893310547,312.0"}
+{"id":"ux-settings-grid-controls","status":"PASS","at":"2026-10-21T18:30:45.963254Z","detail":"3818ms"}
+{"id":"ux-settings-add-folder","status":"START","at":"2026-10-21T18:30:45.963316Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:46.214279Z","detail":"add-folder at 559.6645431518555,704.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:46.599911Z","detail":"add-folder"}
+{"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:30:47.654789Z","detail":"\"Name: ascending\" at 558.79296875,504.0"}
+{"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:30:48.922713Z","detail":"\"Date: newest first\" at 559.5096893310547,312.0"}
+{"id":"ux-settings-add-folder","status":"PASS","at":"2026-10-21T18:30:49.591493Z","detail":"3628ms"}
+{"id":"ux-settings-add-files","status":"START","at":"2026-10-21T18:30:49.591564Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:50.134906Z","detail":"add-files at 708.3370895385742,662.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:50.523933Z","detail":"add-files"}
+{"id":"ux-settings-add-files","status":"PASS","at":"2026-10-21T18:30:50.764517Z","detail":"1172ms"}
+{"id":"ux-settings-rescan","status":"START","at":"2026-10-21T18:30:50.764619Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:51.262110Z","detail":"settings-rescan at 846.2606163024902,590.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:51.646932Z","detail":"settings-rescan"}
+{"id":"ux-settings-rescan","status":"PASS","at":"2026-10-21T18:30:51.888606Z","detail":"1123ms"}
+{"id":"ux-settings-remove-file-source-keeps-file","status":"START","at":"2026-10-21T18:30:51.888700Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:52.130146Z","detail":"settings-remove-source-/tmp/ux-commit/ux/extra/extra.png at 1106.0,730.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:52.515191Z","detail":"settings-remove-source-/tmp/ux-commit/ux/extra/extra.png"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:52.759364Z","detail":"remove-source-confirm at 919.6854858398438,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:53.155387Z","detail":"remove-source-confirm"}
+{"id":"ux-settings-remove-file-source-keeps-file","status":"PASS","at":"2026-10-21T18:30:53.410268Z","detail":"1521ms"}
+{"id":"ux-close-settings","status":"START","at":"2026-10-21T18:30:53.410363Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:53.463090Z","detail":"settings-close at 1134.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:53.849962Z","detail":"settings-close"}
+{"id":"ux-close-settings","status":"PASS","at":"2026-10-21T18:30:54.037761Z","detail":"627ms"}
+{"id":"ux-grid-modes","status":"START","at":"2026-10-21T18:30:54.037843Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:54.090007Z","detail":"mode-year at 764.0,848.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:54.472926Z","detail":"mode-year"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:54.886615Z","detail":"mode-month at 836.0,848.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:55.234946Z","detail":"mode-month"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:55.631042Z","detail":"mode-day at 908.0,848.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:56.017100Z","detail":"mode-day"}
+{"id":"screenshot-ux-02-grid","status":"START","at":"2026-10-21T18:30:56.320406Z"}
+{"id":"screenshot-ux-02-grid","status":"PASS","at":"2026-10-21T18:30:56.786153Z","detail":"465ms"}
+{"id":"ux-grid-modes","status":"PASS","at":"2026-10-21T18:30:56.786216Z","detail":"2748ms"}
+{"id":"ux-sidebar-media-filters","status":"START","at":"2026-10-21T18:30:56.786230Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:56.838332Z","detail":"sidebar-media-images at 120.0,400.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:57.224887Z","detail":"sidebar-media-images"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:57.442308Z","detail":"sidebar-media-videos at 120.0,448.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:57.840864Z","detail":"sidebar-media-videos"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:57.975287Z","detail":"sidebar-photos at 120.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:58.362896Z","detail":"sidebar-photos"}
+{"id":"ux-sidebar-media-filters","status":"PASS","at":"2026-10-21T18:30:58.486836Z","detail":"1700ms"}
+{"id":"ux-search-name-scope","status":"START","at":"2026-10-21T18:30:58.486928Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:58.539097Z","detail":"library-search at 1328.0,94.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:58.945899Z","detail":"library-search"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:59.131283Z","detail":"search-scope-name at 1313.99609375,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:30:59.516022Z","detail":"search-scope-name"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:30:59.793815Z","detail":"library-search at 742.42041015625,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:00.180897Z","detail":"library-search"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:00.369234Z","detail":"ctrl+a"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:00.545806Z","detail":"ctrl+a"}
+{"id":"type","status":"SEND","at":"2026-10-21T18:31:00.660155Z","detail":"alpha (5 characters)"}
+{"id":"type","status":"ACK","at":"2026-10-21T18:31:01.099879Z","detail":"alpha"}
+{"id":"screenshot-ux-03-search","status":"START","at":"2026-10-21T18:31:01.223058Z"}
+{"id":"screenshot-ux-03-search","status":"PASS","at":"2026-10-21T18:31:01.796880Z","detail":"573ms"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:01.796984Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:02.024174Z","detail":"Escape"}
+{"id":"ux-search-name-scope","status":"PASS","at":"2026-10-21T18:31:02.174966Z","detail":"3688ms"}
+{"id":"ux-search-date-scope","status":"START","at":"2026-10-21T18:31:02.175067Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:02.232027Z","detail":"library-search at 1328.0,94.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:02.616125Z","detail":"library-search"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:02.829109Z","detail":"search-scope-date at 1378.04736328125,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:03.215203Z","detail":"search-scope-date"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:03.470066Z","detail":"library-search at 742.43408203125,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:03.861998Z","detail":"library-search"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:04.072253Z","detail":"ctrl+a"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:04.300381Z","detail":"ctrl+a"}
+{"id":"type","status":"SEND","at":"2026-10-21T18:31:04.371325Z","detail":"20261022 (8 characters)"}
+{"id":"type","status":"ACK","at":"2026-10-21T18:31:04.912074Z","detail":"20261022"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:05.075937Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:05.250886Z","detail":"Escape"}
+{"id":"ux-search-date-scope","status":"PASS","at":"2026-10-21T18:31:05.489015Z","detail":"3313ms"}
+{"id":"ux-search-open-viewer","status":"START","at":"2026-10-21T18:31:05.489106Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:05.540987Z","detail":"library-search at 1328.0,94.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:05.928180Z","detail":"library-search"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:06.142542Z","detail":"search-scope-name at 1313.66796875,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:06.526365Z","detail":"search-scope-name"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:06.731032Z","detail":"library-search at 742.42041015625,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:07.120352Z","detail":"library-search"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:07.277273Z","detail":"ctrl+a"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:07.502937Z","detail":"ctrl+a"}
+{"id":"type","status":"SEND","at":"2026-10-21T18:31:07.589021Z","detail":"alpha (5 characters)"}
+{"id":"type","status":"ACK","at":"2026-10-21T18:31:07.975934Z","detail":"alpha"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:08.224877Z","detail":"photo-7d8b4195-c442-4018-9f56-ecd6b85d8847 at 300.61538461538464,280.61538461538464"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:08.617555Z","detail":"photo-7d8b4195-c442-4018-9f56-ecd6b85d8847"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:08.757291Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:08.931893Z","detail":"Escape"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:09.208309Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:09.437867Z","detail":"Escape"}
+{"id":"ux-search-open-viewer","status":"PASS","at":"2026-10-21T18:31:09.647931Z","detail":"4158ms"}
+{"id":"ux-select-all-and-favorite","status":"START","at":"2026-10-21T18:31:09.648019Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:09.802034Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a at 328.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:10.188977Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:10.410807Z","detail":"tile-menu-select at 662.0,346.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:10.764005Z","detail":"tile-menu-select"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:11.009099Z","detail":"select-all at 422.1003875732422,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:11.390940Z","detail":"select-all"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:11.614966Z","detail":"batch-favorite at 689.1578140258789,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:11.999622Z","detail":"batch-favorite"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:12.193591Z","detail":"exit-selection at 321.34345626831055,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:12.598696Z","detail":"exit-selection"}
+{"id":"ux-select-all-and-favorite","status":"PASS","at":"2026-10-21T18:31:12.778531Z","detail":"3130ms"}
+{"id":"ux-favorites-destination","status":"START","at":"2026-10-21T18:31:12.778625Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:12.831476Z","detail":"sidebar-favorites at 120.0,140.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:13.216174Z","detail":"sidebar-favorites"}
+{"id":"screenshot-ux-04-favorites","status":"START","at":"2026-10-21T18:31:13.340788Z"}
+{"id":"screenshot-ux-04-favorites","status":"PASS","at":"2026-10-21T18:31:13.894244Z","detail":"553ms"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:13.946180Z","detail":"sidebar-photos at 120.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:14.278909Z","detail":"sidebar-photos"}
+{"id":"ux-favorites-destination","status":"PASS","at":"2026-10-21T18:31:14.345255Z","detail":"1566ms"}
+{"id":"ux-batch-unfavorite","status":"START","at":"2026-10-21T18:31:14.345330Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:14.398062Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a at 328.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:14.728982Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:14.978911Z","detail":"tile-menu-select at 662.0,346.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:15.366898Z","detail":"tile-menu-select"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:15.575059Z","detail":"select-all at 422.1003875732422,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:15.958930Z","detail":"select-all"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:16.164628Z","detail":"batch-favorite at 689.1578140258789,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:16.550681Z","detail":"batch-favorite"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:16.752036Z","detail":"exit-selection at 321.34345626831055,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:17.149034Z","detail":"exit-selection"}
+{"id":"ux-batch-unfavorite","status":"PASS","at":"2026-10-21T18:31:17.330802Z","detail":"2985ms"}
+{"id":"ux-create-album","status":"START","at":"2026-10-21T18:31:17.330911Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:17.386514Z","detail":"sidebar-album-add at 178.0,204.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:17.782550Z","detail":"sidebar-album-add"}
+{"id":"type","status":"SEND","at":"2026-10-21T18:31:17.973558Z","detail":"Trip (4 characters)"}
+{"id":"type","status":"ACK","at":"2026-10-21T18:31:18.318331Z","detail":"Trip"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:18.474107Z","detail":"album-create-confirm at 937.4127922058105,534.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:18.874873Z","detail":"album-create-confirm"}
+{"id":"ux-create-album","status":"PASS","at":"2026-10-21T18:31:19.087656Z","detail":"1756ms"}
+{"id":"ux-copy-to-album","status":"START","at":"2026-10-21T18:31:19.087742Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:19.140064Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a at 328.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:19.474741Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:19.716946Z","detail":"tile-menu-select at 662.0,346.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:20.106869Z","detail":"tile-menu-select"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:20.447867Z","detail":"select-all at 422.1003875732422,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:20.794926Z","detail":"select-all"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:21.023995Z","detail":"batch-add-to-album at 643.1578140258789,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:21.408476Z","detail":"batch-add-to-album"}
+{"id":"tap-text","status":"SEND","at":"2026-10-21T18:31:21.622293Z","detail":"\"Copy to album\" at 685.4013519287109,171.0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:22.241755Z","detail":"album-target-/tmp/ux-commit/ux/albums/Trip at 545.3333333333334,466.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:22.627441Z","detail":"album-target-/tmp/ux-commit/ux/albums/Trip"}
+{"id":"screenshot-ux-05-album-copy","status":"START","at":"2026-10-21T18:31:22.872059Z"}
+{"id":"screenshot-ux-05-album-copy","status":"PASS","at":"2026-10-21T18:31:23.327417Z","detail":"455ms"}
+{"id":"ux-copy-to-album","status":"PASS","at":"2026-10-21T18:31:23.327537Z","detail":"4239ms"}
+{"id":"ux-move-to-album","status":"START","at":"2026-10-21T18:31:23.327558Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:23.389463Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a at 328.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:23.784030Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:24.010335Z","detail":"tile-menu-move-album at 662.0,586.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:24.345644Z","detail":"tile-menu-move-album"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:24.566798Z","detail":"album-target-/tmp/ux-commit/ux/albums/Trip at 545.3333333333334,466.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:24.951916Z","detail":"album-target-/tmp/ux-commit/ux/albums/Trip"}
+{"id":"ux-move-to-album","status":"PASS","at":"2026-10-21T18:31:25.125119Z","detail":"1797ms"}
+{"id":"ux-set-album-cover","status":"START","at":"2026-10-21T18:31:25.125222Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:25.183362Z","detail":"photo-07eeb9c9-8291-4f38-a078-1672c9b92317 at 473.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:25.514968Z","detail":"photo-07eeb9c9-8291-4f38-a078-1672c9b92317"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:25.693775Z","detail":"tile-menu-cover at 808.0,682.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:26.082075Z","detail":"tile-menu-cover"}
+{"id":"ux-set-album-cover","status":"PASS","at":"2026-10-21T18:31:26.297395Z","detail":"1172ms"}
+{"id":"ux-rename-album-folder","status":"START","at":"2026-10-21T18:31:26.297470Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:26.350347Z","detail":"sidebar-album-/tmp/ux-commit/ux/albums/Trip at 120.0,258.0"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:26.734052Z","detail":"sidebar-album-/tmp/ux-commit/ux/albums/Trip"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:26.912073Z","detail":"album-menu-rename at 242.0,340.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:27.303093Z","detail":"album-menu-rename"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:27.510747Z","detail":"ctrl+a"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:27.739920Z","detail":"ctrl+a"}
+{"id":"type","status":"SEND","at":"2026-10-21T18:31:27.953077Z","detail":"Trips (5 characters)"}
+{"id":"type","status":"ACK","at":"2026-10-21T18:31:28.351923Z","detail":"Trips"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:28.456049Z","detail":"album-rename-confirm at 932.6337928771973,534.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:28.797160Z","detail":"album-rename-confirm"}
+{"id":"ux-rename-album-folder","status":"PASS","at":"2026-10-21T18:31:28.979934Z","detail":"2682ms"}
+{"id":"ux-reorder-albums","status":"START","at":"2026-10-21T18:31:28.980026Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:29.032439Z","detail":"sidebar-album-add at 178.0,204.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:29.422415Z","detail":"sidebar-album-add"}
+{"id":"type","status":"SEND","at":"2026-10-21T18:31:29.538353Z","detail":"Second (6 characters)"}
+{"id":"type","status":"ACK","at":"2026-10-21T18:31:29.989687Z","detail":"Second"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:30.256058Z","detail":"album-create-confirm at 937.4127922058105,534.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:30.648326Z","detail":"album-create-confirm"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:32.281981Z","detail":"sidebar-album-/tmp/ux-commit/ux/albums/Second at 120.0,258.0"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:32.667905Z","detail":"sidebar-album-/tmp/ux-commit/ux/albums/Second"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:32.857780Z","detail":"album-menu-remove at 242.0,388.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:33.251974Z","detail":"album-menu-remove"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:33.511027Z","detail":"album-remove-confirm at 944.834903717041,526.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:33.893893Z","detail":"album-remove-confirm"}
+{"id":"ux-reorder-albums","status":"PASS","at":"2026-10-21T18:31:34.031163Z","detail":"5051ms"}
+{"id":"ux-album-navigation","status":"START","at":"2026-10-21T18:31:34.031238Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:34.085050Z","detail":"sidebar-album-/tmp/ux-commit/ux/albums/Trips at 120.0,258.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:34.429767Z","detail":"sidebar-album-/tmp/ux-commit/ux/albums/Trips"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:34.659050Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a at 328.5,256.5"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:35.042933Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:35.259016Z","detail":"viewer-next at 1392.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:35.590903Z","detail":"viewer-next"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:35.693813Z","detail":"Left"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:35.868273Z","detail":"Left"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:35.966330Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:36.191933Z","detail":"Escape"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:36.464015Z","detail":"sidebar-photos at 120.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:36.864823Z","detail":"sidebar-photos"}
+{"id":"ux-album-navigation","status":"PASS","at":"2026-10-21T18:31:36.964662Z","detail":"2933ms"}
+{"id":"ux-grid-rename-photo","status":"START","at":"2026-10-21T18:31:36.964756Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:37.030544Z","detail":"photo-380d65ad-3803-4616-9a45-f6087ae99760 at 763.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:37.367367Z","detail":"photo-380d65ad-3803-4616-9a45-f6087ae99760"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:37.596168Z","detail":"tile-menu-rename at 931.0,490.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:37.984901Z","detail":"tile-menu-rename"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:38.194408Z","detail":"ctrl+a"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:38.367892Z","detail":"ctrl+a"}
+{"id":"type","status":"SEND","at":"2026-10-21T18:31:38.571596Z","detail":"tiny.png (8 characters)"}
+{"id":"type","status":"ACK","at":"2026-10-21T18:31:39.081213Z","detail":"tiny.png"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:39.198328Z","detail":"rename-confirm at 943.4098777770996,534.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:39.596113Z","detail":"rename-confirm"}
+{"id":"ux-grid-rename-photo","status":"PASS","at":"2026-10-21T18:31:39.839790Z","detail":"2875ms"}
+{"id":"ux-tile-details-dialog","status":"START","at":"2026-10-21T18:31:39.839875Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:39.896944Z","detail":"photo-7d8b4195-c442-4018-9f56-ecd6b85d8847 at 618.5,401.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:40.239206Z","detail":"photo-7d8b4195-c442-4018-9f56-ecd6b85d8847"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:40.448370Z","detail":"tile-menu-details at 785.0,564.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:40.843277Z","detail":"tile-menu-details"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:31:41.072691Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:31:41.299921Z","detail":"Escape"}
+{"id":"ux-tile-details-dialog","status":"PASS","at":"2026-10-21T18:31:41.450499Z","detail":"1610ms"}
+{"id":"ux-batch-export-no-overwrite","status":"START","at":"2026-10-21T18:31:41.450577Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:41.503877Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a at 328.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:41.887877Z","detail":"photo-6c8e75e7-a665-4e21-90b4-73290fbb6d4a"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:42.101956Z","detail":"tile-menu-select at 662.0,346.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:42.489987Z","detail":"tile-menu-select"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:42.792018Z","detail":"select-all at 422.1003875732422,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:43.177898Z","detail":"select-all"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:43.396021Z","detail":"batch-export at 605.9453125,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:43.784875Z","detail":"batch-export"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:44.009293Z","detail":"batch-export at 605.9453125,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:44.396877Z","detail":"batch-export"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:44.647445Z","detail":"exit-selection at 321.34345626831055,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:45.043864Z","detail":"exit-selection"}
+{"id":"ux-batch-export-no-overwrite","status":"PASS","at":"2026-10-21T18:31:45.138692Z","detail":"3688ms"}
+{"id":"ux-trash-one-and-restore","status":"START","at":"2026-10-21T18:31:45.138783Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:45.195217Z","detail":"photo-18785873-721c-4417-aed7-86c4d0761cc8 at 908.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:45.536915Z","detail":"photo-18785873-721c-4417-aed7-86c4d0761cc8"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:45.765070Z","detail":"tile-menu-trash at 1075.0,730.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:46.151916Z","detail":"tile-menu-trash"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:46.344121Z","detail":"confirm-action at 913.5772399902344,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:46.727888Z","detail":"confirm-action"}
+{"id":"screenshot-ux-06-trash","status":"START","at":"2026-10-21T18:31:46.876120Z"}
+{"id":"screenshot-ux-06-trash","status":"PASS","at":"2026-10-21T18:31:47.480339Z","detail":"604ms"}
+{"id":"ux-trash-one-and-restore","status":"PASS","at":"2026-10-21T18:31:47.480408Z","detail":"2341ms"}
+{"id":"ux-restore-from-trash","status":"START","at":"2026-10-21T18:31:47.480418Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:47.534065Z","detail":"sidebar-trash at 120.0,808.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:47.922680Z","detail":"sidebar-trash"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:48.121014Z","detail":"photo-18785873-721c-4417-aed7-86c4d0761cc8 at 328.5,308.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:48.458140Z","detail":"photo-18785873-721c-4417-aed7-86c4d0761cc8"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:48.629275Z","detail":"tile-menu-select at 662.0,398.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:49.017329Z","detail":"tile-menu-select"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:49.266117Z","detail":"batch-restore at 592.1226577758789,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:49.660522Z","detail":"batch-restore"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:49.797376Z","detail":"sidebar-photos at 120.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:50.194268Z","detail":"sidebar-photos"}
+{"id":"ux-restore-from-trash","status":"PASS","at":"2026-10-21T18:31:50.321042Z","detail":"2840ms"}
+{"id":"ux-batch-purge","status":"START","at":"2026-10-21T18:31:50.321118Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:50.377056Z","detail":"photo-f8b9eeba-8a7d-44b1-b89e-35ea4f86f059 at 1198.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:50.763466Z","detail":"photo-f8b9eeba-8a7d-44b1-b89e-35ea4f86f059"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:50.960451Z","detail":"tile-menu-trash at 1340.0,730.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:51.291356Z","detail":"tile-menu-trash"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:51.529555Z","detail":"confirm-action at 913.5772399902344,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:51.916519Z","detail":"confirm-action"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:52.198015Z","detail":"sidebar-trash at 120.0,808.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:52.578861Z","detail":"sidebar-trash"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:52.798115Z","detail":"photo-f8b9eeba-8a7d-44b1-b89e-35ea4f86f059 at 328.5,308.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:53.183431Z","detail":"photo-f8b9eeba-8a7d-44b1-b89e-35ea4f86f059"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:53.413416Z","detail":"tile-menu-select at 662.0,398.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:53.800267Z","detail":"tile-menu-select"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:54.031049Z","detail":"batch-purge at 638.1226577758789,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:54.379931Z","detail":"batch-purge"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:54.574315Z","detail":"confirm-action at 893.4194869995117,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:54.958957Z","detail":"confirm-action"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:55.156019Z","detail":"sidebar-photos at 120.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:55.547937Z","detail":"sidebar-photos"}
+{"id":"ux-batch-purge","status":"PASS","at":"2026-10-21T18:31:55.692546Z","detail":"5371ms"}
+{"id":"ux-empty-trash","status":"START","at":"2026-10-21T18:31:55.692632Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:31:55.747495Z","detail":"photo-07eeb9c9-8291-4f38-a078-1672c9b92317 at 473.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:31:56.132651Z","detail":"photo-07eeb9c9-8291-4f38-a078-1672c9b92317"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:56.334779Z","detail":"tile-menu-trash at 808.0,730.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:56.719026Z","detail":"tile-menu-trash"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:56.898518Z","detail":"confirm-action at 913.5772399902344,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:57.286233Z","detail":"confirm-action"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:57.474783Z","detail":"sidebar-trash at 120.0,808.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:57.865829Z","detail":"sidebar-trash"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:58.034016Z","detail":"empty-trash at 331.7468147277832,158.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:58.414468Z","detail":"empty-trash"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:58.654799Z","detail":"confirm-action at 919.2531852722168,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:59.041405Z","detail":"confirm-action"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:59.265491Z","detail":"sidebar-photos at 120.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:31:59.659949Z","detail":"sidebar-photos"}
+{"id":"ux-empty-trash","status":"PASS","at":"2026-10-21T18:31:59.769084Z","detail":"4076ms"}
+{"id":"ux-viewer-trash-undo","status":"START","at":"2026-10-21T18:31:59.769204Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:31:59.826861Z","detail":"photo-7d8b4195-c442-4018-9f56-ecd6b85d8847 at 328.5,401.5"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:00.211849Z","detail":"photo-7d8b4195-c442-4018-9f56-ecd6b85d8847"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:00.408036Z","detail":"viewer-trash at 1296.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:00.792841Z","detail":"viewer-trash"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:01.024021Z","detail":"viewer-confirm-trash at 925.5772399902344,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:01.410332Z","detail":"viewer-confirm-trash"}
+{"id":"tap-text","status":"SEND","at":"2026-10-21T18:32:01.887949Z","detail":"\"Undo\" at 857.8522453308105,765.5"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:02.421970Z","detail":"viewer-close at 280.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:02.813615Z","detail":"viewer-close"}
+{"id":"ux-viewer-trash-undo","status":"PASS","at":"2026-10-21T18:32:03.031357Z","detail":"3262ms"}
+{"id":"ux-viewer-favorite-and-zoom","status":"START","at":"2026-10-21T18:32:03.031463Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:03.085081Z","detail":"photo-7d8b4195-c442-4018-9f56-ecd6b85d8847 at 328.5,401.5"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:03.474870Z","detail":"photo-7d8b4195-c442-4018-9f56-ecd6b85d8847"}
+{"id":"screenshot-ux-07-viewer","status":"START","at":"2026-10-21T18:32:03.715863Z"}
+{"id":"screenshot-ux-07-viewer","status":"PASS","at":"2026-10-21T18:32:04.084939Z","detail":"369ms"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:04.137129Z","detail":"viewer-favorite at 1200.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:04.525173Z","detail":"viewer-favorite"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:04.669052Z","detail":"viewer-zoom-in at 328.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:05.065626Z","detail":"viewer-zoom-in"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:05.259008Z","detail":"viewer-zoom-in at 328.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:05.655862Z","detail":"viewer-zoom-in"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:05.822011Z","detail":"viewer-zoom-reset at 384.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:06.212897Z","detail":"viewer-zoom-reset"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:06.364462Z","detail":"viewer-zoom-in at 328.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:06.747905Z","detail":"viewer-zoom-in"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:06.905493Z","detail":"viewer-zoom-out at 280.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:07.289834Z","detail":"viewer-zoom-out"}
+{"id":"ux-viewer-favorite-and-zoom","status":"PASS","at":"2026-10-21T18:32:07.397400Z","detail":"4365ms"}
+{"id":"ux-viewer-rotate-changes-file","status":"START","at":"2026-10-21T18:32:07.397472Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:07.479006Z","detail":"viewer-rotate-right at 496.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:07.878049Z","detail":"viewer-rotate-right"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:08.042993Z","detail":"shift+r"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:08.284930Z","detail":"shift+r"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:08.425059Z","detail":"r"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:08.605905Z","detail":"r"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:08.842020Z","detail":"viewer-rotate-left at 448.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:09.236367Z","detail":"viewer-rotate-left"}
+{"id":"ux-viewer-rotate-changes-file","status":"PASS","at":"2026-10-21T18:32:09.336403Z","detail":"1938ms"}
+{"id":"ux-viewer-details-and-rename","status":"START","at":"2026-10-21T18:32:09.336499Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:09.404612Z","detail":"viewer-details at 1344.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:09.797728Z","detail":"viewer-details"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:10.049070Z","detail":"viewer-details-rename at 1328.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:10.433594Z","detail":"viewer-details-rename"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:10.573555Z","detail":"ctrl+a"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:10.802694Z","detail":"ctrl+a"}
+{"id":"type","status":"SEND","at":"2026-10-21T18:32:10.938628Z","detail":"alpha2.png (10 characters)"}
+{"id":"type","status":"ACK","at":"2026-10-21T18:32:11.540920Z","detail":"alpha2.png"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:11.674722Z","detail":"viewer-rename-confirm at 943.4098777770996,534.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:12.019688Z","detail":"viewer-rename-confirm"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:12.245169Z","detail":"viewer-details-close at 1384.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:12.638956Z","detail":"viewer-details-close"}
+{"id":"ux-viewer-details-and-rename","status":"PASS","at":"2026-10-21T18:32:12.757365Z","detail":"3420ms"}
+{"id":"ux-viewer-filmstrip-and-arrows","status":"START","at":"2026-10-21T18:32:12.757426Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:12.815998Z","detail":"viewer-strip-64e0d84b-96e8-44ec-aa5d-5b96c9ed9c2e at 764.0,838.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:13.208621Z","detail":"viewer-strip-64e0d84b-96e8-44ec-aa5d-5b96c9ed9c2e"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:13.531390Z","detail":"viewer-previous at 1340.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:13.914102Z","detail":"viewer-previous"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:14.267487Z","detail":"viewer-next at 1392.0,756.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:14.657157Z","detail":"viewer-next"}
+{"id":"ux-viewer-filmstrip-and-arrows","status":"PASS","at":"2026-10-21T18:32:14.924520Z","detail":"2167ms"}
+{"id":"ux-viewer-immersive","status":"START","at":"2026-10-21T18:32:14.924609Z"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:14.924621Z","detail":"f"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:15.153478Z","detail":"f"}
+{"id":"move","status":"SEND","at":"2026-10-21T18:32:20.354167Z","detail":"720.0,450.0"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:20.672189Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:20.909170Z","detail":"Escape"}
+{"id":"ux-viewer-immersive","status":"PASS","at":"2026-10-21T18:32:20.983564Z","detail":"6058ms"}
+{"id":"ux-viewer-fullscreen-preview","status":"START","at":"2026-10-21T18:32:20.983638Z"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:20.983649Z","detail":"shift+f"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:21.157877Z","detail":"shift+f"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:21.370215Z","detail":"viewer-fullscreen-close at 1408.0,32.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:21.763834Z","detail":"viewer-fullscreen-close"}
+{"id":"ux-viewer-fullscreen-preview","status":"PASS","at":"2026-10-21T18:32:21.993636Z","detail":"1009ms"}
+{"id":"ux-editor-reset-and-close","status":"START","at":"2026-10-21T18:32:21.993760Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:22.061236Z","detail":"viewer-edit at 1248.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:22.448173Z","detail":"viewer-edit"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:22.703251Z","detail":"editor-rotate-right at 1208.4082946777344,248.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:23.088408Z","detail":"editor-rotate-right"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:23.309820Z","detail":"editor-flip-horizontal at 1160.0,304.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:23.694642Z","detail":"editor-flip-horizontal"}
+{"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:32:24.575015Z","detail":"\"1:1\" at 1145.2914066314697,472.0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:25.992051Z","detail":"editor-compare at 1272.0,728.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:26.380312Z","detail":"editor-compare"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:26.596060Z","detail":"editor-reset at 1344.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:26.984206Z","detail":"editor-reset"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:27.213064Z","detail":"editor-close at 1392.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:27.554169Z","detail":"editor-close"}
+{"id":"ux-editor-reset-and-close","status":"PASS","at":"2026-10-21T18:32:27.661081Z","detail":"5667ms"}
+{"id":"ux-editor-discard-protection","status":"START","at":"2026-10-21T18:32:27.661186Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:27.735746Z","detail":"viewer-edit at 1248.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:28.119889Z","detail":"viewer-edit"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:28.381905Z","detail":"editor-rotate-right at 1208.4082946777344,248.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:28.764306Z","detail":"editor-rotate-right"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:28.997600Z","detail":"editor-close at 1392.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:29.332891Z","detail":"editor-close"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:29.500874Z","detail":"editor-discard at 946.0815410614014,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:29.890812Z","detail":"editor-discard"}
+{"id":"ux-editor-discard-protection","status":"PASS","at":"2026-10-21T18:32:30.066259Z","detail":"2405ms"}
+{"id":"ux-editor-save-copy","status":"START","at":"2026-10-21T18:32:30.066404Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:30.143607Z","detail":"viewer-edit at 1248.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:30.529849Z","detail":"viewer-edit"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:30.798403Z","detail":"editor-rotate-right at 1208.4082946777344,248.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:31.185828Z","detail":"editor-rotate-right"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:31.410441Z","detail":"editor-flip-horizontal at 1160.0,304.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:31.792891Z","detail":"editor-flip-horizontal"}
+{"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:32:32.672281Z","detail":"\"1:1\" at 1145.2914066314697,472.0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:33.960053Z","detail":"editor-save-copy at 1272.0,784.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:34.361693Z","detail":"editor-save-copy"}
+{"id":"screenshot-ux-07-editor-copy","status":"START","at":"2026-10-21T18:32:34.576009Z"}
+{"id":"screenshot-ux-07-editor-copy","status":"PASS","at":"2026-10-21T18:32:35.168514Z","detail":"592ms"}
+{"id":"ux-editor-save-copy","status":"PASS","at":"2026-10-21T18:32:35.168588Z","detail":"5102ms"}
+{"id":"ux-editor-overwrite-and-backup","status":"START","at":"2026-10-21T18:32:35.168600Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:35.236075Z","detail":"viewer-edit at 1248.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:35.586370Z","detail":"viewer-edit"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:37.708005Z","detail":"editor-compare at 1272.0,728.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:38.092757Z","detail":"editor-compare"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:38.341950Z","detail":"editor-compare at 1272.0,728.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:38.729936Z","detail":"editor-compare"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:38.958151Z","detail":"editor-save at 1342.0,844.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:39.345187Z","detail":"editor-save"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:39.600032Z","detail":"editor-confirm-overwrite at 899.2962112426758,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:39.986558Z","detail":"editor-confirm-overwrite"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:40.264046Z","detail":"editor-close at 1392.0,92.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:40.650096Z","detail":"editor-close"}
+{"id":"ux-editor-overwrite-and-backup","status":"PASS","at":"2026-10-21T18:32:40.843781Z","detail":"5675ms"}
+{"id":"ux-close-viewer","status":"START","at":"2026-10-21T18:32:40.843865Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:40.896068Z","detail":"viewer-close at 280.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:41.292089Z","detail":"viewer-close"}
+{"id":"ux-close-viewer","status":"PASS","at":"2026-10-21T18:32:41.530389Z","detail":"686ms"}
+{"id":"ux-keyboard-grid-and-viewer","status":"START","at":"2026-10-21T18:32:41.530471Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:32:41.585836Z","detail":"photo-d3c655f2-72a3-44a8-8fbc-153fd49bb798 at 328.5,256.5"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:32:41.918141Z","detail":"photo-d3c655f2-72a3-44a8-8fbc-153fd49bb798"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:42.043243Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:42.273886Z","detail":"Escape"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:42.472280Z","detail":"Right"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:42.698932Z","detail":"Right"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:42.755743Z","detail":"Return"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:42.982903Z","detail":"Return"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:43.182019Z","detail":"h"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:43.408878Z","detail":"h"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:43.553729Z","detail":"h"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:43.784914Z","detail":"h"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:43.865555Z","detail":"i"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:44.042870Z","detail":"i"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:44.230596Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:44.404883Z","detail":"Escape"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:44.518596Z","detail":"Escape"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:44.694125Z","detail":"Escape"}
+{"id":"ux-keyboard-grid-and-viewer","status":"PASS","at":"2026-10-21T18:32:44.931350Z","detail":"3400ms"}
+{"id":"ux-media-kinds-scan","status":"START","at":"2026-10-21T18:32:44.931516Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:44.985712Z","detail":"sidebar-settings at 120.0,856.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:45.375020Z","detail":"sidebar-settings"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:45.662033Z","detail":"settings-category-2 at 360.0,342.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:46.047529Z","detail":"settings-category-2"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:47.116173Z","detail":"add-folder at 559.6645431518555,590.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:47.506555Z","detail":"add-folder"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:47.801138Z","detail":"settings-close at 1134.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:48.187905Z","detail":"settings-close"}
+{"id":"ux-media-kinds-scan","status":"PASS","at":"2026-10-21T18:32:48.407346Z","detail":"3475ms"}
+{"id":"ux-media-kind-filters","status":"START","at":"2026-10-21T18:32:48.407460Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:48.459120Z","detail":"sidebar-media-images at 120.0,504.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:48.844478Z","detail":"sidebar-media-images"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:48.993081Z","detail":"sidebar-media-videos at 120.0,552.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:49.374940Z","detail":"sidebar-media-videos"}
+{"id":"ux-media-kind-filters","status":"PASS","at":"2026-10-21T18:32:49.527576Z","detail":"1120ms"}
+{"id":"ux-media-kind-video-playback","status":"START","at":"2026-10-21T18:32:49.527652Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:49.581988Z","detail":"photo-43234b27-62b0-402f-97fb-57c0d0e72704 at 328.5,256.5"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:49.919583Z","detail":"photo-43234b27-62b0-402f-97fb-57c0d0e72704"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:50.515963Z","detail":"space"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:50.770554Z","detail":"space"}
+{"id":"key","status":"SEND","at":"2026-10-21T18:32:50.883522Z","detail":"space"}
+{"id":"key","status":"ACK","at":"2026-10-21T18:32:51.107194Z","detail":"space"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:51.329172Z","detail":"viewer-close at 280.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:51.768292Z","detail":"viewer-close"}
+{"id":"ux-media-kind-video-playback","status":"PASS","at":"2026-10-21T18:32:52.022120Z","detail":"2494ms"}
+{"id":"ux-media-kind-motion","status":"START","at":"2026-10-21T18:32:52.022233Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:52.079155Z","detail":"sidebar-media-images at 120.0,504.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:52.414868Z","detail":"sidebar-media-images"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:52.582105Z","detail":"photo-4ca4bc7e-9e26-4c92-80a4-7a94e713cde1 at 618.5,256.5"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:52.969269Z","detail":"photo-4ca4bc7e-9e26-4c92-80a4-7a94e713cde1"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:53.210081Z","detail":"viewer-motion-toggle at 344.3111343383789,708.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:53.562403Z","detail":"viewer-motion-toggle"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:54.158470Z","detail":"viewer-motion-toggle at 323.32295989990234,708.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:54.575574Z","detail":"viewer-motion-toggle"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:54.687110Z","detail":"viewer-close at 280.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:55.028091Z","detail":"viewer-close"}
+{"id":"ux-media-kind-motion","status":"PASS","at":"2026-10-21T18:32:55.315570Z","detail":"3293ms"}
+{"id":"ux-motion-auto-play-preference","status":"START","at":"2026-10-21T18:32:55.315642Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:55.368362Z","detail":"sidebar-settings at 120.0,856.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:55.752779Z","detail":"sidebar-settings"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:55.946023Z","detail":"settings-category-2 at 360.0,342.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:56.335037Z","detail":"settings-category-2"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:57.173019Z","detail":"settings-auto-play-motion at 810.5,508.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:57.564398Z","detail":"settings-auto-play-motion"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:57.830090Z","detail":"settings-close at 1134.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:58.213929Z","detail":"settings-close"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:58.481023Z","detail":"photo-4ca4bc7e-9e26-4c92-80a4-7a94e713cde1 at 618.5,256.5"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:58.916252Z","detail":"photo-4ca4bc7e-9e26-4c92-80a4-7a94e713cde1"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:59.242496Z","detail":"viewer-motion-toggle at 323.32295989990234,708.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:32:59.626905Z","detail":"viewer-motion-toggle"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:32:59.761158Z","detail":"viewer-close at 280.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:00.160566Z","detail":"viewer-close"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:00.424527Z","detail":"sidebar-settings at 120.0,856.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:00.823680Z","detail":"sidebar-settings"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:01.109307Z","detail":"settings-category-2 at 360.0,342.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:01.493939Z","detail":"settings-category-2"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:02.306011Z","detail":"settings-auto-play-motion at 810.5,508.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:02.693122Z","detail":"settings-auto-play-motion"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:02.964560Z","detail":"settings-close at 1134.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:03.349856Z","detail":"settings-close"}
+{"id":"ux-motion-auto-play-preference","status":"PASS","at":"2026-10-21T18:33:03.575432Z","detail":"8259ms"}
+{"id":"ux-media-kind-heic-and-gif","status":"START","at":"2026-10-21T18:33:03.575538Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:03.630433Z","detail":"photo-f96eaa36-983e-40bd-85bd-805607e1e67d at 328.5,594.5"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:04.016938Z","detail":"photo-f96eaa36-983e-40bd-85bd-805607e1e67d"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:04.553066Z","detail":"viewer-close at 280.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:04.897932Z","detail":"viewer-close"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:05.286631Z","detail":"photo-47be5197-0ef1-406c-acbe-27de3673e1ae at 473.5,256.5"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:05.675884Z","detail":"photo-47be5197-0ef1-406c-acbe-27de3673e1ae"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:06.324384Z","detail":"viewer-close at 280.0,86.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:06.722386Z","detail":"viewer-close"}
+{"id":"ux-media-kind-heic-and-gif","status":"PASS","at":"2026-10-21T18:33:06.988071Z","detail":"3412ms"}
+{"id":"ux-media-kind-remove-source","status":"START","at":"2026-10-21T18:33:06.988161Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:07.042375Z","detail":"sidebar-settings at 120.0,856.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:07.424922Z","detail":"sidebar-settings"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:07.625044Z","detail":"settings-category-2 at 360.0,342.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:08.012200Z","detail":"settings-category-2"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:09.085690Z","detail":"settings-remove-source-/tmp/ux-commit/fixtures/media-kinds at 1106.0,586.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:09.468124Z","detail":"settings-remove-source-/tmp/ux-commit/fixtures/media-kinds"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:09.733883Z","detail":"remove-source-confirm at 919.6854858398438,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:10.119882Z","detail":"remove-source-confirm"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:10.358015Z","detail":"settings-close at 1134.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:10.741063Z","detail":"settings-close"}
+{"id":"ux-media-kind-remove-source","status":"PASS","at":"2026-10-21T18:33:10.958104Z","detail":"3969ms"}
+{"id":"ux-remove-source-re-add","status":"START","at":"2026-10-21T18:33:10.958190Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:11.011018Z","detail":"sidebar-settings at 120.0,856.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:11.395642Z","detail":"sidebar-settings"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:11.558078Z","detail":"settings-category-2 at 360.0,342.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:11.947878Z","detail":"settings-category-2"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:13.057397Z","detail":"settings-remove-source-/tmp/ux-commit/fixtures/photos at 1106.0,658.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:13.446245Z","detail":"settings-remove-source-/tmp/ux-commit/fixtures/photos"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:13.708461Z","detail":"remove-source-confirm at 919.6854858398438,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:14.098708Z","detail":"remove-source-confirm"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:14.702309Z","detail":"add-folder at 559.6645431518555,662.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:15.085237Z","detail":"add-folder"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:15.348067Z","detail":"settings-close at 1134.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:15.730221Z","detail":"settings-close"}
+{"id":"ux-remove-source-re-add","status":"PASS","at":"2026-10-21T18:33:15.939868Z","detail":"4981ms"}
+{"id":"ux-remove-album-keeps-files","status":"START","at":"2026-10-21T18:33:15.939949Z"}
+{"id":"right-tap","status":"SEND","at":"2026-10-21T18:33:15.991990Z","detail":"sidebar-album-/tmp/ux-commit/ux/albums/Trips at 120.0,258.0"}
+{"id":"right-tap","status":"ACK","at":"2026-10-21T18:33:16.326079Z","detail":"sidebar-album-/tmp/ux-commit/ux/albums/Trips"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:16.525028Z","detail":"album-menu-remove at 242.0,388.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:16.914891Z","detail":"album-menu-remove"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:17.179303Z","detail":"album-remove-confirm at 944.834903717041,526.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:17.579952Z","detail":"album-remove-confirm"}
+{"id":"ux-remove-album-keeps-files","status":"PASS","at":"2026-10-21T18:33:17.744481Z","detail":"1804ms"}
+{"id":"ux-remove-source-keeps-originals","status":"START","at":"2026-10-21T18:33:17.744614Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:17.797080Z","detail":"sidebar-settings at 120.0,856.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:18.184680Z","detail":"sidebar-settings"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:18.449105Z","detail":"settings-category-2 at 360.0,342.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:18.832898Z","detail":"settings-category-2"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:19.856775Z","detail":"settings-remove-source-/tmp/ux-commit/fixtures/photos at 1106.0,730.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:20.238940Z","detail":"settings-remove-source-/tmp/ux-commit/fixtures/photos"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:20.494041Z","detail":"remove-source-confirm at 919.6854858398438,516.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:20.882397Z","detail":"remove-source-confirm"}
+{"id":"ux-remove-source-keeps-originals","status":"PASS","at":"2026-10-21T18:33:21.129778Z","detail":"3385ms"}
+{"id":"ux-clear-cache-and-logs","status":"START","at":"2026-10-21T18:33:21.129827Z"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:21.188321Z","detail":"settings-category-3 at 360.0,406.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:21.571881Z","detail":"settings-category-3"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:22.185955Z","detail":"settings-clear-cache at 1098.0,404.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:22.571253Z","detail":"settings-clear-cache"}
+{"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:33:23.465499Z","detail":"\"debug\" at 515.734375,602.0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:24.226166Z","detail":"settings-clear-logs at 810.5,618.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:24.610898Z","detail":"settings-clear-logs"}
+{"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:33:25.589320Z","detail":"\"Fastest\" at 519.2921886444092,388.0"}
+{"id":"tap","status":"SEND","at":"2026-10-21T18:33:26.148069Z","detail":"settings-close at 1134.0,150.0"}
+{"id":"tap","status":"ACK","at":"2026-10-21T18:33:26.536204Z","detail":"settings-close"}
+{"id":"screenshot-ux-08-empty-after-cleanup","status":"START","at":"2026-10-21T18:33:26.701674Z"}
+{"id":"screenshot-ux-08-empty-after-cleanup","status":"PASS","at":"2026-10-21T18:33:27.001491Z","detail":"299ms"}
+{"id":"ux-clear-cache-and-logs","status":"PASS","at":"2026-10-21T18:33:27.001561Z","detail":"5871ms"}
+{"id":"ux-final-facts","status":"START","at":"2026-10-21T18:33:27.001578Z"}
+{"id":"ux-final-facts","status":"PASS","at":"2026-10-21T18:33:27.001836Z","detail":"0ms"}
+{"id":"shutdown","status":"START","at":"2026-10-21T18:33:27.001858Z"}
+{"id":"shutdown-input","status":"START","at":"2026-10-21T18:33:27.001864Z"}
+{"id":"shutdown-input","status":"DONE","at":"2026-10-21T18:33:27.001873Z"}
+{"id":"shutdown-runtime","status":"DONE","at":"2026-10-21T18:33:27.003870Z"}
+{"id":"shutdown","status":"DONE","at":"2026-10-21T18:33:27.003891Z"}
+{"id":"record","status":"WRITTEN","at":"2026-10-21T18:33:27.004075Z"}
+{"id":"record","status":"FLUSHED","at":"2026-10-21T18:33:27.004097Z"}

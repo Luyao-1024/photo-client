@@ -347,7 +347,7 @@ final class LocalJourney {
       // one library-open observed before the scan.
       facts['opened_count'] = state.info!.count;
       facts['opened_revision'] = state.info!.revision;
-      final tiles = _elementsWithKeyPrefix('photo-');
+      final tiles = _photoTileElements();
       facts['tiles_in_tree'] = tiles.length;
       if (tiles.isEmpty) throw JourneyFailure('no grid tile was rendered');
       final first = state.pages[0]!.first;
@@ -497,7 +497,7 @@ final class LocalJourney {
         () => _elementByKey(const ValueKey('viewer')) == null,
         reason: 'Escape did not close the viewer',
       );
-      if (_elementsWithKeyPrefix('photo-').isEmpty) {
+      if (_photoTileElements().isEmpty) {
         throw JourneyFailure(
           'the grid did not return after closing the viewer',
         );
@@ -943,6 +943,19 @@ final class LocalJourney {
     if (root != null) visit(root);
     return found;
   }
+
+  /// Photo tiles are keyed `photo-<media id>`. The window chrome owns keys
+  /// that start with the same prefix, so a tile is only a key that carries a
+  /// media id.
+  List<Element> _photoTileElements() => _elementsWithKeyPrefix('photo-')
+      .where((element) {
+        final key = element.widget.key;
+        return key is ValueKey<String> &&
+            RegExp(
+              r'^photo-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            ).hasMatch(key.value);
+      })
+      .toList();
 
   List<Element> _elementsWithKeyPrefix(String prefix) {
     final found = <Element>[];
