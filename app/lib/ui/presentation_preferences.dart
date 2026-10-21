@@ -5,25 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_tools.dart';
 import 'runtime_controller.dart';
+import 'backdrop_viewport.dart';
 
 final presentationProvider =
     NotifierProvider<PresentationController, PresentationPreferences>(
       PresentationController.new,
     );
 
-/// Only transparent materials are supported. A solid material is not a mode:
-/// anything outside this set resolves to automatic.
-const Set<String> glassModes = {'auto', 'full', 'reduced'};
-
-String normalizeGlassMode(String? value) =>
-    value != null && glassModes.contains(value) ? value : 'auto';
-
 class PresentationPreferences {
   const PresentationPreferences({
     this.themeMode = ThemeMode.system,
     this.locale,
-    this.glassMode = 'auto',
     this.transparency = .5,
+    this.backgroundBlur = .5,
+    this.followScroll = true,
     this.reduceMotion = false,
     this.dayColumns = 5,
     this.thumbnailWorkers = 2,
@@ -33,16 +28,17 @@ class PresentationPreferences {
   });
   final ThemeMode themeMode;
   final Locale? locale;
-  final bool reduceMotion, saveFailed;
-  final String glassMode, logLevel, order;
-  final double transparency;
+  final bool reduceMotion, saveFailed, followScroll;
+  final String logLevel, order;
+  final double transparency, backgroundBlur;
   final int dayColumns, thumbnailWorkers;
 
   PresentationPreferences copyWith({
     ThemeMode? themeMode,
     Locale? locale,
-    String? glassMode,
     double? transparency,
+    double? backgroundBlur,
+    bool? followScroll,
     bool? reduceMotion,
     int? dayColumns,
     int? thumbnailWorkers,
@@ -52,8 +48,9 @@ class PresentationPreferences {
   }) => PresentationPreferences(
     themeMode: themeMode ?? this.themeMode,
     locale: locale ?? this.locale,
-    glassMode: glassMode ?? this.glassMode,
     transparency: transparency ?? this.transparency,
+    backgroundBlur: backgroundBlur ?? this.backgroundBlur,
+    followScroll: followScroll ?? this.followScroll,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     dayColumns: dayColumns ?? this.dayColumns,
     thumbnailWorkers: thumbnailWorkers ?? this.thumbnailWorkers,
@@ -88,7 +85,6 @@ class PresentationController extends Notifier<PresentationPreferences> {
         'op': 'preferences',
       }) as Map;
       if (_disposed || edits != _edits) return;
-      final mode = normalizeGlassMode(data['glassMode'] as String?);
       state = PresentationPreferences(
         themeMode: ThemeMode.values.firstWhere(
           (m) => m.name == data['theme'],
@@ -97,11 +93,13 @@ class PresentationController extends Notifier<PresentationPreferences> {
         locale: data['locale'] == null
             ? null
             : Locale(data['locale'] as String),
-        glassMode: mode,
         transparency: ((data['transparency'] as num?)?.toDouble() ?? .5).clamp(
           0,
           1,
         ),
+        backgroundBlur: ((data['backgroundBlur'] as num?)?.toDouble() ?? .5)
+            .clamp(0, 1),
+        followScroll: data['followScroll'] as bool? ?? true,
         reduceMotion: data['reduceMotion'] as bool? ?? false,
         dayColumns: ((data['dayColumns'] as int?) ?? 5).clamp(3, 8),
         thumbnailWorkers: ((data['thumbnailWorkers'] as int?) ?? 2).clamp(1, 4),
@@ -142,15 +140,21 @@ class PresentationController extends Notifier<PresentationPreferences> {
     _persist('locale', value.languageCode);
   }
 
-  void setGlassMode(String value) {
-    final mode = normalizeGlassMode(value);
-    state = state.copyWith(glassMode: mode);
-    _persist('glassMode', mode);
-  }
-
   void setTransparency(double value) {
     state = state.copyWith(transparency: value);
     _persist('transparency', value);
+  }
+
+  void setBackgroundBlur(double value) {
+    final normalized = value.clamp(0.0, 1.0);
+    state = state.copyWith(backgroundBlur: normalized);
+    _persist('backgroundBlur', normalized);
+  }
+
+  void setFollowScroll(bool value) {
+    state = state.copyWith(followScroll: value);
+    ref.read(backdropViewportProvider.notifier).reset();
+    _persist('followScroll', value);
   }
 
   void setReduceMotion(bool value) {

@@ -68,9 +68,15 @@ class GlassTheme extends ThemeExtension<GlassTheme> {
 /// The album photo fills the window under a neutral light or dark frost.
 /// Only the low-resolution still image is blurred, never the whole scene.
 class GlassBackdrop extends StatelessWidget {
-  const GlassBackdrop({super.key, required this.child, this.image});
+  const GlassBackdrop({
+    super.key,
+    required this.child,
+    this.image,
+    this.blurSigma = 18,
+  });
   final Widget child;
   final ImageProvider? image;
+  final double blurSigma;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +98,7 @@ class GlassBackdrop extends StatelessWidget {
                       children: [
                         _BackdropPhoto(
                           image: image!,
+                          blurSigma: blurSigma,
                           animate: !MediaQuery.disableAnimationsOf(context),
                         ),
                         ColoredBox(
@@ -115,9 +122,14 @@ class GlassBackdrop extends StatelessWidget {
 /// it. Fading both out/in would expose the neutral base halfway through.
 /// Rapid changes queue only the newest target; at most two images are painted.
 class _BackdropPhoto extends StatefulWidget {
-  const _BackdropPhoto({required this.image, required this.animate});
+  const _BackdropPhoto({
+    required this.image,
+    required this.animate,
+    required this.blurSigma,
+  });
   final ImageProvider image;
   final bool animate;
+  final double blurSigma;
 
   @override
   State<_BackdropPhoto> createState() => _BackdropPhotoState();
@@ -178,8 +190,8 @@ class _BackdropPhotoState extends State<_BackdropPhoto>
   Widget _photo(ImageProvider image) => RepaintBoundary(
     child: ImageFiltered(
       imageFilter: ui.ImageFilter.blur(
-        sigmaX: 18,
-        sigmaY: 18,
+        sigmaX: widget.blurSigma,
+        sigmaY: widget.blurSigma,
         tileMode: TileMode.clamp,
       ),
       child: Image(

@@ -81,11 +81,7 @@ class GlassSurface extends ConsumerWidget {
       shadowElevation: 0,
       shadow: const [],
     );
-    final premium =
-        !flat &&
-        !nested &&
-        preferences.glassMode != 'reduced' &&
-        (live || preferences.glassMode == 'full');
+    final premium = !flat && !nested;
     final quality = flat
         ? GlassQuality.minimal
         : (premium ? GlassQuality.premium : GlassQuality.standard);
@@ -100,14 +96,14 @@ class GlassSurface extends ConsumerWidget {
       child: const SizedBox.expand(),
     );
     if (premium && live) {
-      // The README promotes fixed bars to premium. The outer Linux auto probe
-      // stops at standard without timing any frames; override it only for
-      // these bounded fixed controls, never for scrolling photo tiles.
+      // Keep fixed lenses on the full pipeline even in independently hosted
+      // surfaces. No automatic tier or frost switching is allowed.
       final lens = background;
       background = GlassAdaptiveScope(
         minQuality: GlassQuality.premium,
         maxQuality: GlassQuality.premium,
-        frostStep: true,
+        frostStep: false,
+        allowStepUp: false,
         child: Builder(
           builder: (context) {
             final data = GlassAdaptiveScopeData.of(context);

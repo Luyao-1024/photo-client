@@ -328,7 +328,11 @@ def verify_effects(record: dict, manifest: dict, initial_facts: dict,
            "restoring oriented.jpg did not preserve its bytes")
 
     expect("UX-02", ux.get("theme") == "dark", "dark theme was not recorded")
-    expect("UX-02", ux.get("glass_mode") == "auto", "glass quality was not recorded")
+    expect("UX-02", ux.get("material") == "liquid_glass", "fixed liquid glass was not recorded")
+    expect("UX-02", ux.get("follow_scroll") is True, "background following was not restored")
+    blur = ux.get("background_blur")
+    expect("UX-02", isinstance(blur, (int, float)) and .5 < blur <= 1,
+           "background blur was not adjusted")
     expect("UX-02", ux.get("reduce_motion") is True, "Reduce motion was not recorded")
     day_columns = ux.get("day_columns")
     expect("UX-02", isinstance(day_columns, int) and 3 <= day_columns <= 8,
@@ -493,7 +497,8 @@ def verify_effects(record: dict, manifest: dict, initial_facts: dict,
                     preferences[key] = value
             expected_preferences = {
                 "theme": "dark",
-                "glassMode": "auto",
+                "backgroundBlur": blur,
+                "followScroll": True,
                 "locale": "en",
                 "reduceMotion": True,
                 "dayColumns": day_columns,

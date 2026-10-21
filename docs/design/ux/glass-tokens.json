@@ -61,7 +61,7 @@
     "scrim_alpha_floor": 0.58
   },
   "quality": {
-    "default": "auto",
+    "default": "full",
     "full": {
       "blur_sigma": 12,
       "max_live_surfaces": 3,
@@ -76,23 +76,9 @@
       "frost": 6,
       "frost_overlay": 14
     },
-    "reduced": {
-      "blur_sigma": 6,
-      "max_live_surfaces": 2,
-      "max_normal_viewport_area_ratio": 0.15
-    },
-    "auto_focal_policy": {
-      "fixed_surfaces": [
-        "navigation",
-        "search_button",
-        "options_button",
-        "mode_selector"
-      ],
-      "quality_floor": "premium",
-      "reduced_override": "standard",
-      "high_contrast_override": "minimal",
-      "normal_viewport_area_budget": 0.3
-    }
+    "switchable": false,
+    "automatic_tier_switching": false,
+    "frost_switching": false
   },
   "motion_ms": {
     "hover": 120,
@@ -152,7 +138,7 @@
     "premium_overscan_logical_px": 0
   },
   "ambient_backdrop": {
-    "source": "active_album_cover_else_first_photo",
+    "source": "sampled_viewport_photo_else_album_cover_or_first_photo",
     "thumbnail_class": 512,
     "decode_width": 512,
     "blur_sigma": 18,
@@ -160,7 +146,12 @@
     "light_scrim_alpha": 0.72,
     "disabled_in_high_contrast": true,
     "scroll_updates": false,
-    "coverage": "full_window"
+    "coverage": "full_window",
+    "blur_sigma_range": [
+      0,
+      36
+    ],
+    "blur_preference": "backgroundBlur"
   },
   "window_layout": {
     "sidebar": "inset_rounded_lens",
@@ -190,6 +181,23 @@
       "empty",
       "trash",
       "gateway_change"
-    ]
-  }
+    ],
+    "viewport_follow": {
+      "sample_interval_ms": 1200,
+      "settle_delay_ms": 300,
+      "target": "visible_middle_photo",
+      "top": "saved_cover_or_first_photo",
+      "scope": "query_epoch",
+      "pending_metadata": "keep_last_complete_background",
+      "persists_cover": false,
+      "enabled_preference": "followScroll",
+      "default_enabled": true,
+      "disabled": "saved_album_cover"
+    }
+  },
+  "appearance_controls": [
+    "transparency",
+    "backgroundBlur",
+    "followScroll"
+  ]
 }

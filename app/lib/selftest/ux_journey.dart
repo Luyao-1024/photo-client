@@ -130,7 +130,7 @@ extension UxJourney on LocalJourney {
         () => _uxPreferences.locale?.languageCode == 'en',
         reason: 'the journey could not switch the UI to English',
       );
-      await _tapKey('settings-category-1');
+      await _tapKey('settings-category-0');
       await _uxScrollToKey(
         'settings-theme-dark',
         container: 'settings-content',
@@ -140,22 +140,27 @@ extension UxJourney on LocalJourney {
         () => _uxPreferences.themeMode == ThemeMode.dark,
         reason: 'the dark theme choice did not reach the preference state',
       );
+      await _tapKey('settings-category-1');
       await _uxScrollToKey(
-        'settings-glass-quality',
+        'settings-background-blur',
         container: 'settings-content',
       );
-      await _uxTapDropdown('settings-glass-quality');
-      await _uxTapMenuText('Reduced');
+      await _uxTapFraction('settings-background-blur', .75, .5);
       await _waitFor(
-        () => _uxPreferences.glassMode == 'reduced',
-        reason: 'the material quality dropdown did not apply Reduced',
+        () => _uxPreferences.backgroundBlur > .5,
+        reason: 'the background blur slider did not update',
       );
-      await _uxTapDropdown('settings-glass-quality');
-      await _uxTapMenuText('Automatic');
+      await _tapKey('settings-follow-scroll');
       await _waitFor(
-        () => _uxPreferences.glassMode == 'auto',
-        reason: 'the material quality dropdown did not return to Automatic',
+        () => !_uxPreferences.followScroll,
+        reason: 'the background follow switch did not turn off',
       );
+      await _tapKey('settings-follow-scroll');
+      await _waitFor(
+        () => _uxPreferences.followScroll,
+        reason: 'the background follow switch did not turn on',
+      );
+      await _tapKey('settings-category-0');
       await _uxScrollToKey(
         'settings-reduce-motion',
         container: 'settings-content',
@@ -177,7 +182,9 @@ extension UxJourney on LocalJourney {
         reason: 'the English language chip did not apply',
       );
       _uxRecord('theme', _uxPreferences.themeMode.name);
-      _uxRecord('glass_mode', _uxPreferences.glassMode);
+      _uxRecord('material', 'liquid_glass');
+      _uxRecord('background_blur', _uxPreferences.backgroundBlur);
+      _uxRecord('follow_scroll', _uxPreferences.followScroll);
       _uxRecord('reduce_motion', _uxPreferences.reduceMotion);
     });
   }
@@ -1952,7 +1959,9 @@ extension UxJourney on LocalJourney {
       _uxRecord('logs_after_clear', afterClear.length);
       _uxRecord('preferences_after_cleanup', {
         'theme': _uxPreferences.themeMode.name,
-        'glassMode': _uxPreferences.glassMode,
+        'material': 'liquid_glass',
+        'backgroundBlur': _uxPreferences.backgroundBlur,
+        'followScroll': _uxPreferences.followScroll,
         'locale': _uxPreferences.locale?.languageCode ?? 'system',
         'reduceMotion': _uxPreferences.reduceMotion,
         'dayColumns': _uxPreferences.dayColumns,

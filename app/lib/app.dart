@@ -10,7 +10,6 @@ import 'services/app_navigation.dart';
 import 'services/core_gateway.dart';
 import 'services/local_library_gateway.dart';
 import 'services/window_controller.dart';
-import 'ui/auto_glass_policy.dart';
 import 'ui/glass_dialog.dart';
 import 'ui/library_backdrop.dart';
 import 'ui/library_shell.dart';
@@ -133,29 +132,12 @@ class _ApplicationState extends ConsumerState<_Application>
       debugShowCheckedModeBanner: false,
       title: 'PhotoViewer',
       builder: (context, child) => GlassAdaptiveScope(
-        // The scope is the ceiling for every glass surface below it.
-        //
-        // "Liquid glass" is an explicit request, so it must not be silently
-        // capped by the platform heuristic: the package caps desktop at the
-        // standard tier because ANGLE compiles the multi-pass SDF at runtime,
-        // and the floor is what lifts that cap back. Frost stays the first
-        // thing to go when the frame budget overruns.
-        //
-        // "Reduced" never rises above the standard tier. "Automatic" leaves
-        // the tier to the measured frame budget, and the platform heuristic
-        // decides where the search starts.
-        minQuality: preferences.glassMode == 'full'
-            ? GlassQuality.premium
-            : (preferences.glassMode == 'auto'
-                  ? GlassQuality.minimal
-                  : GlassQuality.standard),
-        maxQuality: preferences.glassMode == 'reduced'
-            ? GlassQuality.standard
-            : GlassQuality.premium,
-        frostStep: preferences.glassMode == 'full',
-        allowStepUp: preferences.glassMode != 'reduced',
-        onQualityChanged: (from, to) =>
-            ref.read(autoGlassProvider.notifier).report(to),
+        // Liquid glass is the only material. Neither legacy preferences nor
+        // frame adaptation may replace it with another visual tier.
+        minQuality: GlassQuality.premium,
+        maxQuality: GlassQuality.premium,
+        frostStep: false,
+        allowStepUp: false,
         onDiagnostic: (diagnostic) {
           // The effective tier and the reason behind it belong in the log:
           // "the user asked for premium" and "premium is what the frame
@@ -166,13 +148,7 @@ class _ApplicationState extends ConsumerState<_Application>
             'reason=${diagnostic.reason.name} '
             'p75=${diagnostic.p75Ms} p95=${diagnostic.p95Ms} '
             'frames=${diagnostic.framesMeasured} '
-            'requested=${preferences.glassMode} '
-            'bounds=${preferences.glassMode == 'full'
-                ? 'premium'
-                : preferences.glassMode == 'auto'
-                ? 'minimal'
-                : 'standard'}'
-            '..${preferences.glassMode == 'reduced' ? 'standard' : 'premium'}',
+            'material=liquid_glass bounds=premium..premium',
           );
         },
         child: Builder(

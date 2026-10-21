@@ -285,6 +285,8 @@ impl LocalLibrary {
                 | "locale"
                 | "glassMode"
                 | "transparency"
+                | "backgroundBlur"
+                | "followScroll"
                 | "reduceMotion"
                 | "dayColumns"
                 | "thumbnailWorkers"
@@ -295,6 +297,14 @@ impl LocalLibrary {
         }
         let parsed: serde_json::Value =
             serde_json::from_str(&value).map_err(|_| "InvalidPreference")?;
+        if key == "backgroundBlur"
+            && !parsed.as_f64().is_some_and(|v| (0.0..=1.0).contains(&v))
+        {
+            return Err("InvalidPreference".into());
+        }
+        if key == "followScroll" && !parsed.is_boolean() {
+            return Err("InvalidPreference".into());
+        }
         if key == "glassMode" {
             // Only transparent materials exist. A solid material is not a
             // preference this build can honour.

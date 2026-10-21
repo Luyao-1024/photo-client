@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
+import 'backdrop_viewport.dart';
 import 'glass_dialog.dart';
 import 'glass_surface.dart';
 import 'glass_theme.dart';
@@ -83,11 +84,14 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       _pendingRank = _visibleRank;
       _mode = value;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _trackBackdrop();
+    });
   }
 
   void _captureAnchor() {
     if (!_scroll.hasClients || _geometry.isEmpty) return;
-    final y = _scroll.offset + _headerExtent;
+    final y = _scroll.positions.last.pixels + _headerExtent;
     var group = _geometry.first;
     for (final candidate in _geometry) {
       if (candidate.top > y) break;
@@ -115,9 +119,47 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   void _nearEnd() {
     _captureAnchor();
-    if (_scroll.hasClients && _scroll.position.extentAfter < 600) {
+    _trackBackdrop();
+    if (_scroll.hasClients && _scroll.positions.last.extentAfter < 600) {
       unawaited(ref.read(localLibraryProvider.notifier).loadNext());
     }
+  }
+
+  void _trackBackdrop() {
+    if (!ref.read(presentationProvider).followScroll) return;
+    if (!_scroll.hasClients ||
+        _geometry.isEmpty ||
+        !mounted ||
+        !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return;
+    }
+    final position = _scroll.positions.last;
+    final library = ref.read(localLibraryProvider);
+    if (library.trashed || library.extent == 0) return;
+    int? rank;
+    if (position.pixels > 1) {
+      final y =
+          position.pixels + (_headerExtent + position.viewportDimension) / 2;
+      var group = _geometry.first;
+      for (final candidate in _geometry) {
+        if (candidate.top > y) break;
+        group = candidate;
+      }
+      final row = ((y - group.top - group.header) / group.stride).floor().clamp(
+        0,
+        (group.count / group.columns).ceil() - 1,
+      );
+      final index = (row * group.columns + group.columns ~/ 2).clamp(
+        0,
+        group.count - 1,
+      );
+      rank = group.items == null
+          ? group.start + index
+          : group.items![index].index;
+    }
+    ref
+        .read(backdropViewportProvider.notifier)
+        .track(queryEpoch: library.queryEpoch, rank: rank);
   }
 
   /// Lazily (re)request the pages around a tile that is actually being built,
@@ -662,6 +704,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       });
       await controller.refresh(force: true);
       if (mounted && ref.read(localLibraryProvider).queryEpoch == epoch) {
+        ref.read(backdropViewportProvider.notifier).reset();
         setState(() => _choosingCover = false);
         _notify(AppStrings.of(context).pick('相册封面已更新', 'Album cover updated'));
       }
@@ -776,6 +819,16 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(presentationProvider.select((value) => value.followScroll), (
+      before,
+      after,
+    ) {
+      if (before == false && after) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _trackBackdrop();
+        });
+      }
+    });
     final strings = AppStrings.of(context);
     final preferences = ref.watch(presentationProvider);
     final runtime = ref.watch(runtimeProvider);
@@ -1088,6 +1141,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                     columns: columns,
                     stride: side + 8,
                     header: header,
+                    items: section.startIndex == null ? section.items : null,
                   ),
                 );
                 top += header + (count / columns).ceil() * (side + 8);
@@ -2515,9 +2569,11 @@ class _GridSectionGeometry {
     required this.columns,
     required this.stride,
     required this.header,
+    this.items,
   });
   final double top, stride, header;
   final int start, count, columns;
+  final List<SectionItem>? items;
 }
 
 class _DateQueryFormatter extends TextInputFormatter {

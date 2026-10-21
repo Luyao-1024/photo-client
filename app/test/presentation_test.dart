@@ -11,6 +11,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:photo_client/app.dart';
 import 'package:photo_client/services/core_gateway.dart';
 import 'package:photo_client/ui/glass_surface.dart';
+import 'package:photo_client/ui/backdrop_viewport.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
 import 'package:photo_client/ui/local_library_pane.dart';
 import 'package:photo_client/ui/mode_selector.dart';
@@ -220,9 +221,9 @@ void main() {
     expect(find.byType(ChoiceChip), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('settings-category-1')));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ChoiceChip, 'Dark'), findsOneWidget);
+    expect(find.byType(ChoiceChip), findsNothing);
     expect(
-      find.byKey(const ValueKey('settings-glass-quality')),
+      find.byKey(const ValueKey('settings-background-blur')),
       findsOneWidget,
     );
     await tester.tap(find.byKey(const ValueKey('settings-category-2')));
@@ -261,7 +262,10 @@ void main() {
       findsOneWidget,
     );
 
-    await openSettingsCategory(tester, 1);
+    await openSettingsCategory(tester, 0);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-theme-dark')),
+    );
     await tester.tap(find.widgetWithText(ChoiceChip, 'Dark'));
     await tester.pumpAndSettle();
     expect(container.read(presentationProvider).themeMode, ThemeMode.dark);
@@ -282,26 +286,12 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('settings-category-1')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('settings-glass-quality')),
+    expect(find.byKey(const ValueKey('settings-glass-quality')), findsNothing);
+    expect(find.byType(Slider), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey('settings-follow-scroll')),
+      findsOneWidget,
     );
-    // Only transparent materials are offered; there is no solid variant.
-    final quality = tester.widget<DropdownButton<String>>(
-      find
-          .descendant(
-            of: find.byKey(const ValueKey('settings-glass-quality')),
-            matching: find.byType(DropdownButton<String>),
-          )
-          .first,
-    );
-    expect(quality.items!.map((item) => item.value).toList(), [
-      'auto',
-      'full',
-      'reduced',
-    ]);
-    container.read(presentationProvider.notifier).setGlassMode('full');
-    await tester.pumpAndSettle();
-    expect(container.read(presentationProvider).glassMode, 'full');
     // The material is drawn by the glass layer, not by a hand-rolled blur, so
     // the contract is the surface itself: it exists, and its body is
     // translucent rather than solid.
@@ -331,7 +321,10 @@ void main() {
     // Appearance never restarts the core; preferences survive dialog cycles.
     expect(gateway.initializes, 1);
     await closeSettings(tester);
-    await openSettingsCategory(tester, 1);
+    await openSettingsCategory(tester, 0);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-theme-dark')),
+    );
     expect(container.read(presentationProvider).themeMode, ThemeMode.dark);
     expect(find.widgetWithText(ChoiceChip, '深色').evaluate().single, isNotNull);
     await closeSettings(tester);
@@ -609,6 +602,72 @@ void main() {
   );
 
   testWidgets(
+    'scrolling publishes a throttled visible photo then the final resting photo',
+    (tester) async {
+      final gateway = FakeLocalGateway(imagePath: image, count: 90);
+      await mount(tester, gateway, width: 1440);
+      await tester.pumpAndSettle();
+      final container = containerOf(tester);
+      final gridFinder = find.byKey(const ValueKey('local-photo-grid'));
+      final scroll = tester.widget<CustomScrollView>(gridFinder).controller!;
+      int centeredRank() {
+        final grid = tester.getRect(gridFinder);
+        final header = tester.getRect(
+          find.byKey(const ValueKey('library-header')),
+        );
+        final center = Offset(
+          grid.center.dx,
+          (header.bottom + grid.bottom) / 2,
+        );
+        final tile =
+            find
+                    .byType(PhotoTile)
+                    .evaluate()
+                    .firstWhere(
+                      (element) => tester
+                          .getRect(find.byWidget(element.widget))
+                          .contains(center),
+                    )
+                    .widget
+                as PhotoTile;
+        return container.read(localLibraryProvider).indexOf(tile.photo.id)!;
+      }
+
+      for (var step = 0; step < 12; step++) {
+        scroll.jumpTo(250 + step * 50.0);
+        await tester.pump(const Duration(milliseconds: 100));
+        if (step < 11) expect(container.read(backdropViewportProvider), isNull);
+      }
+      final sampled = container.read(backdropViewportProvider)!;
+      expect(sampled.rank, centeredRank());
+      scroll.jumpTo(1300);
+      await tester.pump(const Duration(milliseconds: 299));
+      expect(container.read(backdropViewportProvider), sampled);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(container.read(backdropViewportProvider)!.rank, centeredRank());
+      expect(
+        container.read(backdropViewportProvider)!.rank,
+        isNot(sampled.rank),
+      );
+      container.read(presentationProvider.notifier).setFollowScroll(false);
+      await tester.pumpAndSettle();
+      scroll.jumpTo(1600);
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(container.read(backdropViewportProvider), isNull);
+      container.read(presentationProvider.notifier).setFollowScroll(true);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(container.read(backdropViewportProvider)!.rank, centeredRank());
+      scroll.jumpTo(0);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(container.read(backdropViewportProvider)!.rank, isNull);
+      expect(gateway.scans, 0);
+      expect(tester.takeException(), isNull);
+      await disposeApp(tester, gateway);
+    },
+  );
+
+  testWidgets(
     'photos scroll under the pinned heading and its buttons stay clickable',
     (tester) async {
       final gateway = FakeLocalGateway(imagePath: image, count: 90);
@@ -707,16 +766,5 @@ void main() {
     expect(find.text('Settings'), findsWidgets);
     expect(tester.takeException(), isNull);
     await disposeApp(tester, gateway);
-  });
-
-  test('only transparent material modes are accepted', () {
-    expect(normalizeGlassMode('auto'), 'auto');
-    expect(normalizeGlassMode('full'), 'full');
-    expect(normalizeGlassMode('reduced'), 'reduced');
-    // The solid material is not a mode: it never resolves to a solid surface.
-    expect(normalizeGlassMode('plain'), 'auto');
-    expect(normalizeGlassMode(null), 'auto');
-    expect(normalizeGlassMode('unknown'), 'auto');
-    expect(glassModes, isNot(contains('plain')));
   });
 }

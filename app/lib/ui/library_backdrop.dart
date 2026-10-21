@@ -5,13 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
+import 'backdrop_viewport.dart';
 import 'glass_theme.dart';
 import 'local_library_controller.dart';
 import 'local_photo_image.dart';
+import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 
-/// Hold one cover per destination so scrolling/paging never changes the wash.
-/// It uses the thumbnail cache, with no original-file decode or extra scan.
+/// Start with the saved cover; follow throttled viewport samples after scrolling.
+/// Only decoded cache thumbnails can replace the last complete background.
 class LibraryBackdrop extends ConsumerStatefulWidget {
   const LibraryBackdrop({super.key, required this.child});
   final Widget child;
@@ -27,10 +29,13 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
   String? _coverId;
   int _request = 0;
   ImageProvider? _image;
+  BackdropViewport? _focus;
 
   @override
   Widget build(BuildContext context) {
     final library = ref.watch(localLibraryProvider);
+    final preferences = ref.watch(presentationProvider);
+    final viewport = ref.watch(backdropViewportProvider);
     final gateway = ref.watch(coreGatewayProvider);
     final gatewayChanged = !identical(_gateway, gateway);
     if (_epoch != library.queryEpoch || gatewayChanged) {
@@ -40,6 +45,19 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
       _coverId = null;
       _request++;
       if (gatewayChanged) _image = null;
+    }
+    final focus =
+        preferences.followScroll &&
+            viewport?.queryEpoch == library.queryEpoch &&
+            viewport?.rank != null
+        ? viewport
+        : null;
+    if (_focus != focus) {
+      _focus = focus;
+      _cover = null;
+      _coverId = null;
+      // Invalidate late decodes even if this target's DTO page is not here yet.
+      _request++;
     }
     final first = library.photoAt(0);
     String? albumCover;
@@ -51,7 +69,10 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
         }
       }
     }
-    final id = albumCover ?? first?.id;
+    final focusedRank = focus?.rank;
+    final id = focusedRank == null
+        ? albumCover ?? first?.id
+        : library.photoAt(focusedRank)?.id;
     final rank = id == null ? null : library.indexOf(id);
     final photo = rank == null ? null : library.photoAt(rank);
     // Empty/trash destinations must not retain a previous private photo.
@@ -69,7 +90,11 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
       _cover = photo;
       unawaited(_load(gateway as LocalLibraryGateway, id, photo, ++_request));
     }
-    return GlassBackdrop(image: _image, child: widget.child);
+    return GlassBackdrop(
+      image: _image,
+      blurSigma: preferences.backgroundBlur * 36,
+      child: widget.child,
+    );
   }
 
   Future<void> _load(

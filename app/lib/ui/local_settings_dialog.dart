@@ -156,11 +156,6 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               onTap: widget.onShortcuts,
             ),
           ]),
-        ],
-      ),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
           section(strings.theme, [
             Wrap(
               spacing: 8,
@@ -179,44 +174,48 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               ],
             ),
           ]),
-          section(strings.glass, [
-            DropdownButtonFormField<String>(
-              key: const ValueKey('settings-glass-quality'),
-              isExpanded: true,
-              initialValue: preferences.glassMode,
-              decoration: InputDecoration(
-                labelText: strings.pick('材质质量', 'Material quality'),
-              ),
-              items: [
-                for (final (mode, label) in [
-                  ('auto', strings.pick('自动', 'Automatic')),
-                  ('full', strings.pick('液态玻璃', 'Liquid Glass')),
-                  ('reduced', strings.pick('轻量', 'Reduced')),
-                ])
-                  DropdownMenuItem(value: mode, child: Text(label)),
-              ],
-              onChanged: (value) {
-                if (value != null) controller.setGlassMode(value);
-              },
-            ),
-            const SizedBox(height: 6),
-            Text(
-              strings.glassHint,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            Text(strings.pick('透明度', 'Transparency')),
-            Slider(
-              key: const ValueKey('settings-transparency'),
-              value: preferences.transparency,
-              onChanged: controller.setTransparency,
-            ),
+          section(strings.pick('辅助功能', 'Accessibility'), [
             SwitchListTile(
               key: const ValueKey('settings-reduce-motion'),
               contentPadding: EdgeInsets.zero,
               title: Text(strings.pick('减少动画', 'Reduce motion')),
               value: preferences.reduceMotion,
               onChanged: controller.setReduceMotion,
+            ),
+          ]),
+        ],
+      ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          section(strings.pick('透明度', 'Transparency'), [
+            Slider(
+              key: const ValueKey('settings-transparency'),
+              value: preferences.transparency,
+              divisions: 100,
+              label: '${(preferences.transparency * 100).round()}%',
+              onChanged: controller.setTransparency,
+            ),
+          ]),
+          section(strings.pick('背景虚化程度', 'Background blur'), [
+            Slider(
+              key: const ValueKey('settings-background-blur'),
+              value: preferences.backgroundBlur,
+              divisions: 100,
+              label: '${(preferences.backgroundBlur * 100).round()}%',
+              onChanged: controller.setBackgroundBlur,
+            ),
+          ]),
+          section(strings.pick('跟随滚动', 'Follow scrolling'), [
+            SwitchListTile(
+              key: const ValueKey('settings-follow-scroll'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(strings.pick('背景跟随滚动', 'Follow scrolling')),
+              subtitle: Text(
+                strings.pick('关闭后使用相册封面', 'Use the album cover when off'),
+              ),
+              value: preferences.followScroll,
+              onChanged: controller.setFollowScroll,
             ),
           ]),
         ],

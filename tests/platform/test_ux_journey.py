@@ -134,6 +134,7 @@ class EffectVerificationTests(unittest.TestCase):
         """)
         for key, value in {
             "theme": '"dark"', "glassMode": '"auto"', "locale": '"en"',
+            "backgroundBlur": "0.75", "followScroll": "true",
             "reduceMotion": "true", "dayColumns": "8",
             "thumbnailWorkers": "4", "logLevel": '"debug"',
             "order": '"date_desc"',
@@ -154,7 +155,8 @@ class EffectVerificationTests(unittest.TestCase):
             "scan_files": {"discovered": 1},
             "rescan": {"total": 7},
             "extra_source_removed": True,
-            "theme": "dark", "glass_mode": "auto", "reduce_motion": True,
+            "theme": "dark", "material": "liquid_glass", "reduce_motion": True,
+            "background_blur": 0.75, "follow_scroll": True,
             "day_columns": 8,
             "search_name": {"total": 1}, "search_date": {"total": 2},
             "modes": {"year": "1", "month": "1", "day": "1"},
@@ -218,6 +220,15 @@ class EffectVerificationTests(unittest.TestCase):
                           if value["status"] != "PASS"})
         self.assertEqual(evidence["media_count"], 0)
         self.assertEqual(evidence["preferences"]["thumbnailWorkers"], 4)
+
+    def test_fixed_material_and_follow_setting_are_required(self):
+        self.facts["material"] = "reduced"
+        checks, _ = ux_journey.verify_effects(self.record, self.manifest, self.initial, {})
+        self.assertEqual(checks["UX-02"]["status"], "FAIL")
+        self.facts["material"] = "liquid_glass"
+        self.facts["follow_scroll"] = False
+        checks, _ = ux_journey.verify_effects(self.record, self.manifest, self.initial, {})
+        self.assertEqual(checks["UX-02"]["status"], "FAIL")
 
     def test_missing_export_copy_fails_the_export_check_only(self):
         (self.export / "copy-0.png").unlink()

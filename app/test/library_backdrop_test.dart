@@ -6,14 +6,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/services/local_library_gateway.dart';
+import 'package:photo_client/ui/backdrop_viewport.dart';
 import 'package:photo_client/ui/glass_theme.dart';
 import 'package:photo_client/ui/library_backdrop.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
 import 'package:photo_client/ui/local_photo_image.dart';
 import 'package:photo_client/ui/photo_theme.dart';
 import 'package:photo_client/ui/runtime_controller.dart';
+import 'package:photo_client/ui/presentation_preferences.dart';
+
+import 'dart:ui' as ui;
 
 import 'fakes/local_gateway.dart';
+
+class _Preferences extends PresentationController {
+  @override
+  PresentationPreferences build() => const PresentationPreferences();
+}
 
 class _Library extends LocalLibraryController {
   _Library(this.initial);
@@ -64,6 +73,7 @@ void main() {
       ProviderScope(
         overrides: [
           coreGatewayProvider.overrideWithValue(gateway),
+          presentationProvider.overrideWith(_Preferences.new),
           localLibraryProvider.overrideWith(() => library),
         ],
         child: const MaterialApp(
@@ -109,6 +119,164 @@ void main() {
     await gateway.changes.close();
     await gateway.events.close();
   }
+
+  testWidgets(
+    'disabling follow restores album covers and blur changes only the background',
+    (tester) async {
+      final gateway = _Gateway();
+      final library = _Library(
+        LibraryViewState(
+          queryEpoch: 1,
+          extent: 4,
+          loading: false,
+          folder: '/album',
+          pages: {0: gateway.photos},
+          albums: const [
+            LocalAlbum(
+              path: '/album',
+              name: 'Album',
+              count: 4,
+              coverMediaId: 'off-page',
+            ),
+          ],
+        ),
+      );
+      await mount(tester, gateway, library);
+      await complete(tester, gateway, 'off-page');
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(LibraryBackdrop)),
+      );
+      container
+          .read(backdropViewportProvider.notifier)
+          .track(queryEpoch: 1, rank: 1);
+      await tester.pump(const Duration(milliseconds: 300));
+      await complete(tester, gateway, 'p1', photo: gateway.photos[1]);
+      expect(displayedId(tester), 'p1');
+      container.read(presentationProvider.notifier).setBackgroundBlur(.75);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<GlassBackdrop>(find.byType(GlassBackdrop)).blurSigma,
+        27,
+      );
+      expect(
+        tester.widget<ImageFiltered>(find.byType(ImageFiltered)).imageFilter,
+        ui.ImageFilter.blur(sigmaX: 27, sigmaY: 27, tileMode: TileMode.clamp),
+      );
+      container.read(presentationProvider.notifier).setFollowScroll(false);
+      await tester.pumpAndSettle();
+      expect(
+        ((displayed(tester) as ResizeImage).imageProvider as FileImage)
+            .file
+            .path,
+        images['off-page'],
+      );
+      container
+          .read(backdropViewportProvider.notifier)
+          .track(queryEpoch: 1, rank: 3);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(gateway.requests, isNot(contains('p3:512')));
+      library.show(
+        LibraryViewState(
+          queryEpoch: 2,
+          extent: 4,
+          loading: false,
+          folder: '/second',
+          pages: {0: gateway.photos},
+          albums: const [
+            LocalAlbum(
+              path: '/second',
+              name: 'Second',
+              count: 4,
+              coverMediaId: 'p2',
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+      await complete(tester, gateway, 'p2', photo: gateway.photos[2]);
+      expect(displayedId(tester), 'p2');
+      expect(tester.takeException(), isNull);
+      await dispose(tester, gateway);
+    },
+  );
+
+  testWidgets(
+    'viewport waits for visible metadata and never follows a previous destination',
+    (tester) async {
+      final gateway = _Gateway();
+      final library = _Library(
+        LibraryViewState(
+          queryEpoch: 1,
+          extent: 4,
+          loading: false,
+          pages: {
+            0: [gateway.photos[0]],
+          },
+        ),
+      );
+      await mount(tester, gateway, library);
+      await complete(tester, gateway, 'p0', photo: gateway.photos[0]);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(LibraryBackdrop)),
+      );
+      container
+          .read(backdropViewportProvider.notifier)
+          .track(queryEpoch: 1, rank: 1);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(displayedId(tester), 'p0');
+      expect(gateway.requests, ['p0:512']);
+      library.show(
+        LibraryViewState(
+          queryEpoch: 1,
+          extent: 4,
+          loading: false,
+          pages: {0: gateway.photos},
+        ),
+      );
+      await tester.pump();
+      expect(gateway.requests, ['p0:512', 'p1:512']);
+      library.show(
+        LibraryViewState(
+          queryEpoch: 1,
+          extent: 4,
+          loading: false,
+          pages: {0: gateway.photos.take(2).toList()},
+        ),
+      );
+      container
+          .read(backdropViewportProvider.notifier)
+          .track(queryEpoch: 1, rank: 2);
+      await tester.pump(const Duration(milliseconds: 300));
+      await complete(tester, gateway, 'p1', photo: gateway.photos[1]);
+      expect(displayedId(tester), 'p0');
+      library.show(
+        LibraryViewState(
+          queryEpoch: 1,
+          extent: 4,
+          loading: false,
+          pages: {0: gateway.photos},
+        ),
+      );
+      await tester.pump();
+      await complete(tester, gateway, 'p2', photo: gateway.photos[2]);
+      expect(displayedId(tester), 'p2');
+      library.show(
+        LibraryViewState(
+          queryEpoch: 2,
+          extent: 1,
+          loading: false,
+          pages: {
+            0: [gateway.photos[3]],
+          },
+        ),
+      );
+      await tester.pump();
+      await complete(tester, gateway, 'p3', photo: gateway.photos[3]);
+      expect(displayedId(tester), 'p3');
+      expect(gateway.requests, ['p0:512', 'p1:512', 'p2:512', 'p3:512']);
+      await dispose(tester, gateway);
+    },
+  );
 
   testWidgets('saved album cover is decoded before replacing the background', (
     tester,

@@ -30,12 +30,11 @@ File _backdrop() {
 
 Widget _scene({
   required Brightness brightness,
-  required String glassMode,
   required ImageProvider backdrop,
 }) {
   return ProviderScope(
     overrides: [
-      presentationProvider.overrideWith(() => _FixedModeController(glassMode)),
+      presentationProvider.overrideWith(_FixedPresentationController.new),
     ],
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -82,12 +81,9 @@ Widget _scene({
 }
 
 /// Pins the material mode so a frame always shows the same tier.
-class _FixedModeController extends PresentationController {
-  _FixedModeController(this.mode);
-  final String mode;
-
+class _FixedPresentationController extends PresentationController {
   @override
-  PresentationPreferences build() => PresentationPreferences(glassMode: mode);
+  PresentationPreferences build() => const PresentationPreferences();
 }
 
 void _noop(GroupMode _) {}
@@ -196,47 +192,48 @@ class _ReadingPanel extends StatelessWidget {
 }
 
 void main() {
-  for (final mode in ['auto', 'reduced']) {
-    testWidgets('$mode honors the focal lens above a desktop quality ceiling', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            presentationProvider.overrideWith(() => _FixedModeController(mode)),
-          ],
-          child: MaterialApp(
-            theme: photoTheme(Brightness.light),
-            home: const GlassAdaptiveScope(
-              minQuality: GlassQuality.standard,
-              maxQuality: GlassQuality.standard,
-              child: Center(
-                child: ModeSelector(mode: GroupMode.day, onChanged: _noop),
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      '$brightness always uses the full focal lens above a desktop ceiling',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              presentationProvider.overrideWith(
+                _FixedPresentationController.new,
+              ),
+            ],
+            child: MaterialApp(
+              theme: photoTheme(brightness),
+              home: const GlassAdaptiveScope(
+                minQuality: GlassQuality.standard,
+                maxQuality: GlassQuality.standard,
+                child: Center(
+                  child: ModeSelector(mode: GroupMode.day, onChanged: _noop),
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final lens = find
-          .descendant(
-            of: find.byType(ModeSelector),
-            matching: find.byType(GlassContainer),
-          )
-          .first;
-      final expected = mode == 'reduced'
-          ? GlassQuality.standard
-          : GlassQuality.premium;
-      expect(tester.widget<GlassContainer>(lens).quality, expected);
-      expect(
-        GlassAdaptiveScopeData.of(tester.element(lens)).effectiveQuality,
-        expected,
-      );
-      // No blue body tint: all channels of the product glass are neutral.
-      final tint = tester.widget<GlassContainer>(lens).settings!.glassColor;
-      expect(tint.r, tint.g);
-      expect(tint.g, tint.b);
-    });
+        );
+        await tester.pumpAndSettle();
+        final lens = find
+            .descendant(
+              of: find.byType(ModeSelector),
+              matching: find.byType(GlassContainer),
+            )
+            .first;
+        const expected = GlassQuality.premium;
+        expect(tester.widget<GlassContainer>(lens).quality, expected);
+        expect(
+          GlassAdaptiveScopeData.of(tester.element(lens)).effectiveQuality,
+          expected,
+        );
+        // No blue body tint: all channels of the product glass are neutral.
+        final tint = tester.widget<GlassContainer>(lens).settings!.glassColor;
+        expect(tint.r, tint.g);
+        expect(tint.g, tint.b);
+      },
+    );
   }
 
   testWidgets('the glass material over a photo backdrop', (tester) async {
@@ -246,11 +243,7 @@ void main() {
 
     final bytes = _backdrop().readAsBytesSync();
     await tester.pumpWidget(
-      _scene(
-        brightness: Brightness.dark,
-        glassMode: 'full',
-        backdrop: MemoryImage(bytes),
-      ),
+      _scene(brightness: Brightness.dark, backdrop: MemoryImage(bytes)),
     );
     await tester.pumpAndSettle();
 
@@ -296,11 +289,7 @@ void main() {
 
     final bytes = _backdrop().readAsBytesSync();
     await tester.pumpWidget(
-      _scene(
-        brightness: Brightness.dark,
-        glassMode: 'full',
-        backdrop: MemoryImage(bytes),
-      ),
+      _scene(brightness: Brightness.dark, backdrop: MemoryImage(bytes)),
     );
     await tester.pumpAndSettle();
 
