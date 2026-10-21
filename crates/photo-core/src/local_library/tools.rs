@@ -289,6 +289,7 @@ impl LocalLibrary {
                 | "backgroundBlur"
                 | "followScroll"
                 | "reduceMotion"
+                | "autoPlayMotionPhoto"
                 | "dayColumns"
                 | "thumbnailWorkers"
                 | "logLevel"
@@ -298,12 +299,13 @@ impl LocalLibrary {
         }
         let parsed: serde_json::Value =
             serde_json::from_str(&value).map_err(|_| "InvalidPreference")?;
-        if key == "backgroundBlur"
-            && !parsed.as_f64().is_some_and(|v| (0.0..=1.0).contains(&v))
-        {
+        if key == "backgroundBlur" && !parsed.as_f64().is_some_and(|v| (0.0..=1.0).contains(&v)) {
             return Err("InvalidPreference".into());
         }
         if key == "followScroll" && !parsed.is_boolean() {
+            return Err("InvalidPreference".into());
+        }
+        if key == "autoPlayMotionPhoto" && !parsed.is_boolean() {
             return Err("InvalidPreference".into());
         }
         if key == "glassMode" {
@@ -393,6 +395,51 @@ impl LocalLibrary {
             fs::remove_dir_all(&cache).map_err(error)?;
         }
         fs::create_dir_all(cache).map_err(error)?;
+        Ok(())
+    }
+    /// Drop published thumbnails that do not belong to the current encoding
+    /// revision, so a changed encoder rebuilds them instead of reusing the
+    /// entries an older encoder wrote. Previews and extracted motion videos
+    /// live beside them and are kept.
+    pub fn prune_thumbnail_cache(&self) -> Result<(), String> {
+        let cache = self.root.join("cache");
+        if !cache.is_dir() {
+            return Ok(());
+        }
+        let current = format!("r{}", crate::media::THUMBNAIL_CACHE_REVISION);
+        for media_entry in fs::read_dir(&cache).map_err(error)? {
+            let media_entry = media_entry.map_err(error)?;
+            if !media_entry.path().is_dir() {
+                continue;
+            }
+            for version_entry in fs::read_dir(media_entry.path()).map_err(error)? {
+                let version_entry = version_entry.map_err(error)?;
+                if !version_entry.path().is_dir() {
+                    continue;
+                }
+                for entry in fs::read_dir(version_entry.path()).map_err(error)? {
+                    let entry = entry.map_err(error)?;
+                    let path = entry.path();
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    let stale = if path.is_dir() {
+                        name.strip_prefix('r')
+                            .and_then(|revision| revision.parse::<u32>().ok())
+                            .is_some()
+                    } else {
+                        name.starts_with("thumbnail-")
+                    };
+                    if !stale || name == current {
+                        continue;
+                    }
+                    if path.is_dir() {
+                        let _ = fs::remove_dir_all(&path);
+                    } else {
+                        let _ = fs::remove_file(&path);
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }

@@ -4,13 +4,20 @@ use std::path::{Path, PathBuf};
 
 use image::codecs::jpeg::JpegEncoder;
 use image::metadata::Orientation;
-use image::{DynamicImage, ImageReader, Limits};
+use image::{DynamicImage, ImageReader, Limits, Rgb, RgbImage};
 use uuid::Uuid;
 
-use super::{Fingerprint, check_source, format_for_path, headers};
+use super::{Fingerprint, check_source, format_for_path, headers, scaled};
 
 const DECODE_BUDGET: u64 = 128 * 1024 * 1024;
 const WORKSPACE_RESERVE: u64 = 16 * 1024 * 1024;
+/// Quality of the published thumbnail. The pre-refactor client stored its
+/// cache at quality 90, and the grid has to look the same after the rewrite.
+pub(super) const THUMBNAIL_JPEG_QUALITY: u8 = 90;
+/// Upper bound on the source pixel count the bounded decoders accept. Those
+/// decoders keep memory proportional to the thumbnail, so this only rejects
+/// pathological sources that would burn CPU without adding detail.
+const MAX_SOURCE_PIXELS: u64 = 256 * 1024 * 1024;
 
 /// Limit compressed input to the captured file extent even if the file grows
 /// during a decoder read_to_end. Seeking cannot escape that original extent.
@@ -57,10 +64,14 @@ impl Drop for PendingThumbnail {
 /// identities and size/mtime fingerprints are checked before reading, after
 /// decoding and immediately before publication. No original is opened for write.
 ///
-/// The 128 MiB admission budget includes compressed input, conservative decoded
-/// buffers, thumbnail transformations and a codec workspace reserve. Codec heap
-/// overhead is not an operating-system RSS hard limit. Oversized images fail
-/// with DecodeBudgetExceeded, without replacing a previous cache entry.
+/// A source whose full-resolution decode fits the 128 MiB admission budget is
+/// decoded in full and reduced afterwards, which keeps the sharpest result.
+/// Larger sources are derived through the bounded decoders, so a 20 MP photo
+/// still produces a thumbnail instead of being refused. The budget covers
+/// compressed input, conservative decoded buffers, thumbnail transformations
+/// and a codec workspace reserve. Codec heap overhead is not an
+/// operating-system RSS hard limit. Oversized images fail with
+/// DecodeBudgetExceeded, without replacing a previous cache entry.
 pub fn prepare_thumbnail(
     source: &Path,
     expected_size: u64,
@@ -103,55 +114,38 @@ pub fn prepare_thumbnail(
         ((u64::from(header.width) * u64::from(max_edge.min(longest))) / u64::from(longest)).max(1);
     let target_height =
         ((u64::from(header.height) * u64::from(max_edge.min(longest))) / u64::from(longest)).max(1);
-    let decoded_bytes = u64::from(header.width)
-        .checked_mul(u64::from(header.height))
-        .and_then(|v| v.checked_mul(header.bytes_per_pixel));
     let thumbnail_bytes = target_width
         .checked_mul(target_height)
         .and_then(|v| v.checked_mul(16));
+    let decoded_bytes = u64::from(header.width)
+        .checked_mul(u64::from(header.height))
+        .and_then(|v| v.checked_mul(header.bytes_per_pixel));
     let admission = decoded_bytes
         .and_then(|v| v.checked_mul(2))
         .and_then(|v| v.checked_add(expected.size))
         .and_then(|v| v.checked_add(thumbnail_bytes?))
         .and_then(|v| v.checked_add(WORKSPACE_RESERVE));
-    if admission.is_none_or(|bytes| bytes > DECODE_BUDGET) {
-        return Err(
-            "DecodeBudgetExceeded: image exceeds the 128 MiB thumbnail decode budget".into(),
-        );
-    }
-    check_source(source, &file, &expected)?;
-    file.seek(SeekFrom::Start(0))
-        .map_err(|e| format!("SourceRead: {e}"))?;
-    let extent = SourceExtent {
-        file: file.try_clone().map_err(|e| format!("SourceRead: {e}"))?,
-        position: 0,
-        limit: expected.size,
+    let within_budget = admission.is_some_and(|bytes| bytes <= DECODE_BUDGET);
+    let plan = Plan {
+        source,
+        expected: &expected,
+        format,
+        header: &header,
+        max_edge,
+        target_width: target_width as u32,
+        target_height: target_height as u32,
+        thumbnail_bytes: thumbnail_bytes.unwrap_or(0),
     };
-    let mut reader = ImageReader::with_format(BufReader::new(extent), format);
-    let mut limits = Limits::default();
-    limits.max_image_width = Some(header.width);
-    limits.max_image_height = Some(header.height);
-    limits.max_alloc =
-        Some(DECODE_BUDGET - expected.size - thumbnail_bytes.unwrap() - WORKSPACE_RESERVE);
-    reader.limits(limits);
-    let decoded = reader.decode();
-    check_source(source, &file, &expected)?;
-    let decoded = decoded.map_err(|e| format!("ThumbnailDecodeFailed: {e}"))?;
-    if decoded.width() != header.width || decoded.height() != header.height {
-        return Err("SourceChanged: decoded dimensions disagree with captured header".into());
-    }
-    let mut small = if longest <= max_edge {
-        decoded
+    let mut small = if within_budget {
+        decode_full(&plan, &mut file)?
     } else {
-        let reduced = decoded.thumbnail(target_width as u32, target_height as u32);
-        drop(decoded);
-        reduced
+        decode_scaled(&plan, &mut file)?
     };
     // Rotate only after reducing the image, avoiding a second full original buffer.
     small.apply_orientation(
         Orientation::from_exif(header.orientation).unwrap_or(Orientation::NoTransforms),
     );
-    let rgb = DynamicImage::ImageRgb8(small.into_rgb8());
+    let rgb = flatten_on_white(small);
     let parent = destination
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -165,7 +159,7 @@ pub fn prepare_thumbnail(
         .map_err(|e| format!("ThumbnailWriteFailed: {e}"))?;
     {
         let mut writer = BufWriter::new(&output);
-        JpegEncoder::new_with_quality(&mut writer, 85)
+        JpegEncoder::new_with_quality(&mut writer, THUMBNAIL_JPEG_QUALITY)
             .encode_image(&rgb)
             .map_err(|e| format!("ThumbnailEncodeFailed: {e}"))?;
         writer
@@ -179,4 +173,160 @@ pub fn prepare_thumbnail(
     check_source(source, &file, &expected)?;
     fs::rename(&pending.0, destination).map_err(|e| format!("ThumbnailPublishFailed: {e}"))?;
     Ok(())
+}
+
+/// Everything one thumbnail needs: the captured source, its fingerprint and
+/// the header the target size was derived from.
+struct Plan<'a> {
+    source: &'a Path,
+    expected: &'a Fingerprint,
+    format: image::ImageFormat,
+    header: &'a headers::Header,
+    max_edge: u32,
+    target_width: u32,
+    target_height: u32,
+    thumbnail_bytes: u64,
+}
+
+/// Decode the original at full resolution and reduce it afterwards. This is
+/// the sharpest path and stays the default while the admission budget allows
+/// it.
+fn decode_full(plan: &Plan<'_>, file: &mut File) -> Result<DynamicImage, String> {
+    let header = plan.header;
+    let longest = header.width.max(header.height);
+    check_source_path(file)?;
+    let extent = SourceExtent {
+        file: file.try_clone().map_err(|e| format!("SourceRead: {e}"))?,
+        position: 0,
+        limit: plan.expected.size,
+    };
+    let mut reader = ImageReader::with_format(BufReader::new(extent), plan.format);
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(header.width);
+    limits.max_image_height = Some(header.height);
+    limits.max_alloc = Some(
+        DECODE_BUDGET
+            .saturating_sub(plan.expected.size)
+            .saturating_sub(plan.thumbnail_bytes)
+            .saturating_sub(WORKSPACE_RESERVE),
+    );
+    reader.limits(limits);
+    let decoded = reader.decode();
+    check_source(plan.source, file, plan.expected)?;
+    let decoded = decoded.map_err(|e| format!("ThumbnailDecodeFailed: {e}"))?;
+    if decoded.width() != header.width || decoded.height() != header.height {
+        return Err("SourceChanged: decoded dimensions disagree with captured header".into());
+    }
+    let reduced = if longest <= plan.max_edge {
+        decoded
+    } else {
+        decoded.thumbnail(plan.target_width, plan.target_height)
+    };
+    Ok(reduced)
+}
+
+/// Derive the thumbnail without materialising the original.
+///
+/// JPEG frames are decoded with IDCT scaling and PNG rows are streamed, so the
+/// peak allocation follows the thumbnail size. Sources beyond
+/// [`MAX_SOURCE_PIXELS`], and formats without a bounded decoder, still fail
+/// with DecodeBudgetExceeded.
+fn decode_scaled(plan: &Plan<'_>, file: &mut File) -> Result<DynamicImage, String> {
+    let header = plan.header;
+    let pixels = u64::from(header.width).saturating_mul(u64::from(header.height));
+    if pixels > MAX_SOURCE_PIXELS {
+        return Err(
+            "DecodeBudgetExceeded: image exceeds the 256 Mpx thumbnail source limit".into(),
+        );
+    }
+    check_source_path(file)?;
+    let extent = SourceExtent {
+        file: file.try_clone().map_err(|e| format!("SourceRead: {e}"))?,
+        position: 0,
+        limit: plan.expected.size,
+    };
+    let decoded = match plan.format {
+        image::ImageFormat::Jpeg => {
+            // The JPEG decoder holds the compressed frame in memory.
+            let scaled_bytes = u64::from(plan.target_width)
+                .checked_mul(u64::from(plan.target_height))
+                .and_then(|v| v.checked_mul(3 * 8))
+                .unwrap_or(u64::MAX);
+            let admission = plan
+                .expected
+                .size
+                .checked_add(scaled_bytes)
+                .and_then(|v| v.checked_add(WORKSPACE_RESERVE));
+            if admission.is_none_or(|bytes| bytes > DECODE_BUDGET) {
+                return Err(
+                    "DecodeBudgetExceeded: image exceeds the 128 MiB thumbnail decode budget"
+                        .into(),
+                );
+            }
+            scaled::decode_jpeg(
+                extent,
+                header.width,
+                header.height,
+                plan.target_width,
+                plan.target_height,
+            )
+        }
+        image::ImageFormat::Png => scaled::decode_png(
+            extent,
+            header.width,
+            header.height,
+            plan.target_width,
+            plan.target_height,
+        ),
+        _ => {
+            return Err(
+                "DecodeBudgetExceeded: image exceeds the 128 MiB thumbnail decode budget".into(),
+            );
+        }
+    };
+    check_source(plan.source, file, plan.expected)?;
+    let decoded = decoded?;
+    Ok(DynamicImage::ImageRgb8(decoded))
+}
+
+/// Rewind the source before a decoder reads it from the beginning.
+fn check_source_path(file: &mut File) -> Result<(), String> {
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| format!("SourceRead: {e}"))?;
+    Ok(())
+}
+
+/// Flatten transparency onto white, the same opaque result the pre-refactor
+/// client produced before it published a thumbnail.
+fn flatten_on_white(image: DynamicImage) -> RgbImage {
+    match image {
+        DynamicImage::ImageRgba8(rgba) => {
+            let mut rgb = RgbImage::new(rgba.width(), rgba.height());
+            for (target, source) in rgb.pixels_mut().zip(rgba.pixels()) {
+                *target = Rgb([
+                    blend_on_white(source.0[0], source.0[3]),
+                    blend_on_white(source.0[1], source.0[3]),
+                    blend_on_white(source.0[2], source.0[3]),
+                ]);
+            }
+            rgb
+        }
+        DynamicImage::ImageLumaA8(luma) => {
+            let mut rgb = RgbImage::new(luma.width(), luma.height());
+            for (target, source) in rgb.pixels_mut().zip(luma.pixels()) {
+                *target = Rgb([
+                    blend_on_white(source.0[0], source.0[1]),
+                    blend_on_white(source.0[0], source.0[1]),
+                    blend_on_white(source.0[0], source.0[1]),
+                ]);
+            }
+            rgb
+        }
+        other => other.into_rgb8(),
+    }
+}
+
+fn blend_on_white(channel: u8, alpha: u8) -> u8 {
+    let alpha = u16::from(alpha);
+    ((u16::from(channel) * alpha + 255 * (255 - alpha)) / 255) as u8
 }

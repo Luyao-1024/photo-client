@@ -156,3 +156,34 @@ fn foreign_source_and_invalid_batch_roll_back_counts() {
     assert!(a.query(PhotoFilter::default(), None, 0).is_err());
     assert!(a.set_favorite("absent".into(), true).is_err());
 }
+
+#[test]
+fn stale_thumbnail_revisions_are_pruned_and_previews_survive() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    let library = LocalLibrary::open(root.path()).unwrap();
+    let source = library.add_source(photos.path()).unwrap();
+    library
+        .upsert_batch(source, vec![input(photos.path(), "a.jpg", 1)])
+        .unwrap();
+    let media = library.query(PhotoFilter::default(), None, 10).unwrap();
+    let media_id = media.items[0].id.clone();
+    let version = library.photo(media_id.clone()).unwrap().content_version;
+    let version_directory = root
+        .path()
+        .join("cache")
+        .join(&media_id)
+        .join(version.to_string());
+    fs::create_dir_all(version_directory.join("r1")).unwrap();
+    fs::write(version_directory.join("thumbnail-512.jpg"), b"old encoder").unwrap();
+    fs::write(
+        version_directory.join("r1/thumbnail-512.jpg"),
+        b"old revision",
+    )
+    .unwrap();
+    fs::write(version_directory.join("preview.jpg"), b"preview").unwrap();
+    library.prune_thumbnail_cache().unwrap();
+    assert!(!version_directory.join("thumbnail-512.jpg").exists());
+    assert!(!version_directory.join("r1").exists());
+    assert!(version_directory.join("preview.jpg").exists());
+}

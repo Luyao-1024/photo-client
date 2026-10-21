@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::{
     fs,
-    io::Read,
+    io::{Read, Write},
     path::Path,
     process::{Command, Stdio},
     time::{Duration, Instant},
@@ -75,8 +75,10 @@ pub(super) fn video_header(path: &Path) -> Result<super::headers::Header, String
 pub(super) fn thumbnail(path: &Path, max_edge: u32, destination: &Path) -> Result<(), String> {
     let dir = destination.parent().ok_or("InvalidDestination")?;
     fs::create_dir_all(dir).map_err(|_| "CacheUnavailable")?;
-    let stage = tempfile::Builder::new()
-        .suffix(".jpg")
+    // The frame is extracted losslessly and then published through the shared
+    // encoder, so a video thumbnail carries the same quality as an image one.
+    let frame = tempfile::Builder::new()
+        .suffix(".png")
         .tempfile_in(dir)
         .map_err(|_| "CacheUnavailable")?;
     let mut cmd = Command::new("ffmpeg");
@@ -89,9 +91,23 @@ pub(super) fn thumbnail(path: &Path, max_edge: u32, destination: &Path) -> Resul
             &format!("scale={max_edge}:{max_edge}:force_original_aspect_ratio=decrease"),
             "-y",
         ])
-        .arg(stage.path());
+        .arg(frame.path());
     output(cmd)?;
-    image::image_dimensions(stage.path()).map_err(|_| "VideoThumbnailFailed")?;
+    let decoded = image::open(frame.path()).map_err(|_| "VideoThumbnailFailed")?;
+    let mut stage = tempfile::Builder::new()
+        .suffix(".jpg")
+        .tempfile_in(dir)
+        .map_err(|_| "CacheUnavailable")?;
+    {
+        let mut writer = std::io::BufWriter::new(stage.as_file_mut());
+        image::codecs::jpeg::JpegEncoder::new_with_quality(
+            &mut writer,
+            super::thumbnail::THUMBNAIL_JPEG_QUALITY,
+        )
+        .encode_image(&decoded.to_rgb8())
+        .map_err(|_| "VideoThumbnailFailed")?;
+        writer.flush().map_err(|_| "CacheUnavailable")?;
+    }
     stage.as_file().sync_all().map_err(|_| "CacheUnavailable")?;
     stage.persist(destination).map_err(|_| "CacheUnavailable")?;
     Ok(())

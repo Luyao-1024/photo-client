@@ -20,6 +20,7 @@ class PresentationPreferences {
     this.backgroundBlur = .5,
     this.followScroll = true,
     this.reduceMotion = false,
+    this.autoPlayMotionPhoto = false,
     this.dayColumns = 5,
     this.thumbnailWorkers = 2,
     this.logLevel = 'info',
@@ -28,7 +29,7 @@ class PresentationPreferences {
   });
   final ThemeMode themeMode;
   final Locale? locale;
-  final bool reduceMotion, saveFailed, followScroll;
+  final bool reduceMotion, saveFailed, followScroll, autoPlayMotionPhoto;
   final String logLevel, order;
   final double transparency, backgroundBlur;
   final int dayColumns, thumbnailWorkers;
@@ -40,6 +41,7 @@ class PresentationPreferences {
     double? backgroundBlur,
     bool? followScroll,
     bool? reduceMotion,
+    bool? autoPlayMotionPhoto,
     int? dayColumns,
     int? thumbnailWorkers,
     String? logLevel,
@@ -52,6 +54,7 @@ class PresentationPreferences {
     backgroundBlur: backgroundBlur ?? this.backgroundBlur,
     followScroll: followScroll ?? this.followScroll,
     reduceMotion: reduceMotion ?? this.reduceMotion,
+    autoPlayMotionPhoto: autoPlayMotionPhoto ?? this.autoPlayMotionPhoto,
     dayColumns: dayColumns ?? this.dayColumns,
     thumbnailWorkers: thumbnailWorkers ?? this.thumbnailWorkers,
     logLevel: logLevel ?? this.logLevel,
@@ -101,6 +104,7 @@ class PresentationController extends Notifier<PresentationPreferences> {
             .clamp(0, 1),
         followScroll: data['followScroll'] as bool? ?? true,
         reduceMotion: data['reduceMotion'] as bool? ?? false,
+        autoPlayMotionPhoto: data['autoPlayMotionPhoto'] as bool? ?? false,
         dayColumns: ((data['dayColumns'] as int?) ?? 5).clamp(3, 8),
         thumbnailWorkers: ((data['thumbnailWorkers'] as int?) ?? 2).clamp(1, 4),
         logLevel: data['logLevel'] as String? ?? 'info',
@@ -160,6 +164,12 @@ class PresentationController extends Notifier<PresentationPreferences> {
   void setReduceMotion(bool value) {
     state = state.copyWith(reduceMotion: value);
     _persist('reduceMotion', value);
+  }
+
+  /// Play the motion clip as soon as a dynamic photo is opened.
+  void setAutoPlayMotionPhoto(bool value) {
+    state = state.copyWith(autoPlayMotionPhoto: value);
+    _persist('autoPlayMotionPhoto', value);
   }
 
   void setDayColumns(int value) {

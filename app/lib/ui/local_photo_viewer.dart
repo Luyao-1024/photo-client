@@ -12,11 +12,13 @@ import 'glass_dialog.dart';
 import 'glass_surface.dart';
 import 'glass_theme.dart';
 import 'cloud_sync_controller.dart';
+import 'local_animated_stage.dart';
 import 'local_library_controller.dart';
 import 'local_photo_editor.dart';
 import 'local_photo_image.dart';
 import 'local_video_stage.dart';
 import 'photo_theme.dart';
+import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
 
@@ -61,13 +63,14 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   bool _immersive = false;
   bool _chromeHidden = false;
   Timer? _idleTimer;
-  bool _editing = false, _showMotion = false;
+  bool _editing = false, _showMotion = false, _animated = false;
   final _editorKey = GlobalKey<LocalPhotoEditorState>();
   final _videoKey = GlobalKey<LocalVideoStageState>();
   Future<Map<String, dynamic>>? _details;
   String? _detailsIdentity;
   Future<String?>? _preview;
   Future<Object?>? _motionVideo;
+  Future<List<AnimatedFrame>>? _animatedFrames;
   late int _resolvedIndex = widget.initialIndex;
   Timer? _decodeDebounce;
   bool _editAllowed = false;
@@ -557,6 +560,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       _detailsIdentity = identity;
       _editAllowed = false;
       _showMotion = false;
+      _animated = false;
       _details = controller
           .localCommand({'op': 'metadata', 'id': photo.id})
           .then(
@@ -567,8 +571,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
           .catchError((Object error) => <String, dynamic>{});
       _details!.then((data) {
         if (mounted && _detailsIdentity == identity) {
-          setState(
-            () => _editAllowed =
+          final motion = data['motion_offset'] != null;
+          final autoPlay = ref.read(presentationProvider).autoPlayMotionPhoto;
+          setState(() {
+            _animated = data['animated'] == true;
+            _editAllowed =
                 photo.mediaKind == 'image' &&
                 [
                   'image/jpeg',
@@ -577,11 +584,15 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                 ].contains(photo.mimeType) &&
                 data['animated'] != true &&
                 data['hdr'] != true &&
-                data['motion_offset'] == null,
-          );
+                data['motion_offset'] == null;
+            // The pre-refactor client could start the clip right away when the
+            // preference was on.
+            if (motion && autoPlay) _showMotion = true;
+          });
         }
       });
       _motionVideo = null;
+      _animatedFrames = null;
       _preview = photo.mimeType == 'image/heic'
           ? controller
                 .localCommand({'op': 'preview', 'id': photo.id})
@@ -883,6 +894,42 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                 ),
               )
             : const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_animated) {
+      return FutureBuilder<List<AnimatedFrame>>(
+        future: _animatedFrames ??= ref
+            .read(localLibraryProvider.notifier)
+            .localCommand({'op': 'animatedFrames', 'id': photo.id})
+            .then(
+              (value) => (value as List)
+                  .map((entry) => AnimatedFrame.fromJson(
+                        Map<String, dynamic>.from(entry as Map),
+                      ))
+                  .toList(),
+            ),
+        builder: (context, snapshot) {
+          final frames = snapshot.data;
+          if (frames == null || frames.isEmpty) {
+            return Center(
+              child: snapshot.hasError
+                  ? Text(
+                      strings.imageUnavailable,
+                      style: const TextStyle(color: Colors.white),
+                    )
+                  : const CircularProgressIndicator(),
+            );
+          }
+          return InteractiveViewer(
+            key: ValueKey('viewer-image-${photo.id}-${photo.contentVersion}'),
+            transformationController: _transform,
+            minScale: _minScale,
+            maxScale: _maxScale,
+            child: SizedBox.expand(
+              child: AnimatedImageStage(frames: frames),
+            ),
+          );
+        },
       );
     }
     if (photo.mimeType == 'image/heic') {

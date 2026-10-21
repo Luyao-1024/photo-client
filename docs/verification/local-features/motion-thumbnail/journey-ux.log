@@ -1,0 +1,1191 @@
+MESA-EGL: warning: DRI3 error: Could not get DRI3 device
+MESA-EGL: warning: Ensure your X server supports DRI3 to get accelerated rendering
+
+(io.github.photo_client.photo_client:259234): Atk-CRITICAL **: 02:43:18.486: atk_socket_embed: assertion 'plug_id != NULL' failed
+[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
+package:media_kit_libs_linux registered.
+PHOTO_CLIENT_LOCAL_STEP {"id":"journey","status":"START","at":"2026-10-21T18:43:18.558508Z","detail":"ux"}
+GLASS_EFFECTIVE premium/probe/frost=true
+GLASS_LENS chrome/premium/frost=true
+PHOTO_CLIENT_LOCAL_STEP {"id":"runtime-ready","status":"START","at":"2026-10-21T18:43:18.703067Z"}
+GLASS_LENS raised/premium/frost=true
+PHOTO_CLIENT_LOCAL_STEP {"id":"runtime-ready","status":"PASS","at":"2026-10-21T18:43:18.754955Z","detail":"51ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"library-open","status":"START","at":"2026-10-21T18:43:18.755094Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"library-open","status":"PASS","at":"2026-10-21T18:43:18.755185Z","detail":"0ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-empty-library","status":"START","at":"2026-10-21T18:43:18.755209Z"}
+GLASS_EFFECTIVE premium/warmup/frost=true
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-empty-library","status":"PASS","at":"2026-10-21T18:43:18.942160Z","detail":"186ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-open-settings-button","status":"START","at":"2026-10-21T18:43:18.942246Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:19.002655Z","detail":"open-settings at 836.0,572.0"}
+INPUT step=1 kind=tap 
+INPUT step=1 status=ok detail=click at 836,572
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:19.411925Z","detail":"open-settings"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-01-settings","status":"START","at":"2026-10-21T18:43:19.640290Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-01-settings","status":"PASS","at":"2026-10-21T18:43:20.073035Z","detail":"432ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-open-settings-button","status":"PASS","at":"2026-10-21T18:43:20.073128Z","detail":"1130ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-shortcuts","status":"START","at":"2026-10-21T18:43:20.073146Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:20.125087Z","detail":"settings-shortcuts at 810.5,464.0"}
+INPUT step=2 kind=tap 
+INPUT step=2 status=ok detail=click at 810,464
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:20.519966Z","detail":"settings-shortcuts"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:20.749139Z","detail":"shortcuts-close at 952.0,831.0"}
+INPUT step=3 kind=tap 
+INPUT step=3 status=ok detail=click at 952,831
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:21.139911Z","detail":"shortcuts-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-shortcuts","status":"PASS","at":"2026-10-21T18:43:21.287806Z","detail":"1214ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-appearance","status":"START","at":"2026-10-21T18:43:21.287876Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:21.341055Z","detail":"settings-category-0 at 360.0,226.0"}
+INPUT step=4 kind=tap 
+INPUT step=4 status=ok detail=click at 360,226
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:21.734353Z","detail":"settings-category-0"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:21.934055Z","detail":"settings-language-en at 651.2702655792236,331.0"}
+INPUT step=5 kind=tap 
+INPUT step=5 status=ok detail=click at 651,331
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:22.322458Z","detail":"settings-language-en"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:22.509739Z","detail":"settings-category-0 at 360.0,226.0"}
+INPUT step=6 kind=tap 
+INPUT step=6 status=ok detail=click at 360,226
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:22.895071Z","detail":"settings-category-0"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:23.322626Z","detail":"settings-theme-dark at 712.2843732833862,597.0"}
+INPUT step=7 kind=tap 
+INPUT step=7 status=ok detail=click at 712,597
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:23.712947Z","detail":"settings-theme-dark"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:23.956744Z","detail":"settings-category-1 at 360.0,282.0"}
+INPUT step=8 kind=tap 
+INPUT step=8 status=ok detail=click at 360,282
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:24.345936Z","detail":"settings-category-1"}
+INPUT step=9 kind=tap 
+INPUT step=9 status=ok detail=click at 970,470
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:25.343656Z","detail":"settings-follow-scroll at 810.5,616.0"}
+INPUT step=10 kind=tap 
+INPUT step=10 status=ok detail=click at 810,616
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:25.728930Z","detail":"settings-follow-scroll"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:25.919814Z","detail":"settings-follow-scroll at 810.5,616.0"}
+INPUT step=11 kind=tap 
+INPUT step=11 status=ok detail=click at 810,616
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:26.308186Z","detail":"settings-follow-scroll"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:26.487057Z","detail":"settings-category-0 at 360.0,226.0"}
+INPUT step=12 kind=tap 
+INPUT step=12 status=ok detail=click at 360,226
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:26.869884Z","detail":"settings-category-0"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:27.241783Z","detail":"settings-reduce-motion at 810.5,730.0"}
+INPUT step=13 kind=tap 
+INPUT step=13 status=ok detail=click at 810,730
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:27.580848Z","detail":"settings-reduce-motion"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:27.818029Z","detail":"settings-category-0 at 360.0,226.0"}
+INPUT step=14 kind=tap 
+INPUT step=14 status=ok detail=click at 360,226
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:28.206215Z","detail":"settings-category-0"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:28.393328Z","detail":"settings-language-zh at 536.199878692627,331.0"}
+INPUT step=15 kind=tap 
+INPUT step=15 status=ok detail=click at 536,331
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:28.775911Z","detail":"settings-language-zh"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:28.982003Z","detail":"settings-language-en at 651.2702655792236,331.0"}
+INPUT step=16 kind=tap 
+INPUT step=16 status=ok detail=click at 651,331
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:29.363869Z","detail":"settings-language-en"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-appearance","status":"PASS","at":"2026-10-21T18:43:29.565554Z","detail":"8277ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-grid-controls","status":"START","at":"2026-10-21T18:43:29.565640Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:29.617996Z","detail":"settings-category-2 at 360.0,342.0"}
+INPUT step=17 kind=tap 
+INPUT step=17 status=ok detail=click at 360,342
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:30.000517Z","detail":"settings-category-2"}
+INPUT step=18 kind=tap 
+INPUT step=18 status=ok detail=click at 1117,356
+INPUT step=19 kind=tap 
+INPUT step=19 status=ok detail=click at 810,408
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:43:31.898189Z","detail":"\"Name: ascending\" at 558.79296875,504.0"}
+INPUT step=20 kind=tap 
+INPUT step=20 status=ok detail=click at 559,504
+INPUT step=21 kind=tap 
+INPUT step=21 status=ok detail=click at 810,408
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:43:32.957582Z","detail":"\"Date: newest first\" at 559.5096893310547,312.0"}
+INPUT step=22 kind=tap 
+INPUT step=22 status=ok detail=click at 560,312
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-grid-controls","status":"PASS","at":"2026-10-21T18:43:33.453810Z","detail":"3888ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-add-folder","status":"START","at":"2026-10-21T18:43:33.453885Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:33.699120Z","detail":"add-folder at 559.6645431518555,704.0"}
+INPUT step=23 kind=tap 
+INPUT step=23 status=ok detail=click at 560,704
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:34.084097Z","detail":"add-folder"}
+INPUT step=24 kind=tap 
+INPUT step=24 status=ok detail=click at 810,408
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:43:35.041312Z","detail":"\"Name: ascending\" at 558.79296875,504.0"}
+INPUT step=25 kind=tap 
+INPUT step=25 status=ok detail=click at 559,504
+INPUT step=26 kind=tap 
+INPUT step=26 status=ok detail=click at 810,408
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:43:36.307618Z","detail":"\"Date: newest first\" at 559.5096893310547,312.0"}
+INPUT step=27 kind=tap 
+INPUT step=27 status=ok detail=click at 560,312
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-add-folder","status":"PASS","at":"2026-10-21T18:43:36.944707Z","detail":"3490ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-add-files","status":"START","at":"2026-10-21T18:43:36.944830Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:37.495777Z","detail":"add-files at 708.3370895385742,662.0"}
+INPUT step=28 kind=tap 
+INPUT step=28 status=ok detail=click at 708,662
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:37.881500Z","detail":"add-files"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-add-files","status":"PASS","at":"2026-10-21T18:43:38.096321Z","detail":"1151ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-rescan","status":"START","at":"2026-10-21T18:43:38.096396Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:38.656541Z","detail":"settings-rescan at 846.2606163024902,590.0"}
+INPUT step=29 kind=tap 
+INPUT step=29 status=ok detail=click at 846,590
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:39.040214Z","detail":"settings-rescan"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-rescan","status":"PASS","at":"2026-10-21T18:43:39.249888Z","detail":"1153ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-remove-file-source-keeps-file","status":"START","at":"2026-10-21T18:43:39.249954Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:39.551032Z","detail":"settings-remove-source-/tmp/ux-merged/ux/extra/extra.png at 1106.0,730.0"}
+INPUT step=30 kind=tap 
+INPUT step=30 status=ok detail=click at 1106,730
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:39.935907Z","detail":"settings-remove-source-/tmp/ux-merged/ux/extra/extra.png"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:40.216040Z","detail":"remove-source-confirm at 919.6854858398438,516.0"}
+INPUT step=31 kind=tap 
+INPUT step=31 status=ok detail=click at 920,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:40.598665Z","detail":"remove-source-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-settings-remove-file-source-keeps-file","status":"PASS","at":"2026-10-21T18:43:40.800461Z","detail":"1550ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-close-settings","status":"START","at":"2026-10-21T18:43:40.800518Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:40.855744Z","detail":"settings-close at 1134.0,150.0"}
+INPUT step=32 kind=tap 
+INPUT step=32 status=ok detail=click at 1134,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:41.239989Z","detail":"settings-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-close-settings","status":"PASS","at":"2026-10-21T18:43:41.455761Z","detail":"655ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-grid-modes","status":"START","at":"2026-10-21T18:43:41.455898Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:41.509284Z","detail":"mode-year at 764.0,848.0"}
+INPUT step=33 kind=tap 
+INPUT step=33 status=ok detail=click at 764,848
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:41.894356Z","detail":"mode-year"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:42.268987Z","detail":"mode-month at 836.0,848.0"}
+INPUT step=34 kind=tap 
+INPUT step=34 status=ok detail=click at 836,848
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:42.653602Z","detail":"mode-month"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:43.027138Z","detail":"mode-day at 908.0,848.0"}
+INPUT step=35 kind=tap 
+INPUT step=35 status=ok detail=click at 908,848
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:43.410910Z","detail":"mode-day"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-02-grid","status":"START","at":"2026-10-21T18:43:43.778674Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-02-grid","status":"PASS","at":"2026-10-21T18:43:44.257144Z","detail":"478ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-grid-modes","status":"PASS","at":"2026-10-21T18:43:44.257236Z","detail":"2801ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-sidebar-media-filters","status":"START","at":"2026-10-21T18:43:44.257258Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:44.309039Z","detail":"sidebar-media-images at 120.0,400.0"}
+INPUT step=36 kind=tap 
+INPUT step=36 status=ok detail=click at 120,400
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:44.694918Z","detail":"sidebar-media-images"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:44.881332Z","detail":"sidebar-media-videos at 120.0,448.0"}
+INPUT step=37 kind=tap 
+INPUT step=37 status=ok detail=click at 120,448
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:45.278879Z","detail":"sidebar-media-videos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:45.399986Z","detail":"sidebar-photos at 120.0,92.0"}
+INPUT step=38 kind=tap 
+INPUT step=38 status=ok detail=click at 120,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:45.739257Z","detail":"sidebar-photos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-sidebar-media-filters","status":"PASS","at":"2026-10-21T18:43:45.870950Z","detail":"1613ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-search-name-scope","status":"START","at":"2026-10-21T18:43:45.871047Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:45.923847Z","detail":"library-search at 1328.0,94.0"}
+INPUT step=39 kind=tap 
+INPUT step=39 status=ok detail=click at 1328,94
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:46.318776Z","detail":"library-search"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:46.586305Z","detail":"search-scope-name at 1313.99609375,158.0"}
+INPUT step=40 kind=tap 
+INPUT step=40 status=ok detail=click at 1314,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:46.983883Z","detail":"search-scope-name"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:47.152960Z","detail":"library-search at 742.42041015625,158.0"}
+INPUT step=41 kind=tap 
+INPUT step=41 status=ok detail=click at 742,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:47.550899Z","detail":"library-search"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:43:47.700238Z","detail":"ctrl+a"}
+INPUT step=42 kind=key 
+INPUT step=42 status=ok detail=key ctrl+a
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:43:47.929326Z","detail":"ctrl+a"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"SEND","at":"2026-10-21T18:43:47.993353Z","detail":"alpha (5 characters)"}
+INPUT step=43 kind=text 
+INPUT step=43 status=ok detail=typed 5 characters
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"ACK","at":"2026-10-21T18:43:48.429812Z","detail":"alpha"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-03-search","status":"START","at":"2026-10-21T18:43:48.531755Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-03-search","status":"PASS","at":"2026-10-21T18:43:49.087378Z","detail":"555ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:43:49.087470Z","detail":"Escape"}
+INPUT step=44 kind=key 
+INPUT step=44 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:43:49.262734Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-search-name-scope","status":"PASS","at":"2026-10-21T18:43:49.473011Z","detail":"3601ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-search-date-scope","status":"START","at":"2026-10-21T18:43:49.473099Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:49.528207Z","detail":"library-search at 1328.0,94.0"}
+INPUT step=45 kind=tap 
+INPUT step=45 status=ok detail=click at 1328,94
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:49.918580Z","detail":"library-search"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:50.135089Z","detail":"search-scope-date at 1378.04736328125,158.0"}
+INPUT step=46 kind=tap 
+INPUT step=46 status=ok detail=click at 1378,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:50.520730Z","detail":"search-scope-date"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:50.754017Z","detail":"library-search at 742.43408203125,158.0"}
+INPUT step=47 kind=tap 
+INPUT step=47 status=ok detail=click at 742,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:51.106784Z","detail":"library-search"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:43:51.221082Z","detail":"ctrl+a"}
+INPUT step=48 kind=key 
+INPUT step=48 status=ok detail=key ctrl+a
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:43:51.395620Z","detail":"ctrl+a"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"SEND","at":"2026-10-21T18:43:51.514322Z","detail":"20261022 (8 characters)"}
+INPUT step=49 kind=text 
+INPUT step=49 status=ok detail=typed 8 characters
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"ACK","at":"2026-10-21T18:43:52.012884Z","detail":"20261022"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:43:52.153070Z","detail":"Escape"}
+INPUT step=50 kind=key 
+INPUT step=50 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:43:52.332516Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-search-date-scope","status":"PASS","at":"2026-10-21T18:43:52.516992Z","detail":"3043ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-search-open-viewer","status":"START","at":"2026-10-21T18:43:52.517075Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:52.574864Z","detail":"library-search at 1328.0,94.0"}
+INPUT step=51 kind=tap 
+INPUT step=51 status=ok detail=click at 1328,94
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:52.964925Z","detail":"library-search"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:53.156074Z","detail":"search-scope-name at 1313.66796875,158.0"}
+INPUT step=52 kind=tap 
+INPUT step=52 status=ok detail=click at 1314,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:53.542055Z","detail":"search-scope-name"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:53.759015Z","detail":"library-search at 742.42041015625,158.0"}
+INPUT step=53 kind=tap 
+INPUT step=53 status=ok detail=click at 742,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:54.145704Z","detail":"library-search"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:43:54.282989Z","detail":"ctrl+a"}
+INPUT step=54 kind=key 
+INPUT step=54 status=ok detail=key ctrl+a
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:43:54.461152Z","detail":"ctrl+a"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"SEND","at":"2026-10-21T18:43:54.579295Z","detail":"alpha (5 characters)"}
+INPUT step=55 kind=text 
+INPUT step=55 status=ok detail=typed 5 characters
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"ACK","at":"2026-10-21T18:43:54.961976Z","detail":"alpha"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:55.155990Z","detail":"photo-ce2dffe6-07ef-433e-94e4-5336f17cddc7 at 300.61538461538464,280.61538461538464"}
+INPUT step=56 kind=tap 
+INPUT step=56 status=ok detail=click at 301,281
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:55.542377Z","detail":"photo-ce2dffe6-07ef-433e-94e4-5336f17cddc7"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:43:55.691560Z","detail":"Escape"}
+INPUT step=57 kind=key 
+INPUT step=57 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:43:55.917078Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:43:56.116458Z","detail":"Escape"}
+INPUT step=58 kind=key 
+INPUT step=58 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:43:56.344853Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-search-open-viewer","status":"PASS","at":"2026-10-21T18:43:56.487740Z","detail":"3970ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-select-all-and-favorite","status":"START","at":"2026-10-21T18:43:56.487842Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:43:56.647790Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861 at 328.5,256.5"}
+INPUT step=59 kind=secondary-tap 
+INPUT step=59 status=ok detail=right click at 328,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:43:57.034898Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:57.225484Z","detail":"tile-menu-select at 662.0,346.0"}
+INPUT step=60 kind=tap 
+INPUT step=60 status=ok detail=click at 662,346
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:57.626269Z","detail":"tile-menu-select"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:57.911066Z","detail":"select-all at 422.1003875732422,158.0"}
+INPUT step=61 kind=tap 
+INPUT step=61 status=ok detail=click at 422,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:58.322798Z","detail":"select-all"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:58.601032Z","detail":"batch-favorite at 737.1578140258789,158.0"}
+INPUT step=62 kind=tap 
+INPUT step=62 status=ok detail=click at 737,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:58.944714Z","detail":"batch-favorite"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:59.162170Z","detail":"exit-selection at 321.34345626831055,158.0"}
+INPUT step=63 kind=tap 
+INPUT step=63 status=ok detail=click at 321,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:43:59.503938Z","detail":"exit-selection"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-select-all-and-favorite","status":"PASS","at":"2026-10-21T18:43:59.646437Z","detail":"3158ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-favorites-destination","status":"START","at":"2026-10-21T18:43:59.646517Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:43:59.700421Z","detail":"sidebar-favorites at 120.0,140.0"}
+INPUT step=64 kind=tap 
+INPUT step=64 status=ok detail=click at 120,140
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:00.100917Z","detail":"sidebar-favorites"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-04-favorites","status":"START","at":"2026-10-21T18:44:00.205069Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-04-favorites","status":"PASS","at":"2026-10-21T18:44:00.771259Z","detail":"566ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:00.823119Z","detail":"sidebar-photos at 120.0,92.0"}
+INPUT step=65 kind=tap 
+INPUT step=65 status=ok detail=click at 120,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:01.211324Z","detail":"sidebar-photos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-favorites-destination","status":"PASS","at":"2026-10-21T18:44:01.345494Z","detail":"1698ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-batch-unfavorite","status":"START","at":"2026-10-21T18:44:01.345565Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:01.398273Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861 at 328.5,256.5"}
+INPUT step=66 kind=secondary-tap 
+INPUT step=66 status=ok detail=right click at 328,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:01.733848Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:01.979332Z","detail":"tile-menu-select at 662.0,346.0"}
+INPUT step=67 kind=tap 
+INPUT step=67 status=ok detail=click at 662,346
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:02.366476Z","detail":"tile-menu-select"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:02.652150Z","detail":"select-all at 422.1003875732422,158.0"}
+INPUT step=68 kind=tap 
+INPUT step=68 status=ok detail=click at 422,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:03.055667Z","detail":"select-all"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:03.216671Z","detail":"batch-favorite at 737.1578140258789,158.0"}
+INPUT step=69 kind=tap 
+INPUT step=69 status=ok detail=click at 737,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:03.599876Z","detail":"batch-favorite"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:03.794773Z","detail":"exit-selection at 321.34345626831055,158.0"}
+INPUT step=70 kind=tap 
+INPUT step=70 status=ok detail=click at 321,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:04.132962Z","detail":"exit-selection"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-batch-unfavorite","status":"PASS","at":"2026-10-21T18:44:04.266783Z","detail":"2921ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-create-album","status":"START","at":"2026-10-21T18:44:04.266874Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:04.319079Z","detail":"sidebar-album-add at 178.0,204.0"}
+INPUT step=71 kind=tap 
+INPUT step=71 status=ok detail=click at 178,204
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:04.711103Z","detail":"sidebar-album-add"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"SEND","at":"2026-10-21T18:44:04.797920Z","detail":"Trip (4 characters)"}
+INPUT step=72 kind=text 
+INPUT step=72 status=ok detail=typed 4 characters
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"ACK","at":"2026-10-21T18:44:05.136867Z","detail":"Trip"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:05.285075Z","detail":"album-create-confirm at 937.4127922058105,534.0"}
+INPUT step=73 kind=tap 
+INPUT step=73 status=ok detail=click at 937,534
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:05.675921Z","detail":"album-create-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-create-album","status":"PASS","at":"2026-10-21T18:44:05.884034Z","detail":"1617ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-copy-to-album","status":"START","at":"2026-10-21T18:44:05.884112Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:05.935996Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861 at 328.5,256.5"}
+INPUT step=74 kind=secondary-tap 
+INPUT step=74 status=ok detail=right click at 328,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:06.323873Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:06.498038Z","detail":"tile-menu-select at 662.0,346.0"}
+INPUT step=75 kind=tap 
+INPUT step=75 status=ok detail=click at 662,346
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:06.890494Z","detail":"tile-menu-select"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:07.081349Z","detail":"select-all at 422.1003875732422,158.0"}
+INPUT step=76 kind=tap 
+INPUT step=76 status=ok detail=click at 422,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:07.438914Z","detail":"select-all"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:07.654268Z","detail":"batch-add-to-album at 691.1578140258789,158.0"}
+INPUT step=77 kind=tap 
+INPUT step=77 status=ok detail=click at 691,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:08.058877Z","detail":"batch-add-to-album"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-text","status":"SEND","at":"2026-10-21T18:44:08.332038Z","detail":"\"Copy to album\" at 733.4013519287109,171.0"}
+INPUT step=78 kind=tap 
+INPUT step=78 status=ok detail=click at 733,171
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:08.969807Z","detail":"album-target-/tmp/ux-merged/ux/albums/Trip at 545.3333333333334,466.0"}
+INPUT step=79 kind=tap 
+INPUT step=79 status=ok detail=click at 545,466
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:09.361031Z","detail":"album-target-/tmp/ux-merged/ux/albums/Trip"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-05-album-copy","status":"START","at":"2026-10-21T18:44:09.602805Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-05-album-copy","status":"PASS","at":"2026-10-21T18:44:10.066153Z","detail":"463ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-copy-to-album","status":"PASS","at":"2026-10-21T18:44:10.066267Z","detail":"4182ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-move-to-album","status":"START","at":"2026-10-21T18:44:10.066288Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:10.127447Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861 at 328.5,256.5"}
+INPUT step=80 kind=secondary-tap 
+INPUT step=80 status=ok detail=right click at 328,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:10.470558Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:10.633235Z","detail":"tile-menu-move-album at 662.0,634.0"}
+INPUT step=81 kind=tap 
+INPUT step=81 status=ok detail=click at 662,634
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:11.020760Z","detail":"tile-menu-move-album"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:11.297604Z","detail":"album-target-/tmp/ux-merged/ux/albums/Trip at 545.3333333333334,466.0"}
+INPUT step=82 kind=tap 
+INPUT step=82 status=ok detail=click at 545,466
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:11.646731Z","detail":"album-target-/tmp/ux-merged/ux/albums/Trip"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-move-to-album","status":"PASS","at":"2026-10-21T18:44:11.831872Z","detail":"1765ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-set-album-cover","status":"START","at":"2026-10-21T18:44:11.832019Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:11.886158Z","detail":"photo-0ae08735-32c2-45e8-a4e7-7b8090b6a1f2 at 473.5,256.5"}
+INPUT step=83 kind=secondary-tap 
+INPUT step=83 status=ok detail=right click at 474,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:12.230907Z","detail":"photo-0ae08735-32c2-45e8-a4e7-7b8090b6a1f2"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:12.383048Z","detail":"tile-menu-cover at 808.0,730.0"}
+INPUT step=84 kind=tap 
+INPUT step=84 status=ok detail=click at 808,730
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:12.778288Z","detail":"tile-menu-cover"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-set-album-cover","status":"PASS","at":"2026-10-21T18:44:13.021087Z","detail":"1189ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-rename-album-folder","status":"START","at":"2026-10-21T18:44:13.021180Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:13.073081Z","detail":"sidebar-album-/tmp/ux-merged/ux/albums/Trip at 120.0,258.0"}
+INPUT step=85 kind=secondary-tap 
+INPUT step=85 status=ok detail=right click at 120,258
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:13.461024Z","detail":"sidebar-album-/tmp/ux-merged/ux/albums/Trip"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:13.724184Z","detail":"album-menu-rename at 242.0,340.0"}
+INPUT step=86 kind=tap 
+INPUT step=86 status=ok detail=click at 242,340
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:14.110030Z","detail":"album-menu-rename"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:44:14.302936Z","detail":"ctrl+a"}
+INPUT step=87 kind=key 
+INPUT step=87 status=ok detail=key ctrl+a
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:44:14.545888Z","detail":"ctrl+a"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"SEND","at":"2026-10-21T18:44:14.679698Z","detail":"Trips (5 characters)"}
+INPUT step=88 kind=text 
+INPUT step=88 status=ok detail=typed 5 characters
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"ACK","at":"2026-10-21T18:44:15.119193Z","detail":"Trips"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:15.272062Z","detail":"album-rename-confirm at 932.6337928771973,534.0"}
+INPUT step=89 kind=tap 
+INPUT step=89 status=ok detail=click at 933,534
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:15.672927Z","detail":"album-rename-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-rename-album-folder","status":"PASS","at":"2026-10-21T18:44:15.879157Z","detail":"2857ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-reorder-albums","status":"START","at":"2026-10-21T18:44:15.879335Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:15.933694Z","detail":"sidebar-album-add at 178.0,204.0"}
+INPUT step=90 kind=tap 
+INPUT step=90 status=ok detail=click at 178,204
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:16.332914Z","detail":"sidebar-album-add"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"SEND","at":"2026-10-21T18:44:16.544262Z","detail":"Second (6 characters)"}
+INPUT step=91 kind=text 
+INPUT step=91 status=ok detail=typed 6 characters
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"ACK","at":"2026-10-21T18:44:16.991952Z","detail":"Second"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:17.147997Z","detail":"album-create-confirm at 937.4127922058105,534.0"}
+INPUT step=92 kind=tap 
+INPUT step=92 status=ok detail=click at 937,534
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:17.540900Z","detail":"album-create-confirm"}
+INPUT step=93 kind=drag 
+INPUT step=93 status=ok detail=drag 120,310 to 120,258
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:19.376552Z","detail":"sidebar-album-/tmp/ux-merged/ux/albums/Second at 120.0,258.0"}
+INPUT step=94 kind=secondary-tap 
+INPUT step=94 status=ok detail=right click at 120,258
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:19.719916Z","detail":"sidebar-album-/tmp/ux-merged/ux/albums/Second"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:19.926525Z","detail":"album-menu-remove at 242.0,388.0"}
+INPUT step=95 kind=tap 
+INPUT step=95 status=ok detail=click at 242,388
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:20.319867Z","detail":"album-menu-remove"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:20.550098Z","detail":"album-remove-confirm at 944.834903717041,526.0"}
+INPUT step=96 kind=tap 
+INPUT step=96 status=ok detail=click at 945,526
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:20.939370Z","detail":"album-remove-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-reorder-albums","status":"PASS","at":"2026-10-21T18:44:21.187880Z","detail":"5308ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-album-navigation","status":"START","at":"2026-10-21T18:44:21.187958Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:21.243197Z","detail":"sidebar-album-/tmp/ux-merged/ux/albums/Trips at 120.0,258.0"}
+INPUT step=97 kind=tap 
+INPUT step=97 status=ok detail=click at 120,258
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:21.630883Z","detail":"sidebar-album-/tmp/ux-merged/ux/albums/Trips"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:21.874140Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861 at 328.5,256.5"}
+INPUT step=98 kind=tap 
+INPUT step=98 status=ok detail=click at 328,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:22.297072Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:22.631802Z","detail":"viewer-next at 1392.0,756.0"}
+INPUT step=99 kind=tap 
+INPUT step=99 status=ok detail=click at 1392,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:23.016891Z","detail":"viewer-next"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:44:23.137661Z","detail":"Left"}
+INPUT step=100 kind=key 
+INPUT step=100 status=ok detail=key Left
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:44:23.365426Z","detail":"Left"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:44:23.527926Z","detail":"Escape"}
+INPUT step=101 kind=key 
+INPUT step=101 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:44:23.756950Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:24.021091Z","detail":"sidebar-photos at 120.0,92.0"}
+INPUT step=102 kind=tap 
+INPUT step=102 status=ok detail=click at 120,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:24.418894Z","detail":"sidebar-photos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-album-navigation","status":"PASS","at":"2026-10-21T18:44:24.540751Z","detail":"3352ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-grid-rename-photo","status":"START","at":"2026-10-21T18:44:24.540845Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:24.605085Z","detail":"photo-a00c227a-403e-420e-add8-00607c91698a at 618.5,256.5"}
+INPUT step=103 kind=secondary-tap 
+INPUT step=103 status=ok detail=right click at 618,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:24.945246Z","detail":"photo-a00c227a-403e-420e-add8-00607c91698a"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:25.155998Z","detail":"tile-menu-rename at 785.0,538.0"}
+INPUT step=104 kind=tap 
+INPUT step=104 status=ok detail=click at 785,538
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:25.542871Z","detail":"tile-menu-rename"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:44:25.786722Z","detail":"ctrl+a"}
+INPUT step=105 kind=key 
+INPUT step=105 status=ok detail=key ctrl+a
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:44:26.012951Z","detail":"ctrl+a"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"SEND","at":"2026-10-21T18:44:26.181253Z","detail":"tiny.png (8 characters)"}
+INPUT step=106 kind=text 
+INPUT step=106 status=ok detail=typed 8 characters
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"ACK","at":"2026-10-21T18:44:26.724998Z","detail":"tiny.png"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:26.894595Z","detail":"rename-confirm at 943.4098777770996,534.0"}
+INPUT step=107 kind=tap 
+INPUT step=107 status=ok detail=click at 943,534
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:27.281886Z","detail":"rename-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-grid-rename-photo","status":"PASS","at":"2026-10-21T18:44:27.526812Z","detail":"2985ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-tile-details-dialog","status":"START","at":"2026-10-21T18:44:27.526897Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:27.582940Z","detail":"photo-ce2dffe6-07ef-433e-94e4-5336f17cddc7 at 763.5,401.5"}
+INPUT step=108 kind=secondary-tap 
+INPUT step=108 status=ok detail=right click at 764,402
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:27.915957Z","detail":"photo-ce2dffe6-07ef-433e-94e4-5336f17cddc7"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:28.161246Z","detail":"tile-menu-details at 931.0,564.0"}
+INPUT step=109 kind=tap 
+INPUT step=109 status=ok detail=click at 931,564
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:28.547513Z","detail":"tile-menu-details"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:44:28.675713Z","detail":"Escape"}
+INPUT step=110 kind=key 
+INPUT step=110 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:44:28.850951Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-tile-details-dialog","status":"PASS","at":"2026-10-21T18:44:29.032930Z","detail":"1506ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-batch-export-no-overwrite","status":"START","at":"2026-10-21T18:44:29.033019Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:29.086829Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861 at 328.5,256.5"}
+INPUT step=111 kind=secondary-tap 
+INPUT step=111 status=ok detail=right click at 328,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:29.476995Z","detail":"photo-889779f0-e3ec-4867-9541-316d7b4dd861"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:29.702976Z","detail":"tile-menu-select at 662.0,346.0"}
+INPUT step=112 kind=tap 
+INPUT step=112 status=ok detail=click at 662,346
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:30.090026Z","detail":"tile-menu-select"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:30.313049Z","detail":"select-all at 422.1003875732422,158.0"}
+INPUT step=113 kind=tap 
+INPUT step=113 status=ok detail=click at 422,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:30.695887Z","detail":"select-all"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:30.981956Z","detail":"batch-export at 653.9453125,158.0"}
+INPUT step=114 kind=tap 
+INPUT step=114 status=ok detail=click at 654,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:31.366862Z","detail":"batch-export"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:31.584106Z","detail":"batch-export at 653.9453125,158.0"}
+INPUT step=115 kind=tap 
+INPUT step=115 status=ok detail=click at 654,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:31.979113Z","detail":"batch-export"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:32.248034Z","detail":"exit-selection at 321.34345626831055,158.0"}
+INPUT step=116 kind=tap 
+INPUT step=116 status=ok detail=click at 321,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:32.635044Z","detail":"exit-selection"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-batch-export-no-overwrite","status":"PASS","at":"2026-10-21T18:44:32.815414Z","detail":"3782ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-trash-one-and-restore","status":"START","at":"2026-10-21T18:44:32.815520Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:32.871739Z","detail":"photo-c20589df-c35d-4f43-a5d9-e1bbc1dfd726 at 908.5,256.5"}
+INPUT step=117 kind=secondary-tap 
+INPUT step=117 status=ok detail=right click at 908,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:33.201876Z","detail":"photo-c20589df-c35d-4f43-a5d9-e1bbc1dfd726"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:33.478902Z","detail":"tile-menu-trash at 1075.0,778.0"}
+INPUT step=118 kind=tap 
+INPUT step=118 status=ok detail=click at 1075,778
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:33.887661Z","detail":"tile-menu-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:34.051679Z","detail":"confirm-action at 913.5772399902344,516.0"}
+INPUT step=119 kind=tap 
+INPUT step=119 status=ok detail=click at 914,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:34.438930Z","detail":"confirm-action"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-06-trash","status":"START","at":"2026-10-21T18:44:34.689788Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-06-trash","status":"PASS","at":"2026-10-21T18:44:35.245107Z","detail":"555ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-trash-one-and-restore","status":"PASS","at":"2026-10-21T18:44:35.245219Z","detail":"2429ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-restore-from-trash","status":"START","at":"2026-10-21T18:44:35.245243Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:35.302698Z","detail":"sidebar-trash at 120.0,808.0"}
+INPUT step=120 kind=tap 
+INPUT step=120 status=ok detail=click at 120,808
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:35.686909Z","detail":"sidebar-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:35.873165Z","detail":"photo-c20589df-c35d-4f43-a5d9-e1bbc1dfd726 at 328.5,308.5"}
+INPUT step=121 kind=secondary-tap 
+INPUT step=121 status=ok detail=right click at 328,308
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:36.217420Z","detail":"photo-c20589df-c35d-4f43-a5d9-e1bbc1dfd726"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:36.384122Z","detail":"tile-menu-select at 662.0,398.0"}
+INPUT step=122 kind=tap 
+INPUT step=122 status=ok detail=click at 662,398
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:36.775083Z","detail":"tile-menu-select"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:37.101888Z","detail":"batch-restore at 592.1226577758789,158.0"}
+INPUT step=123 kind=tap 
+INPUT step=123 status=ok detail=click at 592,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:37.464027Z","detail":"batch-restore"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:37.683027Z","detail":"sidebar-photos at 120.0,92.0"}
+INPUT step=124 kind=tap 
+INPUT step=124 status=ok detail=click at 120,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:38.072914Z","detail":"sidebar-photos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-restore-from-trash","status":"PASS","at":"2026-10-21T18:44:38.326399Z","detail":"3081ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-batch-purge","status":"START","at":"2026-10-21T18:44:38.326572Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:38.384195Z","detail":"photo-420a38bf-630e-4217-b136-433812a8bd3f at 1343.5,256.5"}
+INPUT step=125 kind=secondary-tap 
+INPUT step=125 status=ok detail=right click at 1344,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:38.770992Z","detail":"photo-420a38bf-630e-4217-b136-433812a8bd3f"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:39.032997Z","detail":"tile-menu-trash at 1340.0,778.0"}
+INPUT step=126 kind=tap 
+INPUT step=126 status=ok detail=click at 1340,778
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:39.415853Z","detail":"tile-menu-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:39.610028Z","detail":"confirm-action at 913.5772399902344,516.0"}
+INPUT step=127 kind=tap 
+INPUT step=127 status=ok detail=click at 914,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:40.001930Z","detail":"confirm-action"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:40.303522Z","detail":"sidebar-trash at 120.0,808.0"}
+INPUT step=128 kind=tap 
+INPUT step=128 status=ok detail=click at 120,808
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:40.712166Z","detail":"sidebar-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:40.975644Z","detail":"photo-420a38bf-630e-4217-b136-433812a8bd3f at 328.5,308.5"}
+INPUT step=129 kind=secondary-tap 
+INPUT step=129 status=ok detail=right click at 328,308
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:41.356910Z","detail":"photo-420a38bf-630e-4217-b136-433812a8bd3f"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:41.550979Z","detail":"tile-menu-select at 662.0,398.0"}
+INPUT step=130 kind=tap 
+INPUT step=130 status=ok detail=click at 662,398
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:41.906038Z","detail":"tile-menu-select"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:42.133795Z","detail":"batch-purge at 638.1226577758789,158.0"}
+INPUT step=131 kind=tap 
+INPUT step=131 status=ok detail=click at 638,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:42.519890Z","detail":"batch-purge"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:42.784216Z","detail":"confirm-action at 893.4194869995117,516.0"}
+INPUT step=132 kind=tap 
+INPUT step=132 status=ok detail=click at 893,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:43.167959Z","detail":"confirm-action"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:43.394064Z","detail":"sidebar-photos at 120.0,92.0"}
+INPUT step=133 kind=tap 
+INPUT step=133 status=ok detail=click at 120,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:43.779970Z","detail":"sidebar-photos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-batch-purge","status":"PASS","at":"2026-10-21T18:44:43.956764Z","detail":"5630ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-empty-trash","status":"START","at":"2026-10-21T18:44:43.956917Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:44:44.067060Z","detail":"photo-0ae08735-32c2-45e8-a4e7-7b8090b6a1f2 at 473.5,256.5"}
+INPUT step=134 kind=secondary-tap 
+INPUT step=134 status=ok detail=right click at 474,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:44:44.401861Z","detail":"photo-0ae08735-32c2-45e8-a4e7-7b8090b6a1f2"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:47.128014Z","detail":"tile-menu-trash at 808.0,778.0"}
+INPUT step=135 kind=tap 
+INPUT step=135 status=ok detail=click at 808,778
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:47.519755Z","detail":"tile-menu-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:47.811403Z","detail":"confirm-action at 913.5772399902344,516.0"}
+INPUT step=136 kind=tap 
+INPUT step=136 status=ok detail=click at 914,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:48.198619Z","detail":"confirm-action"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:48.421649Z","detail":"sidebar-trash at 120.0,808.0"}
+INPUT step=137 kind=tap 
+INPUT step=137 status=ok detail=click at 120,808
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:48.802861Z","detail":"sidebar-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:48.951052Z","detail":"empty-trash at 331.7468147277832,158.0"}
+INPUT step=138 kind=tap 
+INPUT step=138 status=ok detail=click at 332,158
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:49.350142Z","detail":"empty-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:49.489960Z","detail":"confirm-action at 919.2531852722168,516.0"}
+INPUT step=139 kind=tap 
+INPUT step=139 status=ok detail=click at 919,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:49.873939Z","detail":"confirm-action"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:50.053416Z","detail":"sidebar-photos at 120.0,92.0"}
+INPUT step=140 kind=tap 
+INPUT step=140 status=ok detail=click at 120,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:50.442615Z","detail":"sidebar-photos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-empty-trash","status":"PASS","at":"2026-10-21T18:44:50.625553Z","detail":"6668ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-trash-undo","status":"START","at":"2026-10-21T18:44:50.625638Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:50.682826Z","detail":"photo-ce2dffe6-07ef-433e-94e4-5336f17cddc7 at 473.5,401.5"}
+INPUT step=141 kind=tap 
+INPUT step=141 status=ok detail=click at 474,402
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:51.067882Z","detail":"photo-ce2dffe6-07ef-433e-94e4-5336f17cddc7"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:51.267371Z","detail":"viewer-trash at 1296.0,86.0"}
+INPUT step=142 kind=tap 
+INPUT step=142 status=ok detail=click at 1296,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:51.672218Z","detail":"viewer-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:51.934596Z","detail":"viewer-confirm-trash at 925.5772399902344,516.0"}
+INPUT step=143 kind=tap 
+INPUT step=143 status=ok detail=click at 926,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:52.319618Z","detail":"viewer-confirm-trash"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-text","status":"SEND","at":"2026-10-21T18:44:52.770972Z","detail":"\"Undo\" at 857.8522453308105,765.5"}
+INPUT step=144 kind=tap 
+INPUT step=144 status=ok detail=click at 858,766
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:53.256974Z","detail":"viewer-close at 280.0,86.0"}
+INPUT step=145 kind=tap 
+INPUT step=145 status=ok detail=click at 280,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:53.644085Z","detail":"viewer-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-trash-undo","status":"PASS","at":"2026-10-21T18:44:53.866870Z","detail":"3241ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-favorite-and-zoom","status":"START","at":"2026-10-21T18:44:53.866936Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:53.921989Z","detail":"photo-ce2dffe6-07ef-433e-94e4-5336f17cddc7 at 473.5,401.5"}
+INPUT step=146 kind=tap 
+INPUT step=146 status=ok detail=click at 474,402
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:54.326881Z","detail":"photo-ce2dffe6-07ef-433e-94e4-5336f17cddc7"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-07-viewer","status":"START","at":"2026-10-21T18:44:54.539228Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-07-viewer","status":"PASS","at":"2026-10-21T18:44:54.960008Z","detail":"420ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:55.011972Z","detail":"viewer-favorite at 1200.0,86.0"}
+INPUT step=147 kind=tap 
+INPUT step=147 status=ok detail=click at 1200,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:55.394169Z","detail":"viewer-favorite"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:55.574008Z","detail":"viewer-zoom-in at 328.0,756.0"}
+INPUT step=148 kind=tap 
+INPUT step=148 status=ok detail=click at 328,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:55.968416Z","detail":"viewer-zoom-in"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:56.103006Z","detail":"viewer-zoom-in at 328.0,756.0"}
+INPUT step=149 kind=tap 
+INPUT step=149 status=ok detail=click at 328,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:56.488409Z","detail":"viewer-zoom-in"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:56.647225Z","detail":"viewer-zoom-reset at 384.0,756.0"}
+INPUT step=150 kind=tap 
+INPUT step=150 status=ok detail=click at 384,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:57.033819Z","detail":"viewer-zoom-reset"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:57.216630Z","detail":"viewer-zoom-in at 328.0,756.0"}
+INPUT step=151 kind=tap 
+INPUT step=151 status=ok detail=click at 328,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:57.603890Z","detail":"viewer-zoom-in"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:57.774127Z","detail":"viewer-zoom-out at 280.0,756.0"}
+INPUT step=152 kind=tap 
+INPUT step=152 status=ok detail=click at 280,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:58.154909Z","detail":"viewer-zoom-out"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-favorite-and-zoom","status":"PASS","at":"2026-10-21T18:44:58.246721Z","detail":"4379ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-rotate-changes-file","status":"START","at":"2026-10-21T18:44:58.246795Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:58.322108Z","detail":"viewer-rotate-right at 496.0,756.0"}
+INPUT step=153 kind=tap 
+INPUT step=153 status=ok detail=click at 496,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:58.724420Z","detail":"viewer-rotate-right"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:44:58.826095Z","detail":"shift+r"}
+INPUT step=154 kind=key 
+INPUT step=154 status=ok detail=key shift+r
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:44:59.064791Z","detail":"shift+r"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:44:59.157808Z","detail":"r"}
+INPUT step=155 kind=key 
+INPUT step=155 status=ok detail=key r
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:44:59.336916Z","detail":"r"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:44:59.518338Z","detail":"viewer-rotate-left at 448.0,756.0"}
+INPUT step=156 kind=tap 
+INPUT step=156 status=ok detail=click at 448,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:44:59.911196Z","detail":"viewer-rotate-left"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-rotate-changes-file","status":"PASS","at":"2026-10-21T18:45:00.010136Z","detail":"1763ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-details-and-rename","status":"START","at":"2026-10-21T18:45:00.010233Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:00.077739Z","detail":"viewer-details at 1344.0,86.0"}
+INPUT step=157 kind=tap 
+INPUT step=157 status=ok detail=click at 1344,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:00.420575Z","detail":"viewer-details"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:00.711542Z","detail":"viewer-details-rename at 1328.0,150.0"}
+INPUT step=158 kind=tap 
+INPUT step=158 status=ok detail=click at 1328,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:01.100759Z","detail":"viewer-details-rename"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:01.312568Z","detail":"ctrl+a"}
+INPUT step=159 kind=key 
+INPUT step=159 status=ok detail=key ctrl+a
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:01.487558Z","detail":"ctrl+a"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"SEND","at":"2026-10-21T18:45:01.645824Z","detail":"alpha2.png (10 characters)"}
+INPUT step=160 kind=text 
+INPUT step=160 status=ok detail=typed 10 characters
+PHOTO_CLIENT_LOCAL_STEP {"id":"type","status":"ACK","at":"2026-10-21T18:45:02.244295Z","detail":"alpha2.png"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:02.389102Z","detail":"viewer-rename-confirm at 943.4098777770996,534.0"}
+INPUT step=161 kind=tap 
+INPUT step=161 status=ok detail=click at 943,534
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:02.778050Z","detail":"viewer-rename-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:03.035009Z","detail":"viewer-details-close at 1384.0,150.0"}
+INPUT step=162 kind=tap 
+INPUT step=162 status=ok detail=click at 1384,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:03.391983Z","detail":"viewer-details-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-details-and-rename","status":"PASS","at":"2026-10-21T18:45:03.549971Z","detail":"3539ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-filmstrip-and-arrows","status":"START","at":"2026-10-21T18:45:03.550041Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:03.607342Z","detail":"viewer-strip-06866213-f1c0-4112-a58f-9c437a339693 at 692.0,838.0"}
+INPUT step=163 kind=tap 
+INPUT step=163 status=ok detail=click at 692,838
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:04.003527Z","detail":"viewer-strip-06866213-f1c0-4112-a58f-9c437a339693"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:04.388367Z","detail":"viewer-previous at 1340.0,756.0"}
+INPUT step=164 kind=tap 
+INPUT step=164 status=ok detail=click at 1340,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:04.770788Z","detail":"viewer-previous"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:05.139487Z","detail":"viewer-next at 1392.0,756.0"}
+INPUT step=165 kind=tap 
+INPUT step=165 status=ok detail=click at 1392,756
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:05.538882Z","detail":"viewer-next"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-filmstrip-and-arrows","status":"PASS","at":"2026-10-21T18:45:05.866874Z","detail":"2316ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-immersive","status":"START","at":"2026-10-21T18:45:05.866972Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:05.866984Z","detail":"f"}
+INPUT step=166 kind=key 
+INPUT step=166 status=ok detail=key f
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:06.041277Z","detail":"f"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"move","status":"SEND","at":"2026-10-21T18:45:11.279255Z","detail":"720.0,450.0"}
+INPUT step=167 kind=move 
+INPUT step=167 status=ok detail=move to 720,450
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:11.653285Z","detail":"Escape"}
+INPUT step=168 kind=key 
+INPUT step=168 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:11.879978Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-immersive","status":"PASS","at":"2026-10-21T18:45:12.010758Z","detail":"6143ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-fullscreen-preview","status":"START","at":"2026-10-21T18:45:12.010836Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:12.010846Z","detail":"shift+f"}
+INPUT step=169 kind=key 
+INPUT step=169 status=ok detail=key shift+f
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:12.184878Z","detail":"shift+f"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:12.401976Z","detail":"viewer-fullscreen-close at 1408.0,32.0"}
+INPUT step=170 kind=tap 
+INPUT step=170 status=ok detail=click at 1408,32
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:12.786964Z","detail":"viewer-fullscreen-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-viewer-fullscreen-preview","status":"PASS","at":"2026-10-21T18:45:13.005225Z","detail":"994ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-editor-reset-and-close","status":"START","at":"2026-10-21T18:45:13.005319Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:13.070443Z","detail":"viewer-edit at 1248.0,86.0"}
+INPUT step=171 kind=tap 
+INPUT step=171 status=ok detail=click at 1248,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:13.463342Z","detail":"viewer-edit"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:13.700455Z","detail":"editor-rotate-right at 1208.4082946777344,248.0"}
+INPUT step=172 kind=tap 
+INPUT step=172 status=ok detail=click at 1208,248
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:14.037907Z","detail":"editor-rotate-right"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:14.287911Z","detail":"editor-flip-horizontal at 1160.0,304.0"}
+INPUT step=173 kind=tap 
+INPUT step=173 status=ok detail=click at 1160,304
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:14.677172Z","detail":"editor-flip-horizontal"}
+INPUT step=174 kind=tap 
+INPUT step=174 status=ok detail=click at 1272,376
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:45:15.635800Z","detail":"\"1:1\" at 1145.2914066314697,472.0"}
+INPUT step=175 kind=tap 
+INPUT step=175 status=ok detail=click at 1145,472
+INPUT step=176 kind=drag 
+INPUT step=176 status=ok detail=drag 495,229 to 857,711
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:17.119292Z","detail":"editor-compare at 1272.0,728.0"}
+INPUT step=177 kind=tap 
+INPUT step=177 status=ok detail=click at 1272,728
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:17.512132Z","detail":"editor-compare"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:17.683374Z","detail":"editor-reset at 1344.0,92.0"}
+INPUT step=178 kind=tap 
+INPUT step=178 status=ok detail=click at 1344,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:18.030508Z","detail":"editor-reset"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:18.254138Z","detail":"editor-close at 1392.0,92.0"}
+INPUT step=179 kind=tap 
+INPUT step=179 status=ok detail=click at 1392,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:18.637892Z","detail":"editor-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-editor-reset-and-close","status":"PASS","at":"2026-10-21T18:45:18.766893Z","detail":"5761ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-editor-discard-protection","status":"START","at":"2026-10-21T18:45:18.766997Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:18.834392Z","detail":"viewer-edit at 1248.0,86.0"}
+INPUT step=180 kind=tap 
+INPUT step=180 status=ok detail=click at 1248,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:19.226311Z","detail":"viewer-edit"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:19.418173Z","detail":"editor-rotate-right at 1208.4082946777344,248.0"}
+INPUT step=181 kind=tap 
+INPUT step=181 status=ok detail=click at 1208,248
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:19.768237Z","detail":"editor-rotate-right"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:19.958111Z","detail":"editor-close at 1392.0,92.0"}
+INPUT step=182 kind=tap 
+INPUT step=182 status=ok detail=click at 1392,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:20.345270Z","detail":"editor-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:20.543381Z","detail":"editor-discard at 946.0815410614014,516.0"}
+INPUT step=183 kind=tap 
+INPUT step=183 status=ok detail=click at 946,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:20.929090Z","detail":"editor-discard"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-editor-discard-protection","status":"PASS","at":"2026-10-21T18:45:21.097712Z","detail":"2330ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-editor-save-copy","status":"START","at":"2026-10-21T18:45:21.097841Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:21.170441Z","detail":"viewer-edit at 1248.0,86.0"}
+INPUT step=184 kind=tap 
+INPUT step=184 status=ok detail=click at 1248,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:21.582247Z","detail":"viewer-edit"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:21.803018Z","detail":"editor-rotate-right at 1208.4082946777344,248.0"}
+INPUT step=185 kind=tap 
+INPUT step=185 status=ok detail=click at 1208,248
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:22.190175Z","detail":"editor-rotate-right"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:22.375260Z","detail":"editor-flip-horizontal at 1160.0,304.0"}
+INPUT step=186 kind=tap 
+INPUT step=186 status=ok detail=click at 1160,304
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:22.763876Z","detail":"editor-flip-horizontal"}
+INPUT step=187 kind=tap 
+INPUT step=187 status=ok detail=click at 1272,376
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:45:23.827173Z","detail":"\"1:1\" at 1145.2914066314697,472.0"}
+INPUT step=188 kind=tap 
+INPUT step=188 status=ok detail=click at 1145,472
+INPUT step=189 kind=drag 
+INPUT step=189 status=ok detail=drag 495,229 to 857,711
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:25.209291Z","detail":"editor-save-copy at 1272.0,784.0"}
+INPUT step=190 kind=tap 
+INPUT step=190 status=ok detail=click at 1272,784
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:25.596647Z","detail":"editor-save-copy"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-07-editor-copy","status":"START","at":"2026-10-21T18:45:25.798211Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-07-editor-copy","status":"PASS","at":"2026-10-21T18:45:26.426079Z","detail":"627ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-editor-save-copy","status":"PASS","at":"2026-10-21T18:45:26.426178Z","detail":"5328ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-editor-overwrite-and-backup","status":"START","at":"2026-10-21T18:45:26.426198Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:26.495024Z","detail":"viewer-edit at 1248.0,86.0"}
+INPUT step=191 kind=tap 
+INPUT step=191 status=ok detail=click at 1248,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:26.881650Z","detail":"viewer-edit"}
+INPUT step=192 kind=tap 
+INPUT step=192 status=ok detail=click at 1340,524
+INPUT step=193 kind=tap 
+INPUT step=193 status=ok detail=click at 1313,644
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:28.994854Z","detail":"editor-compare at 1272.0,728.0"}
+INPUT step=194 kind=tap 
+INPUT step=194 status=ok detail=click at 1272,728
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:29.376914Z","detail":"editor-compare"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:29.586003Z","detail":"editor-compare at 1272.0,728.0"}
+INPUT step=195 kind=tap 
+INPUT step=195 status=ok detail=click at 1272,728
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:29.968655Z","detail":"editor-compare"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:30.218533Z","detail":"editor-save at 1342.0,844.0"}
+INPUT step=196 kind=tap 
+INPUT step=196 status=ok detail=click at 1342,844
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:30.606888Z","detail":"editor-save"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:30.803879Z","detail":"editor-confirm-overwrite at 899.2962112426758,516.0"}
+INPUT step=197 kind=tap 
+INPUT step=197 status=ok detail=click at 899,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:31.186909Z","detail":"editor-confirm-overwrite"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:31.466123Z","detail":"editor-close at 1392.0,92.0"}
+INPUT step=198 kind=tap 
+INPUT step=198 status=ok detail=click at 1392,92
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:31.857152Z","detail":"editor-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-editor-overwrite-and-backup","status":"PASS","at":"2026-10-21T18:45:32.048505Z","detail":"5622ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-close-viewer","status":"START","at":"2026-10-21T18:45:32.048583Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:32.101025Z","detail":"viewer-close at 280.0,86.0"}
+INPUT step=199 kind=tap 
+INPUT step=199 status=ok detail=click at 280,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:32.494424Z","detail":"viewer-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-close-viewer","status":"PASS","at":"2026-10-21T18:45:32.781497Z","detail":"732ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-keyboard-grid-and-viewer","status":"START","at":"2026-10-21T18:45:32.781595Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:45:32.834095Z","detail":"photo-8c695c8e-a71c-441b-a664-10fd9475719e at 328.5,256.5"}
+INPUT step=200 kind=secondary-tap 
+INPUT step=200 status=ok detail=right click at 328,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:45:33.226930Z","detail":"photo-8c695c8e-a71c-441b-a664-10fd9475719e"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:33.424016Z","detail":"Escape"}
+INPUT step=201 kind=key 
+INPUT step=201 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:33.651872Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:34.000179Z","detail":"Right"}
+INPUT step=202 kind=key 
+INPUT step=202 status=ok detail=key Right
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:34.227047Z","detail":"Right"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:34.282634Z","detail":"Return"}
+INPUT step=203 kind=key 
+INPUT step=203 status=ok detail=key Return
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:34.517311Z","detail":"Return"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:34.735166Z","detail":"h"}
+INPUT step=204 kind=key 
+INPUT step=204 status=ok detail=key h
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:34.912956Z","detail":"h"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:35.115674Z","detail":"h"}
+INPUT step=205 kind=key 
+INPUT step=205 status=ok detail=key h
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:35.290512Z","detail":"h"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:35.421647Z","detail":"i"}
+INPUT step=206 kind=key 
+INPUT step=206 status=ok detail=key i
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:35.650938Z","detail":"i"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:35.766272Z","detail":"Escape"}
+INPUT step=207 kind=key 
+INPUT step=207 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:35.993527Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:36.107781Z","detail":"Escape"}
+INPUT step=208 kind=key 
+INPUT step=208 status=ok detail=key Escape
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:36.281866Z","detail":"Escape"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-keyboard-grid-and-viewer","status":"PASS","at":"2026-10-21T18:45:36.512261Z","detail":"3730ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kinds-scan","status":"START","at":"2026-10-21T18:45:36.512363Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:36.564022Z","detail":"sidebar-settings at 120.0,856.0"}
+INPUT step=209 kind=tap 
+INPUT step=209 status=ok detail=click at 120,856
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:36.946956Z","detail":"sidebar-settings"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:37.152072Z","detail":"settings-category-2 at 360.0,342.0"}
+INPUT step=210 kind=tap 
+INPUT step=210 status=ok detail=click at 360,342
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:37.540688Z","detail":"settings-category-2"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:38.595038Z","detail":"add-folder at 559.6645431518555,590.0"}
+INPUT step=211 kind=tap 
+INPUT step=211 status=ok detail=click at 560,590
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:38.982446Z","detail":"add-folder"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:39.218102Z","detail":"settings-close at 1134.0,150.0"}
+INPUT step=212 kind=tap 
+INPUT step=212 status=ok detail=click at 1134,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:39.607177Z","detail":"settings-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kinds-scan","status":"PASS","at":"2026-10-21T18:45:39.800440Z","detail":"3288ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-filters","status":"START","at":"2026-10-21T18:45:39.800526Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:39.852330Z","detail":"sidebar-media-images at 120.0,504.0"}
+INPUT step=213 kind=tap 
+INPUT step=213 status=ok detail=click at 120,504
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:40.199002Z","detail":"sidebar-media-images"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:40.504261Z","detail":"sidebar-media-videos at 120.0,552.0"}
+INPUT step=214 kind=tap 
+INPUT step=214 status=ok detail=click at 120,552
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:40.904303Z","detail":"sidebar-media-videos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-filters","status":"PASS","at":"2026-10-21T18:45:41.112909Z","detail":"1312ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-video-playback","status":"START","at":"2026-10-21T18:45:41.113019Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:41.169368Z","detail":"photo-388a6f05-cb92-4a31-9809-75765a52f15d at 328.5,256.5"}
+INPUT step=215 kind=tap 
+INPUT step=215 status=ok detail=click at 328,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:41.554628Z","detail":"photo-388a6f05-cb92-4a31-9809-75765a52f15d"}
+media_kit: VideoOutput: EGL display or context is invalid.
+media_kit: VideoOutput: S/W rendering.
+VideoOutput.Resize
+{handle: 644639088, id: 642988464, rect: {left: 0, top: 0, width: 1, height: 1}}
+NativeVideoController: Texture ID: 642988464
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:42.246365Z","detail":"space"}
+INPUT step=216 kind=key 
+VideoOutput.Resize
+{handle: 644639088, id: 642988464, rect: {left: 0, top: 0, width: 320, height: 240}}
+INPUT step=216 status=ok detail=key space
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:42.473799Z","detail":"space"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"SEND","at":"2026-10-21T18:45:42.600483Z","detail":"space"}
+INPUT step=217 kind=key 
+INPUT step=217 status=ok detail=key space
+PHOTO_CLIENT_LOCAL_STEP {"id":"key","status":"ACK","at":"2026-10-21T18:45:42.805636Z","detail":"space"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:43.095519Z","detail":"viewer-close at 280.0,86.0"}
+INPUT step=218 kind=tap 
+INPUT step=218 status=ok detail=click at 280,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:43.551470Z","detail":"viewer-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-video-playback","status":"PASS","at":"2026-10-21T18:45:43.804409Z","detail":"2691ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-motion","status":"START","at":"2026-10-21T18:45:43.804502Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:43.862508Z","detail":"sidebar-media-images at 120.0,504.0"}
+INPUT step=219 kind=tap 
+INPUT step=219 status=ok detail=click at 120,504
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:44.245603Z","detail":"sidebar-media-images"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:44.390108Z","detail":"photo-103624b7-beb7-492b-af29-69bfbcc88036 at 618.5,256.5"}
+INPUT step=220 kind=tap 
+INPUT step=220 status=ok detail=click at 618,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:44.777164Z","detail":"photo-103624b7-beb7-492b-af29-69bfbcc88036"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:44.970357Z","detail":"viewer-motion-toggle at 344.3111343383789,708.0"}
+INPUT step=221 kind=tap 
+INPUT step=221 status=ok detail=click at 344,708
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:45.366803Z","detail":"viewer-motion-toggle"}
+media_kit: VideoOutput: EGL display or context is invalid.
+media_kit: VideoOutput: S/W rendering.
+VideoOutput.Resize
+{handle: 644572208, id: 642690768, rect: {left: 0, top: 0, width: 1, height: 1}}
+NativeVideoController: Texture ID: 642690768
+VideoOutput.Resize
+{handle: 644572208, id: 642690768, rect: {left: 0, top: 0, width: 160, height: 120}}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:46.065514Z","detail":"viewer-motion-toggle at 323.32295989990234,708.0"}
+INPUT step=222 kind=tap 
+INPUT step=222 status=ok detail=click at 323,708
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:46.455389Z","detail":"viewer-motion-toggle"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:46.621985Z","detail":"viewer-close at 280.0,86.0"}
+INPUT step=223 kind=tap 
+INPUT step=223 status=ok detail=click at 280,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:47.013492Z","detail":"viewer-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-motion","status":"PASS","at":"2026-10-21T18:45:47.252267Z","detail":"3447ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-motion-auto-play-preference","status":"START","at":"2026-10-21T18:45:47.252343Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:47.303983Z","detail":"sidebar-settings at 120.0,856.0"}
+INPUT step=224 kind=tap 
+INPUT step=224 status=ok detail=click at 120,856
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:47.650590Z","detail":"sidebar-settings"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:47.949079Z","detail":"settings-category-2 at 360.0,342.0"}
+INPUT step=225 kind=tap 
+INPUT step=225 status=ok detail=click at 360,342
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:48.334921Z","detail":"settings-category-2"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:49.162361Z","detail":"settings-auto-play-motion at 810.5,508.0"}
+INPUT step=226 kind=tap 
+INPUT step=226 status=ok detail=click at 810,508
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:49.555972Z","detail":"settings-auto-play-motion"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:49.852462Z","detail":"settings-close at 1134.0,150.0"}
+INPUT step=227 kind=tap 
+INPUT step=227 status=ok detail=click at 1134,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:50.243605Z","detail":"settings-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:50.451997Z","detail":"photo-103624b7-beb7-492b-af29-69bfbcc88036 at 618.5,256.5"}
+INPUT step=228 kind=tap 
+INPUT step=228 status=ok detail=click at 618,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:50.842920Z","detail":"photo-103624b7-beb7-492b-af29-69bfbcc88036"}
+media_kit: VideoOutput: EGL display or context is invalid.
+media_kit: VideoOutput: S/W rendering.
+VideoOutput.Resize
+{handle: 640738032, id: 631046224, rect: {left: 0, top: 0, width: 1, height: 1}}
+NativeVideoController: Texture ID: 631046224
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:51.372307Z","detail":"viewer-motion-toggle at 323.32295989990234,708.0"}
+INPUT step=229 kind=tap 
+VideoOutput.Resize
+{handle: 640738032, id: 631046224, rect: {left: 0, top: 0, width: 160, height: 120}}
+INPUT step=229 status=ok detail=click at 323,708
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:51.742943Z","detail":"viewer-motion-toggle"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:51.912894Z","detail":"viewer-close at 280.0,86.0"}
+INPUT step=230 kind=tap 
+INPUT step=230 status=ok detail=click at 280,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:52.302875Z","detail":"viewer-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:52.546969Z","detail":"sidebar-settings at 120.0,856.0"}
+INPUT step=231 kind=tap 
+INPUT step=231 status=ok detail=click at 120,856
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:52.936075Z","detail":"sidebar-settings"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:53.214668Z","detail":"settings-category-2 at 360.0,342.0"}
+INPUT step=232 kind=tap 
+INPUT step=232 status=ok detail=click at 360,342
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:53.599844Z","detail":"settings-category-2"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:54.535970Z","detail":"settings-auto-play-motion at 810.5,508.0"}
+INPUT step=233 kind=tap 
+INPUT step=233 status=ok detail=click at 810,508
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:54.923954Z","detail":"settings-auto-play-motion"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:55.133021Z","detail":"settings-close at 1134.0,150.0"}
+INPUT step=234 kind=tap 
+INPUT step=234 status=ok detail=click at 1134,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:55.514882Z","detail":"settings-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-motion-auto-play-preference","status":"PASS","at":"2026-10-21T18:45:55.837881Z","detail":"8585ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-heic-and-gif","status":"START","at":"2026-10-21T18:45:55.837961Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:55.893991Z","detail":"photo-c87a9e4e-752a-480f-b800-9f4fe8ad87ba at 328.5,594.5"}
+INPUT step=235 kind=tap 
+INPUT step=235 status=ok detail=click at 328,594
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:56.278981Z","detail":"photo-c87a9e4e-752a-480f-b800-9f4fe8ad87ba"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:56.860391Z","detail":"viewer-close at 280.0,86.0"}
+INPUT step=236 kind=tap 
+INPUT step=236 status=ok detail=click at 280,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:57.246930Z","detail":"viewer-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:57.479055Z","detail":"photo-e744d81f-9c5d-4ab7-b705-b60ed9def099 at 473.5,256.5"}
+INPUT step=237 kind=tap 
+INPUT step=237 status=ok detail=click at 474,256
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:57.864854Z","detail":"photo-e744d81f-9c5d-4ab7-b705-b60ed9def099"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:58.536156Z","detail":"viewer-close at 280.0,86.0"}
+INPUT step=238 kind=tap 
+INPUT step=238 status=ok detail=click at 280,86
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:58.929905Z","detail":"viewer-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-heic-and-gif","status":"PASS","at":"2026-10-21T18:45:59.202496Z","detail":"3364ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-remove-source","status":"START","at":"2026-10-21T18:45:59.202587Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:59.255085Z","detail":"sidebar-settings at 120.0,856.0"}
+INPUT step=239 kind=tap 
+INPUT step=239 status=ok detail=click at 120,856
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:45:59.639300Z","detail":"sidebar-settings"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:45:59.838059Z","detail":"settings-category-2 at 360.0,342.0"}
+INPUT step=240 kind=tap 
+INPUT step=240 status=ok detail=click at 360,342
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:00.219894Z","detail":"settings-category-2"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:01.353140Z","detail":"settings-remove-source-/tmp/ux-merged/fixtures/media-kinds at 1106.0,586.0"}
+INPUT step=241 kind=tap 
+INPUT step=241 status=ok detail=click at 1106,586
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:01.788901Z","detail":"settings-remove-source-/tmp/ux-merged/fixtures/media-kinds"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:02.088120Z","detail":"remove-source-confirm at 919.6854858398438,516.0"}
+INPUT step=242 kind=tap 
+INPUT step=242 status=ok detail=click at 920,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:02.471946Z","detail":"remove-source-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:02.816306Z","detail":"settings-close at 1134.0,150.0"}
+INPUT step=243 kind=tap 
+INPUT step=243 status=ok detail=click at 1134,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:03.208122Z","detail":"settings-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-media-kind-remove-source","status":"PASS","at":"2026-10-21T18:46:03.452216Z","detail":"4249ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-remove-source-re-add","status":"START","at":"2026-10-21T18:46:03.452289Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:03.506838Z","detail":"sidebar-settings at 120.0,856.0"}
+INPUT step=244 kind=tap 
+INPUT step=244 status=ok detail=click at 120,856
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:03.908340Z","detail":"sidebar-settings"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:04.076833Z","detail":"settings-category-2 at 360.0,342.0"}
+INPUT step=245 kind=tap 
+INPUT step=245 status=ok detail=click at 360,342
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:04.522775Z","detail":"settings-category-2"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:05.604032Z","detail":"settings-remove-source-/tmp/ux-merged/fixtures/photos at 1106.0,658.0"}
+INPUT step=246 kind=tap 
+INPUT step=246 status=ok detail=click at 1106,658
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:06.001545Z","detail":"settings-remove-source-/tmp/ux-merged/fixtures/photos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:06.209546Z","detail":"remove-source-confirm at 919.6854858398438,516.0"}
+INPUT step=247 kind=tap 
+INPUT step=247 status=ok detail=click at 920,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:06.594140Z","detail":"remove-source-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:07.223003Z","detail":"add-folder at 559.6645431518555,662.0"}
+INPUT step=248 kind=tap 
+INPUT step=248 status=ok detail=click at 560,662
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:07.611173Z","detail":"add-folder"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:07.825261Z","detail":"settings-close at 1134.0,150.0"}
+INPUT step=249 kind=tap 
+INPUT step=249 status=ok detail=click at 1134,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:08.211934Z","detail":"settings-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-remove-source-re-add","status":"PASS","at":"2026-10-21T18:46:08.516714Z","detail":"5064ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-remove-album-keeps-files","status":"START","at":"2026-10-21T18:46:08.516803Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"SEND","at":"2026-10-21T18:46:08.569152Z","detail":"sidebar-album-/tmp/ux-merged/ux/albums/Trips at 120.0,258.0"}
+INPUT step=250 kind=secondary-tap 
+INPUT step=250 status=ok detail=right click at 120,258
+PHOTO_CLIENT_LOCAL_STEP {"id":"right-tap","status":"ACK","at":"2026-10-21T18:46:08.964933Z","detail":"sidebar-album-/tmp/ux-merged/ux/albums/Trips"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:09.242481Z","detail":"album-menu-remove at 242.0,388.0"}
+INPUT step=251 kind=tap 
+INPUT step=251 status=ok detail=click at 242,388
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:09.667919Z","detail":"album-menu-remove"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:09.953063Z","detail":"album-remove-confirm at 944.834903717041,526.0"}
+INPUT step=252 kind=tap 
+INPUT step=252 status=ok detail=click at 945,526
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:10.354908Z","detail":"album-remove-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-remove-album-keeps-files","status":"PASS","at":"2026-10-21T18:46:10.525981Z","detail":"2009ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-remove-source-keeps-originals","status":"START","at":"2026-10-21T18:46:10.526159Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:10.579603Z","detail":"sidebar-settings at 120.0,856.0"}
+INPUT step=253 kind=tap 
+INPUT step=253 status=ok detail=click at 120,856
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:10.967878Z","detail":"sidebar-settings"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:11.275174Z","detail":"settings-category-2 at 360.0,342.0"}
+INPUT step=254 kind=tap 
+INPUT step=254 status=ok detail=click at 360,342
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:11.660964Z","detail":"settings-category-2"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:12.671131Z","detail":"settings-remove-source-/tmp/ux-merged/fixtures/photos at 1106.0,730.0"}
+INPUT step=255 kind=tap 
+INPUT step=255 status=ok detail=click at 1106,730
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:13.055427Z","detail":"settings-remove-source-/tmp/ux-merged/fixtures/photos"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:13.368811Z","detail":"remove-source-confirm at 919.6854858398438,516.0"}
+INPUT step=256 kind=tap 
+INPUT step=256 status=ok detail=click at 920,516
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:13.761176Z","detail":"remove-source-confirm"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-remove-source-keeps-originals","status":"PASS","at":"2026-10-21T18:46:13.918723Z","detail":"3392ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-clear-cache-and-logs","status":"START","at":"2026-10-21T18:46:13.918784Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:13.979061Z","detail":"settings-category-3 at 360.0,406.0"}
+INPUT step=257 kind=tap 
+INPUT step=257 status=ok detail=click at 360,406
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:14.375840Z","detail":"settings-category-3"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:15.104985Z","detail":"settings-clear-cache at 1098.0,404.0"}
+INPUT step=258 kind=tap 
+INPUT step=258 status=ok detail=click at 1098,404
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:15.492902Z","detail":"settings-clear-cache"}
+INPUT step=259 kind=tap 
+INPUT step=259 status=ok detail=click at 810,554
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:46:16.450111Z","detail":"\"debug\" at 515.734375,602.0"}
+INPUT step=260 kind=tap 
+INPUT step=260 status=ok detail=click at 516,602
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:17.300411Z","detail":"settings-clear-logs at 810.5,618.0"}
+INPUT step=261 kind=tap 
+INPUT step=261 status=ok detail=click at 810,618
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:17.707449Z","detail":"settings-clear-logs"}
+INPUT step=262 kind=tap 
+INPUT step=262 status=ok detail=click at 810,340
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap-menu-text","status":"SEND","at":"2026-10-21T18:46:18.532230Z","detail":"\"Fastest\" at 519.2921886444092,388.0"}
+INPUT step=263 kind=tap 
+INPUT step=263 status=ok detail=click at 519,388
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"SEND","at":"2026-10-21T18:46:19.114097Z","detail":"settings-close at 1134.0,150.0"}
+INPUT step=264 kind=tap 
+INPUT step=264 status=ok detail=click at 1134,150
+PHOTO_CLIENT_LOCAL_STEP {"id":"tap","status":"ACK","at":"2026-10-21T18:46:19.496891Z","detail":"settings-close"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-08-empty-after-cleanup","status":"START","at":"2026-10-21T18:46:19.658057Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"screenshot-ux-08-empty-after-cleanup","status":"PASS","at":"2026-10-21T18:46:20.007182Z","detail":"349ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-clear-cache-and-logs","status":"PASS","at":"2026-10-21T18:46:20.007288Z","detail":"6088ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-final-facts","status":"START","at":"2026-10-21T18:46:20.007304Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"ux-final-facts","status":"PASS","at":"2026-10-21T18:46:20.007656Z","detail":"0ms"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"shutdown","status":"START","at":"2026-10-21T18:46:20.007683Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"shutdown-input","status":"START","at":"2026-10-21T18:46:20.007689Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"shutdown-input","status":"DONE","at":"2026-10-21T18:46:20.007699Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"shutdown-runtime","status":"DONE","at":"2026-10-21T18:46:20.010028Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"shutdown","status":"DONE","at":"2026-10-21T18:46:20.010070Z"}
+PHOTO_CLIENT_LOCAL {"result":"PASS","phase":"ux","input":"x11","started_at":"2026-10-21T18:43:18.558504Z","elapsed_ms":181449,"window":{"width":1440,"height":900,"device_pixel_ratio":1.0},"steps":[{"id":"runtime-ready","status":"PASS","ms":51},{"id":"library-open","status":"PASS","ms":0},{"id":"ux-empty-library","status":"PASS","ms":186},{"id":"screenshot-ux-01-settings","status":"PASS","ms":432},{"id":"ux-open-settings-button","status":"PASS","ms":1130},{"id":"ux-settings-shortcuts","status":"PASS","ms":1214},{"id":"ux-settings-appearance","status":"PASS","ms":8277},{"id":"ux-settings-grid-controls","status":"PASS","ms":3888},{"id":"ux-settings-add-folder","status":"PASS","ms":3490},{"id":"ux-settings-add-files","status":"PASS","ms":1151},{"id":"ux-settings-rescan","status":"PASS","ms":1153},{"id":"ux-settings-remove-file-source-keeps-file","status":"PASS","ms":1550},{"id":"ux-close-settings","status":"PASS","ms":655},{"id":"screenshot-ux-02-grid","status":"PASS","ms":478},{"id":"ux-grid-modes","status":"PASS","ms":2801},{"id":"ux-sidebar-media-filters","status":"PASS","ms":1613},{"id":"screenshot-ux-03-search","status":"PASS","ms":555},{"id":"ux-search-name-scope","status":"PASS","ms":3601},{"id":"ux-search-date-scope","status":"PASS","ms":3043},{"id":"ux-search-open-viewer","status":"PASS","ms":3970},{"id":"ux-select-all-and-favorite","status":"PASS","ms":3158},{"id":"screenshot-ux-04-favorites","status":"PASS","ms":566},{"id":"ux-favorites-destination","status":"PASS","ms":1698},{"id":"ux-batch-unfavorite","status":"PASS","ms":2921},{"id":"ux-create-album","status":"PASS","ms":1617},{"id":"screenshot-ux-05-album-copy","status":"PASS","ms":463},{"id":"ux-copy-to-album","status":"PASS","ms":4182},{"id":"ux-move-to-album","status":"PASS","ms":1765},{"id":"ux-set-album-cover","status":"PASS","ms":1189},{"id":"ux-rename-album-folder","status":"PASS","ms":2857},{"id":"ux-reorder-albums","status":"PASS","ms":5308},{"id":"ux-album-navigation","status":"PASS","ms":3352},{"id":"ux-grid-rename-photo","status":"PASS","ms":2985},{"id":"ux-tile-details-dialog","status":"PASS","ms":1506},{"id":"ux-batch-export-no-overwrite","status":"PASS","ms":3782},{"id":"screenshot-ux-06-trash","status":"PASS","ms":555},{"id":"ux-trash-one-and-restore","status":"PASS","ms":2429},{"id":"ux-restore-from-trash","status":"PASS","ms":3081},{"id":"ux-batch-purge","status":"PASS","ms":5630},{"id":"ux-empty-trash","status":"PASS","ms":6668},{"id":"ux-viewer-trash-undo","status":"PASS","ms":3241},{"id":"screenshot-ux-07-viewer","status":"PASS","ms":420},{"id":"ux-viewer-favorite-and-zoom","status":"PASS","ms":4379},{"id":"ux-viewer-rotate-changes-file","status":"PASS","ms":1763},{"id":"ux-viewer-details-and-rename","status":"PASS","ms":3539},{"id":"ux-viewer-filmstrip-and-arrows","status":"PASS","ms":2316},{"id":"ux-viewer-immersive","status":"PASS","ms":6143},{"id":"ux-viewer-fullscreen-preview","status":"PASS","ms":994},{"id":"ux-editor-reset-and-close","status":"PASS","ms":5761},{"id":"ux-editor-discard-protection","status":"PASS","ms":2330},{"id":"screenshot-ux-07-editor-copy","status":"PASS","ms":627},{"id":"ux-editor-save-copy","status":"PASS","ms":5328},{"id":"ux-editor-overwrite-and-backup","status":"PASS","ms":5622},{"id":"ux-close-viewer","status":"PASS","ms":732},{"id":"ux-keyboard-grid-and-viewer","status":"PASS","ms":3730},{"id":"ux-media-kinds-scan","status":"PASS","ms":3288},{"id":"ux-media-kind-filters","status":"PASS","ms":1312},{"id":"ux-media-kind-video-playback","status":"PASS","ms":2691},{"id":"ux-media-kind-motion","status":"PASS","ms":3447},{"id":"ux-motion-auto-play-preference","status":"PASS","ms":8585},{"id":"ux-media-kind-heic-and-gif","status":"PASS","ms":3364},{"id":"ux-media-kind-remove-source","status":"PASS","ms":4249},{"id":"ux-remove-source-re-add","status":"PASS","ms":5064},{"id":"ux-remove-album-keeps-files","status":"PASS","ms":2009},{"id":"ux-remove-source-keeps-originals","status":"PASS","ms":3392},{"id":"screenshot-ux-08-empty-after-cleanup","status":"PASS","ms":349},{"id":"ux-clear-cache-and-logs","status":"PASS","ms":6088},{"id":"ux-final-facts","status":"PASS","ms":0}],"facts":{"profile_id":"linux-x86_64","profile_digest":"7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280","session_id":"31d6e6a5-67e3-464e-b17c-4f896811b77f","library_id":"0ee15bd9-94cc-4382-8736-665a7237a5f1","opened_count":0,"opened_revision":0,"ux":{"initial_total":0,"theme":"dark","material":"liquid_glass","background_blur":0.79,"follow_scroll":true,"reduce_motion":true,"day_columns":8,"order_applied":"name_asc","scan_folder":{"discovered":6,"skipped":2,"failed":1,"cancelled":false},"scan_files":{"discovered":1},"rescan":{"discovered":0,"skipped":9,"failed":1,"total":7},"extra_source_removed":true,"modes":{"year":"6 tiles","month":"6 tiles","day":"6 tiles"},"search_name":{"query":"alpha","total":1},"search_date":{"query":"2026/10/22","total":6},"search_viewer":{"query":"alpha","position":"1 / 1","restored_total":6},"favorite_all":6,"favorite_all_off":0,"album_path":"/tmp/ux-merged/ux/albums/Trip","album_created":true,"album_copy_files":6,"album_move_file":"/tmp/ux-merged/ux/albums/Trip/large_1.jpg","album_move_id":"889779f0-e3ec-4867-9541-316d7b4dd861","album_cover_id":"0ae08735-32c2-45e8-a4e7-7b8090b6a1f2","album_renamed":"/tmp/ux-merged/ux/albums/Trips","album_order_first":"/tmp/ux-merged/ux/albums/Second","album_navigation":{"album_total":7,"first":"large_1.jpg","second":"large.jpg"},"renamed_file":"/tmp/ux-merged/fixtures/photos/tiny.png","details_path":"/tmp/ux-merged/fixtures/photos/alpha.png","export_files":24,"trash_payload":"/tmp/ux-merged/ux/xdg-data/Trash/files/oriented.jpg","trash_info":"[Trash Info]\nPath=/tmp/ux-merged/fixtures/photos/oriented.jpg\nDeletionDate=2026-10-22T02:44:34","restored_oriented":true,"purged_gamma":true,"empty_trash":true,"viewer_undo":true,"filmstrip_offset_initial":0.0,"viewer_zoom":"visible percentages 156/100","viewer_rotate":{"before":[640,480],"after":[480,640],"version":2},"viewer_renamed":"/tmp/ux-merged/fixtures/photos/alpha2.png","filmstrip_offsets":{"beta":0.0,"previous":0.0,"returned":0.0},"filmstrip":{"alpha":"ce2dffe6-07ef-433e-94e4-5336f17cddc7","beta":"06866213-f1c0-4112-a58f-9c437a339693","previous":"beta.jpg"},"immersive":true,"fullscreen_preview":true,"editor_reset":true,"editor_discard":true,"edited_copy":{"path":"/tmp/ux-merged/fixtures/photos/beta_edited_1792608325483.jpg","width":360,"height":360,"original_unchanged":true},"overwrite_backup":"/tmp/ux-merged/ux/data-root/backups/8c695c8e-a71c-441b-a664-10fd9475719e/v1-d6c89f53-7cba-415f-addf-60125ee8aa6c.bak","keyboard":{"anchor":"photo-8c695c8e-a71c-441b-a664-10fd9475719e","moved_to":"photo-889779f0-e3ec-4867-9541-316d7b4dd861","opened":"large_1.jpg","favorite_key":true,"details_key":true},"media_scan":{"base_total":11,"discovered":4},"media_filter":{"images":14,"videos":1},"video_playback":{"duration_ms":6000,"duration_label":"00:06","position_ms":41,"playing":true,"paused":true,"resumed":true},"motion_photo":{"extracted":"/tmp/ux-merged/ux/data-root/cache/103624b7-beb7-492b-af29-69bfbcc88036/1/motion.mp4","bytes":53702,"played":true},"motion_auto_play":true,"gif_frames":3,"heic_preview":{"path":"/tmp/ux-merged/ux/data-root/cache/c87a9e4e-752a-480f-b800-9f4fe8ad87ba/1/preview.jpg","width":2560,"height":2240},"gif_animated":true,"media_source_removed":true,"media_files":["clip.mp4","loop.gif","motion.jpg","still.heic"],"source_removed_readded":{"album_rows":6,"readded_discovered":5},"album_removed_files":6,"source_remove_kept":["alpha2.png","beta.jpg","beta_edited_1792608325483.jpg","broken.jpg","notes.txt","oriented.jpg","tiny.png"],"cache_before":1413930,"cache_after":0,"logs_before_lines":55,"logs_before_marker":"{\"time_ms\":1792608375355,\"operation\":\"clearCache\",\"result\":\"complete\",\"elapsed_ms\":0}","logs_after_clear":1,"preferences_after_cleanup":{"theme":"dark","material":"liquid_glass","backgroundBlur":0.79,"followScroll":true,"locale":"en","reduceMotion":true,"dayColumns":8,"thumbnailWorkers":4,"logLevel":"debug","order":"date_desc"},"source_root":"/tmp/ux-merged/fixtures/photos","album_root":"/tmp/ux-merged/ux/albums","trips_path":"/tmp/ux-merged/ux/albums/Trips","export_root":"/tmp/ux-merged/ux/export","data_root":"/tmp/ux-merged/ux/data-root","final_total":0,"source_files":["alpha2.png","beta.jpg","beta_edited_1792608325483.jpg","broken.jpg","notes.txt","oriented.jpg","tiny.png"],"album_files":["alpha.png","beta.jpg","gamma.webp","large_1.jpg","oriented.jpg","small.png"],"export_names":["alpha.png","alpha_1.png","alpha_2.png","alpha_3.png","beta.jpg","beta_1.jpg","beta_2.jpg","beta_3.jpg","gamma.webp","gamma_1.webp","gamma_2.webp","gamma_3.webp","large.jpg","large_1.jpg","large_1_1.jpg","large_2.jpg","oriented.jpg","oriented_1.jpg","oriented_2.jpg","oriented_3.jpg","small.png","small_1.png","tiny.png","tiny_1.png"],"backup_files":["/tmp/ux-merged/ux/data-root/backups/8c695c8e-a71c-441b-a664-10fd9475719e/v1-d6c89f53-7cba-415f-addf-60125ee8aa6c.bak","/tmp/ux-merged/ux/data-root/backups/ce2dffe6-07ef-433e-94e4-5336f17cddc7/v4-65688dfd-de0a-4ee7-9b4c-f7e63635be62.bak","/tmp/ux-merged/ux/data-root/backups/ce2dffe6-07ef-433e-94e4-5336f17cddc7/v3-f95b2140-1ade-493a-acb5-72545eda842f.bak","/tmp/ux-merged/ux/data-root/backups/ce2dffe6-07ef-433e-94e4-5336f17cddc7/v2-d957ca5a-8913-43d8-ae68-a975fa6cbaa0.bak","/tmp/ux-merged/ux/data-root/backups/ce2dffe6-07ef-433e-94e4-5336f17cddc7/v1-9625bd67-5298-440d-af42-00dab877fd6f.bak"],"elapsed_ms":181252},"screenshot_ux-01-settings":{"file":"ux-01-settings.png","width":1440,"height":900},"screenshot_ux-02-grid":{"file":"ux-02-grid.png","width":1440,"height":900},"screenshot_ux-03-search":{"file":"ux-03-search.png","width":1440,"height":900},"screenshot_ux-04-favorites":{"file":"ux-04-favorites.png","width":1440,"height":900},"screenshot_ux-05-album-copy":{"file":"ux-05-album-copy.png","width":1440,"height":900},"screenshot_ux-06-trash":{"file":"ux-06-trash.png","width":1440,"height":900},"screenshot_ux-07-viewer":{"file":"ux-07-viewer.png","width":1440,"height":900},"screenshot_ux-07-editor-copy":{"file":"ux-07-editor-copy.png","width":1440,"height":900},"screenshot_ux-08-empty-after-cleanup":{"file":"ux-08-empty-after-cleanup.png","width":1440,"height":900}},"screenshots":["ux-01-settings.png","ux-02-grid.png","ux-03-search.png","ux-04-favorites.png","ux-05-album-copy.png","ux-06-trash.png","ux-07-viewer.png","ux-07-editor-copy.png","ux-08-empty-after-cleanup.png"]}
+PHOTO_CLIENT_LOCAL_STEP {"id":"record","status":"WRITTEN","at":"2026-10-21T18:46:20.010337Z"}
+PHOTO_CLIENT_LOCAL_STEP {"id":"record","status":"FLUSHED","at":"2026-10-21T18:46:20.010372Z"}

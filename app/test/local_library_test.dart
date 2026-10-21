@@ -122,7 +122,13 @@ void main() {
       ..files = [];
     await mount(tester, gateway, picker: picker);
     await openSettings(tester);
+    // The import buttons sit below the fold once the dialog carries more
+    // settings, so the content is scrolled to them first.
+    await tester.ensureVisible(find.byKey(const ValueKey('add-folder')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('add-folder')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('add-files')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('add-files')));
     await tester.pumpAndSettle();
@@ -141,9 +147,10 @@ void main() {
         final picker = FakePicker();
         await mount(tester, gateway, picker: picker, width: 390);
         await openSettings(tester);
-        await tester.tap(
-          find.byKey(ValueKey(directory ? 'add-folder' : 'add-files')),
-        );
+        final target = find.byKey(ValueKey(directory ? 'add-folder' : 'add-files'));
+        await tester.ensureVisible(target);
+        await tester.pumpAndSettle();
+        await tester.tap(target);
         await tester.pumpAndSettle();
         expect(
           gateway.addedPaths,

@@ -306,6 +306,57 @@ fn small_webp_images_are_not_upscaled() {
     assert_eq!((output.width(), output.height()), (12, 6));
 }
 
+/// A source whose full-resolution decode exceeds the 128 MiB admission budget
+/// still has to produce a thumbnail. The bounded decoders derive it without
+/// materialising the original, so a 15 MP photo is no longer refused.
+#[test]
+fn large_sources_still_produce_thumbnails() {
+    let temp = TempDir::new().unwrap();
+    for (name, format) in [
+        ("large.jpg", ImageFormat::Jpeg),
+        ("large.png", ImageFormat::Png),
+    ] {
+        let path = temp.path().join(name);
+        fs::write(&path, image_bytes(format, 4400, 3300)).unwrap();
+        let row = one(&path);
+        let destination = temp.path().join(format!("cache/{name}.jpg"));
+        thumbnail(&row, 512, &destination).unwrap();
+        let output = image::open(&destination).unwrap();
+        assert_eq!(
+            (output.width(), output.height()),
+            (512, 384),
+            "{name} produced the wrong thumbnail size"
+        );
+        assert_no_temporaries(destination.parent().unwrap());
+    }
+}
+
+/// Transparency is flattened onto white, the same opaque result the
+/// pre-refactor client published.
+#[test]
+fn transparent_source_is_flattened_onto_white() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("transparent.png");
+    let mut buffer = Cursor::new(Vec::new());
+    PngEncoder::new(&mut buffer)
+        .write_image(
+            &image::RgbaImage::from_pixel(32, 16, image::Rgba([255, 0, 0, 0])),
+            32,
+            16,
+            ExtendedColorType::Rgba8,
+        )
+        .unwrap();
+    fs::write(&path, buffer.into_inner()).unwrap();
+    let destination = temp.path().join("cache/transparent.jpg");
+    thumbnail(&one(&path), 128, &destination).unwrap();
+    let output = image::open(&destination).unwrap().to_rgb8();
+    let pixel = output.get_pixel(0, 0);
+    assert!(
+        pixel.0[0] > 240 && pixel.0[1] > 240 && pixel.0[2] > 240,
+        "transparent source was not flattened onto white: {pixel:?}"
+    );
+}
+
 #[test]
 fn all_eight_exif_orientations_have_correct_dimensions_and_quadrants() {
     let temp = TempDir::new().unwrap();

@@ -285,6 +285,11 @@ impl LocalLibrary {
             browse_index: Arc::new(Mutex::new(None)),
             closed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
+        .inspect(|store| {
+            // Thumbnails written by an older encoder are rebuilt on demand, so
+            // the stale entries are dropped instead of piling up.
+            let _ = store.prune_thumbnail_cache();
+        })
     }
 
     pub fn is_closed(&self) -> bool {
