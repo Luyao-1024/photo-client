@@ -12,6 +12,7 @@ import '../app.dart';
 import '../platform/file_selector_source_picker.dart';
 import '../services/core_gateway.dart';
 import '../services/local_library_gateway.dart';
+import '../ui/cloud_sync_controller.dart';
 import '../ui/library_shell.dart';
 import '../ui/local_library_controller.dart';
 import '../ui/local_video_stage.dart';
@@ -21,6 +22,7 @@ import 'journey_input.dart';
 import 'launch_options.dart';
 
 part 'ux_journey.dart';
+part 'cloud_journey.dart';
 
 const String _recordPrefix = 'PHOTO_CLIENT_LOCAL ';
 const String _readyPrefix = 'PHOTO_CLIENT_LOCAL_READY ';
@@ -89,6 +91,16 @@ final class LocalJourney {
           await _holdJourney();
         case 'ux':
           await _uxJourney();
+        case 'cloud-upload':
+          await _cloudUploadJourney();
+        case 'cloud-download':
+          await _cloudDownloadJourney();
+        case 'cloud-offline':
+          await _cloudOfflineJourney();
+        case 'cloud-reconnect':
+          await _cloudReconnectJourney();
+        case 'cloud-reconcile':
+          await _cloudReconcileJourney();
         default:
           throw JourneyFailure(
             'Unsupported journey phase: ${options.journeyPhase}',
@@ -957,15 +969,14 @@ final class LocalJourney {
   /// Photo tiles are keyed `photo-<media id>`. The window chrome owns keys
   /// that start with the same prefix, so a tile is only a key that carries a
   /// media id.
-  List<Element> _photoTileElements() => _elementsWithKeyPrefix('photo-')
-      .where((element) {
+  List<Element> _photoTileElements() =>
+      _elementsWithKeyPrefix('photo-').where((element) {
         final key = element.widget.key;
         return key is ValueKey<String> &&
             RegExp(
               r'^photo-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
             ).hasMatch(key.value);
-      })
-      .toList();
+      }).toList();
 
   List<Element> _elementsWithKeyPrefix(String prefix) {
     final found = <Element>[];

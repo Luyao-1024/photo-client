@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Real-server cloud acceptance: see tools/cloud_journey.py.
+set -euo pipefail
+exec python3 -B "$(dirname "${BASH_SOURCE[0]}")/cloud_journey.py" "$@"

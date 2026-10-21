@@ -142,3 +142,26 @@ duplicated or malformed records fail. Checks that only have component-level
 evidence are labelled `evidence_level: "component"` in `report.json`; the
 interactive GTK file-dialog probe is reported separately as
 `L03-05-picker-dialog` and never upgrades `L03-01` on its own.
+
+## Cloud synchronization acceptance
+
+```sh
+PHOTO_FLUTTER_ROOT=/path/to/flutter ./tools/cloud_e2e --evidence-dir /path/to/fresh-evidence
+```
+
+`tools/cloud_e2e` builds the release bundle, starts the real binary from the
+adjacent `../syncserver` checkout on an isolated loopback port and data
+directory, and snapshots the user's real library database into two client data
+roots. It then runs five shipped-bundle journeys on a private Xvfb display with
+real XTest input: explicit album/single upload, download of originals and
+thumbnails, cloud badges, read-only protection, two-way favorites, sign-out,
+offline startup/queueing, reconnect and reconciliation. The password reaches
+the app only through `PHOTO_CLOUD_PASSWORD`; no credential is written to the
+report.
+
+After the app phases, the runner verifies server state over HTTP
+(`/v1/console/*`, `/v1/storage`) and compares every downloaded original and
+thumbnail with the server checksum and size. `report.json` includes phase
+records, screenshots and that cross-check; the real photo screenshots stay in
+the local evidence directory and are not committed. Focused helper tests live
+in `tests/cloud/test_cloud_journey.py`.

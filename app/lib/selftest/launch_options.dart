@@ -1,3 +1,5 @@
+import 'dart:io';
+
 /// Command-line contract for the real product process.
 ///
 /// Product runs accept `--data-root` only. Everything else selects an
@@ -19,6 +21,12 @@ final class LaunchOptions {
     this.holdSeconds = 0,
     this.inputMode = 'x11',
     this.expectRejected = false,
+    this.cloudEndpoint,
+    this.cloudUsername,
+    this.cloudBatchAlbum,
+    this.cloudSingleAlbum,
+    this.cloudExtraAlbum,
+    this.cloudExpectedPhotos = 0,
   });
 
   static const Set<String> _known = {
@@ -38,6 +46,12 @@ final class LaunchOptions {
     '--hold-seconds',
     '--input',
     '--expect-rejected',
+    '--cloud-endpoint',
+    '--cloud-username',
+    '--cloud-batch-album',
+    '--cloud-single-album',
+    '--cloud-extra-album',
+    '--cloud-expected-photos',
     // Consumed by the Linux runner; accepted here so strict runs stay clean.
     '--window-size',
   };
@@ -58,6 +72,27 @@ final class LaunchOptions {
   final String inputMode;
   final bool expectRejected;
 
+  /// Cloud journeys use a real server. The password is never a command-line
+  /// argument; it arrives through `PHOTO_CLOUD_PASSWORD` for the child process.
+  final String? cloudEndpoint;
+  final String? cloudUsername;
+  final String? cloudBatchAlbum;
+  final String? cloudSingleAlbum;
+  final String? cloudExtraAlbum;
+  final int cloudExpectedPhotos;
+
+  String get cloudPassword =>
+      Platform.environment['PHOTO_CLOUD_PASSWORD'] ?? '';
+
+  String requireCloudEndpoint() =>
+      cloudEndpoint ?? (throw ArgumentError('--cloud-endpoint is required'));
+
+  String requireCloudUsername() =>
+      cloudUsername ?? (throw ArgumentError('--cloud-username is required'));
+
+  String requireCloudAlbum(String name, String? value) =>
+      value ?? (throw ArgumentError('--$name is required'));
+
   static LaunchOptions parse(List<String> arguments, {bool strict = false}) {
     var selfTest = false;
     String? rejection;
@@ -74,6 +109,12 @@ final class LaunchOptions {
     var holdSeconds = 0;
     var inputMode = 'x11';
     var expectRejected = false;
+    String? cloudEndpoint;
+    String? cloudUsername;
+    String? cloudBatchAlbum;
+    String? cloudSingleAlbum;
+    String? cloudExtraAlbum;
+    var cloudExpectedPhotos = 0;
 
     String value(String flag, String? inline, int index) {
       if (inline != null) return inline;
@@ -133,6 +174,24 @@ final class LaunchOptions {
         case '--input':
           inputMode = value(flag, inline, index);
           consumed = inline == null;
+        case '--cloud-endpoint':
+          cloudEndpoint = value(flag, inline, index);
+          consumed = inline == null;
+        case '--cloud-username':
+          cloudUsername = value(flag, inline, index);
+          consumed = inline == null;
+        case '--cloud-batch-album':
+          cloudBatchAlbum = value(flag, inline, index);
+          consumed = inline == null;
+        case '--cloud-single-album':
+          cloudSingleAlbum = value(flag, inline, index);
+          consumed = inline == null;
+        case '--cloud-extra-album':
+          cloudExtraAlbum = value(flag, inline, index);
+          consumed = inline == null;
+        case '--cloud-expected-photos':
+          cloudExpectedPhotos = int.parse(value(flag, inline, index));
+          consumed = inline == null;
         case '--window-size':
           break;
         default:
@@ -158,6 +217,12 @@ final class LaunchOptions {
       holdSeconds: holdSeconds,
       inputMode: inputMode,
       expectRejected: expectRejected,
+      cloudEndpoint: cloudEndpoint,
+      cloudUsername: cloudUsername,
+      cloudBatchAlbum: cloudBatchAlbum,
+      cloudSingleAlbum: cloudSingleAlbum,
+      cloudExtraAlbum: cloudExtraAlbum,
+      cloudExpectedPhotos: cloudExpectedPhotos,
     );
   }
 }
