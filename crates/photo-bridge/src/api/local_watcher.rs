@@ -69,7 +69,10 @@ pub(super) fn install(service: &Arc<Service>) -> Result<(), String> {
         .map_err(|_| "WatchUnavailable")?;
     let mut watcher = watcher;
     let sources = service.store.sources()?;
-    for source in sources.into_iter().filter(|s| s.enabled) {
+    for source in sources
+        .into_iter()
+        .filter(|s| s.enabled && s.kind != "managed")
+    {
         let path = PathBuf::from(source.path);
         let watched = if path.is_dir() {
             path
@@ -97,7 +100,12 @@ pub(super) fn install(service: &Arc<Service>) -> Result<(), String> {
 }
 pub(super) fn refresh(service: &Arc<Service>) -> Result<(), String> {
     service.store.reconcile_trash()?;
-    for source in service.store.sources()?.into_iter().filter(|s| s.enabled) {
+    for source in service
+        .store
+        .sources()?
+        .into_iter()
+        .filter(|s| s.enabled && s.kind != "managed")
+    {
         if service.closed.load(Ordering::Acquire) {
             break;
         }

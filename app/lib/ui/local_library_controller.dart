@@ -55,11 +55,13 @@ class LibraryViewState {
   final int total, extent, revision, queryEpoch;
   final int anchorRank;
   final bool loading, loadingNext, hasNext, favoritesOnly, scanning, selecting;
+
   /// Whether the running scan may be announced to the user.
   ///
   /// Only indexing a newly added directory earns that attention: every other
   /// scan keeps the library current without interrupting anyone.
   final bool scanVisible;
+
   /// A sweep the user never asked for: it refreshes the library on its own
   /// and stays invisible.
   final bool backgroundScanning;
@@ -702,14 +704,16 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
     }
   }
 
-  Future<void> retryScan() =>
-      _lastPaths.isEmpty ? rescanSources() : scanPaths(_lastPaths, visible: false);
+  Future<void> retryScan() => _lastPaths.isEmpty
+      ? rescanSources()
+      : scanPaths(_lastPaths, visible: false);
   Future<void> rescanSources() async {
     final data = await localCommand({'op': 'sources'}) as List?;
     if (data == null) return;
     final paths = [
       for (final source in data)
-        if ((source as Map)['enabled'] == true) source['path'] as String,
+        if ((source as Map)['enabled'] == true && source['kind'] != 'managed')
+          source['path'] as String,
     ];
     // A rescan of known sources is maintenance: it never interrupts the user.
     if (paths.isNotEmpty) await scanPaths(paths, visible: false);

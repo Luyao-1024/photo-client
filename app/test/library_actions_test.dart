@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/app.dart';
+import 'package:photo_client/services/cloud_sync_gateway.dart';
 import 'package:photo_client/services/local_library_gateway.dart';
 import 'package:photo_client/ui/library_shell.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
@@ -213,6 +214,75 @@ void main() {
     // The floating Year/Month/Day capsule belongs to the library grid only.
     expect(find.text('Month'), findsNothing);
     expect(find.byKey(const ValueKey('search-scope-all')), findsOneWidget);
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('cloud-bound photo is read-only in the grid and viewer', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 2)
+      ..cloudState = const CloudStatus(
+        loggedIn: true,
+        endpoint: 'http://127.0.0.1:8790',
+        username: 'alice',
+        state: 'idle',
+        boundCount: 1,
+      )
+      ..cloudBoundIds = {'p0'};
+    await mount(tester, gateway);
+
+    expect(find.byKey(const ValueKey('cloud-badge-p0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('cloud-badge-p1')), findsNothing);
+
+    await tester.longPress(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('tile-menu-favorite')), findsOneWidget);
+    expect(find.byKey(const ValueKey('photo-upload-cloud')), findsNothing);
+    expect(find.byKey(const ValueKey('tile-menu-rename')), findsNothing);
+    expect(find.byKey(const ValueKey('tile-menu-move-album')), findsNothing);
+    expect(find.byKey(const ValueKey('tile-menu-trash')), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-edit')), findsNothing);
+    final trashButton = tester.widget<IconButton>(
+      find.byKey(const ValueKey('viewer-trash')),
+    );
+    expect(trashButton.onPressed, isNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-confirm-trash')), findsNothing);
+    expect(gateway.trashCalls, 0);
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('batch upload queues only unbound photos and syncs', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 3)
+      ..cloudState = const CloudStatus(
+        loggedIn: true,
+        endpoint: 'http://127.0.0.1:8790',
+        username: 'alice',
+        state: 'idle',
+        boundCount: 1,
+      )
+      ..cloudBoundIds = {'p1'};
+    await mount(tester, gateway);
+    final startupSyncs = gateway.cloudSyncCalls;
+
+    await pressWith(tester, LogicalKeyboardKey.keyA);
+    await tester.tap(find.byKey(const ValueKey('batch-upload-cloud')));
+    await tester.pumpAndSettle();
+
+    expect(gateway.cloudUploadCalls, [
+      ['p0', 'p2'],
+    ]);
+    expect(gateway.cloudSyncCalls, startupSyncs + 1);
+    expect(find.text('2 queued, 0 skipped, 0 rejected'), findsOneWidget);
     await disposeApp(tester, gateway);
   });
 }

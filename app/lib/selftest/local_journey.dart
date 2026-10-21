@@ -299,6 +299,11 @@ final class LocalJourney {
       // scripted folder, then close the dialog before watching the real scan.
       await _tapKey('sidebar-settings');
       await _waitForElement(
+        'settings-category-2',
+        reason: 'the settings dialog did not offer the photos category',
+      );
+      await _tapKey('settings-category-2');
+      await _waitForElement(
         'add-folder',
         reason: 'the settings dialog did not offer add-folder',
       );
@@ -552,9 +557,14 @@ final class LocalJourney {
         () => _state.search.isEmpty && _state.total > 1,
         reason: 'clearing the search did not restore the full library',
       );
+      await _key('Escape');
+      await _waitForElement(
+        'library-header-count',
+        reason: 'the library header did not render after clearing search',
+      );
     });
     await _step('library-summary-text', () async {
-      final text = _textOf(const ValueKey('library-info'));
+      final text = _textOf(const ValueKey('library-header-count'));
       facts['library_info_text'] = text;
       if (text == null || !text.contains('${_state.info!.count}')) {
         throw JourneyFailure(

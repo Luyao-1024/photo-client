@@ -110,7 +110,7 @@ fn global() -> &'static Mutex<Option<Arc<Service>>> {
     static INSTANCE: OnceLock<Mutex<Option<Arc<Service>>>> = OnceLock::new();
     INSTANCE.get_or_init(|| Mutex::new(None))
 }
-fn service() -> Result<Arc<Service>, String> {
+pub(super) fn service() -> Result<Arc<Service>, String> {
     let service = global()
         .lock()
         .map_err(|_| "LibraryUnavailable")?
@@ -151,7 +151,7 @@ fn crop_rect(x: u32, y: u32, width: u32, height: u32) -> CropRect {
     }
 }
 
-fn join_error(_: tokio::task::JoinError) -> String {
+pub(super) fn join_error(_: tokio::task::JoinError) -> String {
     "LocalWorkerFailed".into()
 }
 
@@ -165,7 +165,12 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
         let mut slot = global().lock().map_err(|_| "LibraryUnavailable")?;
         if slot.is_none() {
             let store = LocalLibrary::open(&root)?;
-            if auto_discover && store.sources()?.is_empty() {
+            if auto_discover
+                && store
+                    .sources()?
+                    .iter()
+                    .all(|source| source.kind == "managed")
+            {
                 if let Some(home) = std::env::var_os("HOME") {
                     let home = PathBuf::from(home);
                     let config = std::env::var_os("XDG_CONFIG_HOME")
@@ -229,7 +234,12 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
         {
             let _ = super::local_watcher::install(active);
         }
-        if active.initial_scan.swap(false, Ordering::AcqRel) && !active.store.sources()?.is_empty()
+        if active.initial_scan.swap(false, Ordering::AcqRel)
+            && active
+                .store
+                .sources()?
+                .iter()
+                .any(|source| source.enabled && source.kind != "managed")
         {
             let worker = active.clone();
             // Startup reconciliation is background work: it refreshes the index
@@ -669,31 +679,49 @@ pub async fn thumbnail(media_id: String, size_class: u32) -> Result<String, Stri
     let worker = active.clone();
     tokio::task::spawn_blocking(move || {
         let photo = worker.store.photo(media_id)?;
-        let directory = worker
+        let cloud_thumbnail = worker
             .store
-            .root
-            .join("cache")
-            .join(&photo.id)
-            .join(photo.content_version.to_string());
-        std::fs::create_dir_all(&directory).map_err(|_| "CacheUnavailable")?;
-        let destination = directory.join(format!("thumbnail-{size_class}.jpg"));
-        if !destination.is_file() {
-            media::prepare_preview(
-                std::path::Path::new(&photo.path),
-                photo.size_bytes,
-                photo.modified_ns,
-                size_class,
-                &destination,
-            )?;
+            .cloud_thumbnail_for_media(photo.id.clone())
+            .ok()
+            .flatten()
+            .map(|(path, _)| path);
+        let generated = (|| -> Result<String, String> {
+            let directory = worker
+                .store
+                .root
+                .join("cache")
+                .join(&photo.id)
+                .join(photo.content_version.to_string());
+            std::fs::create_dir_all(&directory).map_err(|_| "CacheUnavailable")?;
+            let destination = directory.join(format!("thumbnail-{size_class}.jpg"));
+            if !destination.is_file() {
+                media::prepare_preview(
+                    std::path::Path::new(&photo.path),
+                    photo.size_bytes,
+                    photo.modified_ns,
+                    size_class,
+                    &destination,
+                )?;
+            }
+            let current = worker.store.photo(photo.id.clone())?;
+            if current.content_version != photo.content_version {
+                return Err("SourceChanged".into());
+            }
+            destination
+                .to_str()
+                .map(str::to_owned)
+                .ok_or("UnsupportedPathEncoding".into())
+        })();
+        match generated {
+            Ok(path) => Ok(path),
+            // Formats the native image pipeline cannot decode (or a cloud
+            // original that is no longer readable) still get the synced
+            // thumbnail the server provided.
+            Err(error) => match cloud_thumbnail {
+                Some(path) if std::path::Path::new(&path).is_file() => Ok(path),
+                _ => Err(error),
+            },
         }
-        let current = worker.store.photo(photo.id)?;
-        if current.content_version != photo.content_version {
-            return Err("SourceChanged".into());
-        }
-        destination
-            .to_str()
-            .map(str::to_owned)
-            .ok_or("UnsupportedPathEncoding".into())
     })
     .await
     .map_err(join_error)?
@@ -714,6 +742,7 @@ pub async fn set_favorite(media_id: String, favorite: bool) -> Result<(), String
 pub async fn close_library() -> Result<(), String> {
     tokio::task::spawn_blocking(|| {
         if let Some(active) = global().lock().map_err(|_| "LibraryUnavailable")?.take() {
+            active.store.mark_closed();
             active.closed.store(true, Ordering::Release);
             active.cancel.store(true, Ordering::Release);
             active.thumbnails.close();

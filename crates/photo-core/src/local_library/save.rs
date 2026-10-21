@@ -141,6 +141,9 @@ impl LocalLibrary {
         expected_version: Option<u64>,
     ) -> Result<LocalPhoto, String> {
         let _mutation = self.mutation_guard()?;
+        if self.cloud_media_read_only(id.clone())? {
+            return Err("CloudMediaReadOnly".into());
+        }
         if adjustments.is_identity() {
             return Err("NoEdits".into());
         }
@@ -408,6 +411,9 @@ impl LocalLibrary {
             };
             if photo.state != "trashed" {
                 return Err("PhotoNotTrashed".into());
+            }
+            if self.cloud_media_read_only(id.clone())? {
+                return Err("CloudMediaReadOnly".into());
             }
             let source = PathBuf::from(&photo.path);
             let op = Uuid::new_v4().to_string();

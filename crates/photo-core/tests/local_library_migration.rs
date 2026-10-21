@@ -6,9 +6,10 @@ use std::fs;
 use tempfile::TempDir;
 
 const SCHEMA: &str = include_str!("../src/storage/local-schema.sql");
+const EXTENSIONS: &str = include_str!("../src/storage/local-v3.sql");
 
 /// Older supported catalogs are upgraded; future writers are still rejected.
-const CURRENT_SCHEMA_VERSION: i64 = 3;
+const CURRENT_SCHEMA_VERSION: i64 = 4;
 
 fn input(folder: &std::path::Path, name: &str, ns: i64) -> MediaInput {
     let path = folder.join(name);
@@ -262,6 +263,9 @@ fn legacy_catalog(root: &TempDir, photos: &TempDir, version: i64) {
     let photo = input(photos.path(), "keep.jpg", 1_000_000);
     let c = Connection::open(root.path().join("library.sqlite")).unwrap();
     c.execute_batch(&schema).unwrap();
+    if version >= 3 {
+        c.execute_batch(EXTENSIONS).unwrap();
+    }
     c.execute(
         "INSERT INTO app_meta VALUES(1,?1,'installation',0)",
         [version],
@@ -333,13 +337,13 @@ fn v1_migration_preserves_catalog_preferences_and_originals() {
     assert_eq!(
         c.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        3
+        CURRENT_SCHEMA_VERSION
     );
     assert_eq!(
         c.query_row("SELECT schema_version FROM app_meta", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
-        3
+        CURRENT_SCHEMA_VERSION
     );
     assert_eq!(fs::read(photos.path().join("keep.jpg")).unwrap(), before);
     let backups = backup_files(&root);
@@ -386,6 +390,82 @@ fn v2_migration_keeps_already_saved_preferences() {
     assert_eq!(prefs["theme"], "light");
     assert_eq!(prefs["glassMode"], "full");
     assert_eq!(backup_files(&root).len(), 1);
+}
+
+#[test]
+fn v3_migration_adds_cloud_tables_and_preserves_catalog() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    legacy_catalog(&root, &photos, 3);
+    let library = LocalLibrary::open(root.path()).unwrap();
+    assert_eq!(library.library_id, "legacy-library");
+    assert_eq!(library.info().unwrap().count, 1);
+    assert_eq!(library.info().unwrap().revision, 7);
+    assert!(library.photo("photo".into()).unwrap().favorite);
+    let prefs: serde_json::Value = serde_json::from_str(&library.preferences().unwrap()).unwrap();
+    assert_eq!(prefs["glassMode"], "full");
+    let c = Connection::open(root.path().join("library.sqlite")).unwrap();
+    for table in [
+        "cloud_accounts",
+        "cloud_sync_state",
+        "cloud_records",
+        "cloud_bindings",
+        "cloud_uploads",
+    ] {
+        assert_eq!(
+            c.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1,
+            "{table} must exist after the v3 upgrade"
+        );
+    }
+    assert_eq!(
+        c.query_row("SELECT COUNT(*) FROM album_members", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        c.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        CURRENT_SCHEMA_VERSION
+    );
+    assert_eq!(
+        c.query_row("SELECT schema_version FROM app_meta", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        CURRENT_SCHEMA_VERSION
+    );
+    assert_eq!(
+        c.query_row("SELECT favorite FROM media WHERE media_id='photo'", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    drop(c);
+    let backups = backup_files(&root);
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    assert_eq!(
+        backup
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        backup
+            .query_row(
+                "SELECT favorite FROM media WHERE media_id='photo'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+        1
+    );
 }
 
 #[test]

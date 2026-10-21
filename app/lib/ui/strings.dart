@@ -221,6 +221,114 @@ class AppStrings {
   String get appliedEdits => pick('已应用修改', 'Changes applied');
   String get editorFailed => pick('保存失败，请重试。', 'Save failed. Try again.');
 
+  // --- Cloud sync -------------------------------------------------------
+  String get cloudSync => pick('云同步', 'Cloud Sync');
+  String get cloudSyncBody => pick(
+    '登录后自动下载云端照片，并在本机与云端之间同步收藏。上传仅在你明确选择照片后发生。',
+    'Sign in to download cloud photos and keep favorites in sync. Uploads only happen for photos you explicitly select.',
+  );
+  String get cloudEndpoint => pick('服务器地址', 'Server endpoint');
+  String get cloudEndpointHint => 'http://127.0.0.1:8790';
+  String get cloudUsername => pick('用户名', 'Username');
+  String get cloudPassword => pick('密码', 'Password');
+  String get cloudPasswordHint =>
+      pick('仅用于登录，不会保存', 'Used only to sign in; never stored');
+  String get cloudSignIn => pick('登录', 'Sign in');
+  String get cloudSignOut => pick('退出登录', 'Sign out');
+  String get cloudSyncNow => pick('立即同步', 'Sync now');
+  String get syncing => pick('同步中…', 'Syncing…');
+  String get cloudLastSync => pick('上次同步', 'Last sync');
+  String get cloudNeverSynced => pick('尚未同步', 'Not synced yet');
+  String get cloudPendingUploads => pick('待上传', 'Pending uploads');
+  String get cloudPendingFavorites => pick('待同步收藏', 'Pending favorites');
+  String get cloudBoundCount => pick('云端照片', 'Cloud photos');
+  String get cloudUnavailable =>
+      pick('当前构建不支持云同步。', 'Cloud sync is unavailable in this build.');
+  String get cloudSignedOut => pick(
+    '云同步未登录，请先在设置中登录。',
+    'Cloud sync is signed out. Sign in from Settings.',
+  );
+  String get cloudReadOnly => pick(
+    '云端照片为只读，可收藏、复制或导出。',
+    'Cloud photos are read-only. You can favorite, copy or export them.',
+  );
+  String get cloudUpload => pick('上传到云端', 'Upload to cloud');
+  String get cloudUploadQueued => pick('已加入上传队列', 'Added to the upload queue');
+  String get cloudUploadNone => pick('没有可上传的照片', 'No photos to upload');
+  String cloudUploadResult(int queued, int skipped, int rejected) => pick(
+    '已加入 $queued 张，跳过 $skipped 张，无法上传 $rejected 张',
+    '$queued queued, $skipped skipped, $rejected rejected',
+  );
+  String cloudSyncedCounts(int downloaded, int uploaded, int favorites) => pick(
+    '同步完成：下载 $downloaded，上传 $uploaded，收藏 $favorites',
+    'Synced: $downloaded downloaded, $uploaded uploaded, $favorites favorites',
+  );
+  String cloudError(String code) => switch (code) {
+    'AuthFailed' => pick(
+      '登录失败，请检查服务器地址、用户名和密码。',
+      'Sign-in failed. Check the endpoint, username and password.',
+    ),
+    'TokenExpired' => pick(
+      '登录已过期，请重新登录。',
+      'The session expired. Sign in again.',
+    ),
+    'Network' => pick(
+      '无法连接服务器，请检查网络后重试。',
+      'Cannot reach the server. Check the connection and retry.',
+    ),
+    'EndpointRejected' => pick(
+      '服务器地址无效：请使用完整地址，例如 http://127.0.0.1:8790，不要使用 localhost。',
+      'Invalid endpoint. Use a full address such as http://127.0.0.1:8790, not localhost.',
+    ),
+    'AccountExists' => pick(
+      '此图库已登录其他账号。更换账号需要新的数据目录。',
+      'This library is signed in to another account. A new account needs a fresh data directory.',
+    ),
+    'AdminAccountUnsupported' => pick(
+      '不支持管理员账号，请使用普通用户。',
+      'Administrator accounts are not supported. Use a regular user.',
+    ),
+    'LeaseBusy' => pick(
+      '另一台设备正在同步，请稍后再试。',
+      'Another device is syncing. Try again shortly.',
+    ),
+    'LeaseLost' => pick('同步写入权已失效，请重试。', 'The sync lease was lost. Try again.'),
+    'NotCurrent' => pick(
+      '云端数据已变化，请再同步一次。',
+      'Cloud data changed. Sync once more.',
+    ),
+    'GraphInvalid' => pick(
+      '云端照片数据不完整，已保留现有内容。',
+      'Cloud photo data is incomplete; existing content was kept.',
+    ),
+    'ChangeFailed' => pick(
+      '部分云端变更无法读取，已保留现有内容。',
+      'Some cloud changes could not be read; existing content was kept.',
+    ),
+    'UnsupportedMedia' => pick(
+      '云端照片格式不受支持，已跳过下载。',
+      'A cloud photo format is unsupported and was skipped.',
+    ),
+    'ThumbnailFailed' => pick(
+      '无法生成上传缩略图。',
+      'Could not create an upload thumbnail.',
+    ),
+    'QuotaExceeded' => pick('云端存储空间不足。', 'The cloud storage quota is full.'),
+    'SourceChanged' => pick(
+      '照片在上传前发生了变化，请重新选择。',
+      'The photo changed before upload. Select it again.',
+    ),
+    'LibraryClosed' => pick(
+      '图库已关闭，请重新打开。',
+      'The library was closed. Open it again.',
+    ),
+    'ServerRejected' => pick(
+      '服务器拒绝了请求，请稍后重试。',
+      'The server rejected the request. Try again later.',
+    ),
+    _ => pick('云同步失败，请重试。', 'Cloud sync failed. Try again.'),
+  };
+
   String libraryError(String kind) => switch (kind) {
     'picker' => pick(
       '无法打开文件选择器，请重试。',

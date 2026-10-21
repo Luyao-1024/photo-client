@@ -97,6 +97,9 @@ pub async fn watch_runtime(sink: StreamSink<RuntimeEvent>) -> Result<(), String>
 }
 
 pub async fn shutdown() -> Result<(), String> {
+    // Wait for any in-flight cloud sweep before closing the library so the
+    // engine never observes a half-closed catalog.
+    let _cloud = super::cloud_sync::lock().await;
     super::local_library::close_library().await?;
     runtime().shutdown().map_err(|e| e.to_string())
 }

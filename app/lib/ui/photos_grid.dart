@@ -104,6 +104,8 @@ class PhotoTile extends StatefulWidget {
     required this.onEnterSelection,
     required this.onToggleFavorite,
     required this.onShowDetails,
+    this.cloudBound = false,
+    this.onUploadToCloud,
     this.onRename,
     this.onMoveToTrash,
     this.onCopyToAlbum,
@@ -125,6 +127,8 @@ class PhotoTile extends StatefulWidget {
   final VoidCallback onEnterSelection;
   final VoidCallback onToggleFavorite;
   final VoidCallback onShowDetails;
+  final bool cloudBound;
+  final VoidCallback? onUploadToCloud;
   final VoidCallback? onRename;
   final VoidCallback? onMoveToTrash;
   final VoidCallback? onCopyToAlbum;
@@ -231,6 +235,12 @@ class _PhotoTileState extends State<PhotoTile> {
                   : strings.markFavorite,
             ),
           ),
+        if (widget.onUploadToCloud != null)
+          PopupMenuItem<String>(
+            key: const ValueKey('photo-upload-cloud'),
+            value: 'upload-cloud',
+            child: Text(strings.cloudUpload),
+          ),
         PopupMenuItem<String>(
           key: const ValueKey('tile-menu-details'),
           value: 'details',
@@ -296,6 +306,8 @@ class _PhotoTileState extends State<PhotoTile> {
         }
       case 'favorite':
         widget.onToggleFavorite();
+      case 'upload-cloud':
+        widget.onUploadToCloud?.call();
       case 'details':
         widget.onShowDetails();
       case 'rename':
@@ -399,6 +411,29 @@ class _PhotoTileState extends State<PhotoTile> {
                                     fontSize: 12,
                                   ),
                                 ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (widget.cloudBound)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Semantics(
+                      label: strings.pick('已同步到云端', 'Synced to cloud'),
+                      child: DecoratedBox(
+                        key: ValueKey('cloud-badge-${widget.photo.id}'),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: .55),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.cloud_outlined,
+                            size: 13,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),

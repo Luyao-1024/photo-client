@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:photo_client/services/cloud_sync_gateway.dart';
 import 'package:photo_client/services/local_library_gateway.dart';
 
 import '../presentation_test.dart' show FakeGateway;
 
-class FakeLocalGateway extends FakeGateway implements LocalLibraryGateway {
+class FakeLocalGateway extends FakeGateway
+    implements LocalLibraryGateway, CloudSyncGateway {
   FakeLocalGateway({required this.imagePath, int count = 0}) {
     photos = List.generate(count, (index) => photo(index));
   }
@@ -38,6 +40,16 @@ class FakeLocalGateway extends FakeGateway implements LocalLibraryGateway {
   final requestedTrashed = <bool>[];
   final requestedAdds = <(List<String>, String, bool)>[];
   final requestedRenames = <(String, String)>[];
+  CloudStatus cloudState = const CloudStatus();
+  Set<String> cloudBoundIds = {};
+  CloudSyncReport cloudReport = const CloudSyncReport();
+  bool failCloudLogin = false;
+  bool failCloudSync = false;
+  int cloudLoginCalls = 0;
+  int cloudLogoutCalls = 0;
+  int cloudSyncCalls = 0;
+  final cloudUploadCalls = <List<String>>[];
+  final cloudSeenPasswords = <String>[];
 
   LocalPhoto photo(
     int index, {
@@ -131,6 +143,72 @@ class FakeLocalGateway extends FakeGateway implements LocalLibraryGateway {
       DateTime.fromMillisecondsSinceEpoch(
         photo.captureTimeMs ?? photo.modifiedMs,
       ).toIso8601String().substring(0, 10);
+
+  @override
+  Future<CloudStatus> cloudLogin({
+    required String endpoint,
+    required String username,
+    required String password,
+  }) async {
+    cloudLoginCalls++;
+    cloudSeenPasswords.add(password);
+    if (failCloudLogin) throw StateError('AuthFailed');
+    cloudState = CloudStatus(
+      loggedIn: true,
+      endpoint: endpoint,
+      username: username,
+      state: 'idle',
+      pendingUploads: cloudState.pendingUploads,
+      boundCount: cloudBoundIds.length,
+    );
+    return cloudState;
+  }
+
+  @override
+  Future<CloudStatus> cloudLogout() async {
+    cloudLogoutCalls++;
+    cloudState = CloudStatus(
+      username: cloudState.username,
+      endpoint: cloudState.endpoint,
+      state: 'logged_out',
+      boundCount: cloudBoundIds.length,
+    );
+    return cloudState;
+  }
+
+  @override
+  Future<CloudStatus> cloudStatus() async => cloudState;
+
+  @override
+  Future<CloudSyncReport> cloudSyncNow() async {
+    cloudSyncCalls++;
+    if (failCloudSync) throw StateError('Network');
+    cloudState = CloudStatus(
+      loggedIn: cloudState.loggedIn,
+      endpoint: cloudState.endpoint,
+      username: cloudState.username,
+      state: cloudReport.errorCode == null ? 'idle' : 'error',
+      errorCode: cloudReport.errorCode,
+      lastSyncMs: 1700000000000,
+      pendingUploads: 0,
+      pendingFavorites: 0,
+      boundCount: cloudBoundIds.length,
+    );
+    return cloudReport;
+  }
+
+  @override
+  Future<CloudQueueResult> cloudQueueUpload(List<String> mediaIds) async {
+    cloudUploadCalls.add(List<String>.of(mediaIds));
+    final pending = mediaIds.where((id) => !cloudBoundIds.contains(id)).length;
+    return CloudQueueResult(
+      queued: pending,
+      skipped: mediaIds.length - pending,
+    );
+  }
+
+  @override
+  Future<List<String>> cloudBoundMediaIds() async => cloudBoundIds.toList();
 
   @override
   Future<List<LocalAlbum>> listAlbums() async {

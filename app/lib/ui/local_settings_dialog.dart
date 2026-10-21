@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'cloud_sync_settings_page.dart';
 import 'glass_dialog.dart';
 import 'glass_theme.dart';
 import 'local_library_controller.dart';
@@ -101,12 +102,14 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
       strings.pick('外观', 'Appearance'),
       strings.pick('照片与视频', 'Photos and Videos'),
       strings.pick('存储与日志', 'Storage and Logs'),
+      strings.cloudSync,
     ];
     final titles = [
       strings.pick('通用设置', 'General'),
       strings.pick('外观设置', 'Appearance'),
       strings.pick('照片与视频', 'Photos and Videos'),
       strings.pick('存储与日志', 'Storage and Logs'),
+      strings.cloudSync,
     ];
     Widget section(String title, List<Widget> children) => Padding(
       padding: const EdgeInsets.only(bottom: 24),
@@ -311,7 +314,8 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
             ),
             const SizedBox(height: 8),
             for (final source in _sources)
-              if ((source as Map)['enabled'] == true)
+              if ((source as Map)['enabled'] == true &&
+                  source['kind'] != 'managed')
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(
@@ -418,6 +422,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
           ]),
         ],
       ),
+      const CloudSyncSettingsPage(),
     ];
     return GlassDialog(
       child: ConstrainedBox(

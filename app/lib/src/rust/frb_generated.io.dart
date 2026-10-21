@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/bootstrap.dart';
+import 'api/cloud_sync.dart';
 import 'api/local_library.dart';
 
 import 'dart:async';
@@ -50,6 +51,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  CloudQueueResultView dco_decode_cloud_queue_result_view(dynamic raw);
+
+  @protected
+  CloudStatusView dco_decode_cloud_status_view(dynamic raw);
+
+  @protected
+  CloudSyncReportView dco_decode_cloud_sync_report_view(dynamic raw);
 
   @protected
   EditRequest dco_decode_edit_request(dynamic raw);
@@ -142,6 +152,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  CloudQueueResultView sse_decode_cloud_queue_result_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CloudStatusView sse_decode_cloud_status_view(SseDeserializer deserializer);
+
+  @protected
+  CloudSyncReportView sse_decode_cloud_sync_report_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   EditRequest sse_decode_edit_request(SseDeserializer deserializer);
@@ -247,6 +270,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_cloud_queue_result_view(
+    CloudQueueResultView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_cloud_status_view(
+    CloudStatusView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_cloud_sync_report_view(
+    CloudSyncReportView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_edit_request(EditRequest self, SseSerializer serializer);

@@ -6,15 +6,21 @@ import '../services/local_library_tools.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+import '../services/cloud_sync_gateway.dart';
 import '../services/core_gateway.dart';
 import '../services/local_library_gateway.dart';
 import '../src/rust/api/bootstrap.dart' as native;
+import '../src/rust/api/cloud_sync.dart' as native_cloud;
 import '../src/rust/api/local_library.dart' as native_library;
 import '../src/rust/frb_generated.dart';
 
 /// The only presentation adapter that knows the generated FFI API or native path.
 final class NativeCoreGateway
-    implements CoreGateway, LocalLibraryGateway, LocalLibraryTools {
+    implements
+        CoreGateway,
+        LocalLibraryGateway,
+        LocalLibraryTools,
+        CloudSyncGateway {
   NativeCoreGateway({
     this.expectedDigestOverride,
     this.protocolOverride,
@@ -311,4 +317,69 @@ final class NativeCoreGateway
         .where((event) => event.status == 'library_changed')
         .map((_) {});
   }
+
+  CloudStatus _cloudStatus(native_cloud.CloudStatusView status) => CloudStatus(
+    loggedIn: status.loggedIn,
+    endpoint: status.endpoint,
+    username: status.username,
+    userId: status.userId,
+    tokenExpiresAtMs: status.tokenExpiresAtMs?.toInt(),
+    lastSyncMs: status.lastSyncMs?.toInt(),
+    state: status.state,
+    errorCode: status.errorCode,
+    pendingUploads: status.pendingUploads,
+    pendingFavorites: status.pendingFavorites,
+    boundCount: status.boundCount,
+    syncing: status.syncing,
+  );
+
+  @override
+  Future<CloudStatus> cloudLogin({
+    required String endpoint,
+    required String username,
+    required String password,
+  }) async => _cloudStatus(
+    await native_cloud.cloudLogin(
+      endpoint: endpoint,
+      username: username,
+      password: password,
+    ),
+  );
+
+  @override
+  Future<CloudStatus> cloudLogout() async =>
+      _cloudStatus(await native_cloud.cloudLogout());
+
+  @override
+  Future<CloudStatus> cloudStatus() async =>
+      _cloudStatus(await native_cloud.cloudStatus());
+
+  @override
+  Future<CloudSyncReport> cloudSyncNow() async {
+    final report = await native_cloud.cloudSyncNow();
+    return CloudSyncReport(
+      downloaded: report.downloaded,
+      uploaded: report.uploaded,
+      favoritesApplied: report.favoritesApplied,
+      favoritesUploaded: report.favoritesUploaded,
+      skipped: report.skipped,
+      failed: report.failed,
+      state: report.state,
+      errorCode: report.errorCode,
+    );
+  }
+
+  @override
+  Future<CloudQueueResult> cloudQueueUpload(List<String> mediaIds) async {
+    final result = await native_cloud.cloudQueueUpload(mediaIds: mediaIds);
+    return CloudQueueResult(
+      queued: result.queued,
+      skipped: result.skipped,
+      rejected: result.rejected,
+    );
+  }
+
+  @override
+  Future<List<String>> cloudBoundMediaIds() =>
+      native_cloud.cloudBoundMediaIds();
 }

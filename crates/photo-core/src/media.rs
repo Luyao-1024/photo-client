@@ -143,8 +143,13 @@ pub(super) fn fingerprint_of(path: &Path) -> Result<Fingerprint, String> {
     )
 }
 
-fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, String> {
-    let mime = mime_from_extension(path).ok_or("UnsupportedSource: extension")?;
+/// Inspect one existing file with the same fingerprint checks a scan performs.
+pub fn inspect_file(path: &Path) -> Result<DiscoveredMedia, String> {
+    let initial = fingerprint_of(path)?;
+    inspect_with(path, initial)
+}
+
+fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, String> {    let mime = mime_from_extension(path).ok_or("UnsupportedSource: extension")?;
     let mut file = File::open(path).map_err(|e| format!("SourceRead: {e}"))?;
     check_source(path, &file, &initial)?;
     let header = if mime == "image/heic" {

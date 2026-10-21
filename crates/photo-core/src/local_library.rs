@@ -13,11 +13,18 @@ use std::{
 use uuid::Uuid;
 
 const SCHEMA: &str = include_str!("storage/local-schema.sql");
-const SCHEMA_VERSION: i64 = 3;
+const EXTENSIONS: &str = include_str!("storage/local-v3.sql");
+const CLOUD_SCHEMA: &str = include_str!("storage/local-v4.sql");
+const SCHEMA_VERSION: i64 = 4;
+mod cloud_store;
+pub(crate) use cloud_store::{
+    CloudAccount, CloudBinding, CloudBindingMedia, CloudBindingUpdate, CloudQueueCounts,
+    CloudUpload, CloudUploadIntent, RemoteMediaInput, StoredCloudRecord,
+};
+mod migrations;
 mod save;
 mod system_trash;
 mod tools;
-mod migrations;
 pub use tools::{BrowseIndex, SourceInfo};
 type Job = Box<dyn FnOnce(&mut Connection) + Send>;
 enum Message {
@@ -120,6 +127,7 @@ pub struct LocalLibrary {
     pub root: PathBuf,
     pub library_id: String,
     browse_index: Arc<Mutex<Option<BrowseIndex>>>,
+    closed: Arc<std::sync::atomic::AtomicBool>,
 }
 
 fn error<T: std::fmt::Display>(value: T) -> String {
@@ -171,9 +179,8 @@ impl LocalLibrary {
         if current == 0 {
             let transaction = connection.transaction().map_err(error)?;
             transaction.execute_batch(SCHEMA).map_err(error)?;
-            transaction
-                .execute_batch(include_str!("storage/local-v3.sql"))
-                .map_err(error)?;
+            transaction.execute_batch(EXTENSIONS).map_err(error)?;
+            transaction.execute_batch(CLOUD_SCHEMA).map_err(error)?;
             let installation_id = Uuid::new_v4().to_string();
             let library_id = Uuid::new_v4().to_string();
             transaction
@@ -194,7 +201,12 @@ impl LocalLibrary {
                     "INSERT INTO schema_migrations VALUES(?1,?2,?3)",
                     params![
                         SCHEMA_VERSION,
-                        format!("{:x}", Sha256::digest(SCHEMA.as_bytes())),
+                        format!(
+                            "{:x}",
+                            Sha256::digest(
+                                [SCHEMA, EXTENSIONS, CLOUD_SCHEMA].concat().as_bytes()
+                            )
+                        ),
                         now_ms()
                     ],
                 )
@@ -206,9 +218,8 @@ impl LocalLibrary {
         } else if current < SCHEMA_VERSION {
             migrations::upgrade(&mut connection, &root, current)?;
         }
-        connection
-            .execute_batch(include_str!("storage/local-v3.sql"))
-            .map_err(error)?;
+        connection.execute_batch(EXTENSIONS).map_err(error)?;
+        connection.execute_batch(CLOUD_SCHEMA).map_err(error)?;
         let library_id: String = connection
             .query_row(
                 "SELECT selected_library_id FROM app_settings WHERE singleton=1",
@@ -272,7 +283,17 @@ impl LocalLibrary {
             root,
             library_id,
             browse_index: Arc::new(Mutex::new(None)),
+            closed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    pub fn mark_closed(&self) {
+        self.closed
+            .store(true, std::sync::atomic::Ordering::Release);
     }
 
     fn execute<R: Send + 'static>(
@@ -390,7 +411,7 @@ impl LocalLibrary {
             let exists:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM media WHERE library_id=?1 AND media_id=?2 AND state='active')",params![library,media_id],|r|r.get(0)).map_err(error)?;
             if !exists{return Err("PhotoNotFound".into());}
             let changed=tx.execute("UPDATE media SET favorite=?3 WHERE library_id=?1 AND media_id=?2 AND favorite<>?3",params![library,media_id,favorite]).map_err(error)?>0;
-            if changed{tx.execute("UPDATE libraries SET revision=revision+1,favorite_count=favorite_count+?2 WHERE library_id=?1",params![library,if favorite{1}else{-1}]).map_err(error)?;}
+            if changed{tools::recount(&tx,&library)?;cloud_store::mark_favorite_dirty(&tx,&library,&media_id)?;}
             tx.commit().map_err(error)?;Ok(changed)
         })
     }
@@ -607,6 +628,9 @@ impl LocalLibrary {
                 if state != "active" {
                     continue;
                 }
+                if cloud_store::is_bound(&tx, &library, &media_id)? {
+                    return Err("CloudMediaReadOnly".into());
+                }
                 let source = PathBuf::from(&source_uri);
                 if !source.is_file() {
                     return Err("SourceUnavailable".into());
@@ -788,6 +812,9 @@ impl LocalLibrary {
                 if state != "active" {
                     continue;
                 }
+                if move_files && cloud_store::is_bound(&tx, &library, &media_id)? {
+                    return Err("CloudMediaReadOnly".into());
+                }
                 if move_files && parent_uri == target_uri {
                     continue;
                 }
@@ -846,13 +873,7 @@ impl LocalLibrary {
                 changed += 1;
             }
             if changed > 0 {
-                let delta = if move_files { 0_i64 } else { changed as i64 };
-                let favorite_delta=0_i64;
-                tx.execute(
-                    "UPDATE libraries SET revision=revision+1,media_count=media_count+?2,favorite_count=favorite_count+?3 WHERE library_id=?1",
-                    params![library, delta, favorite_delta],
-                )
-                .map_err(error)?;
+                tools::recount(&tx, &library)?;
             }
             tx.commit().map_err(error)?;
             rollback.committed=true;
@@ -880,6 +901,9 @@ impl LocalLibrary {
             let Some(source_uri) = row else {
                 return Err("PhotoNotFound".into());
             };
+            if cloud_store::is_bound(c, &library, &media_id)? {
+                return Err("CloudMediaReadOnly".into());
+            }
             let source = PathBuf::from(&source_uri);
             let parent = source.parent().ok_or("SourceUnavailable")?;
             let destination = unique_destination(parent, &requested)?;

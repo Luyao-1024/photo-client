@@ -17,7 +17,9 @@ publish = false
 [workspace.dependencies]
 photo-domain = { path = "crates/photo-domain" }
 photo-core = { path = "crates/photo-core" }
+syncserver-client = { path = "crates/syncserver-client" }
 platform-linux = { path = "crates/platform-linux" }
+sync-client = { git = "https://github.com/Luyao-1024/syncserver.git", rev = "9097be58dbec0cc441ebb46068dc81f72d537368" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

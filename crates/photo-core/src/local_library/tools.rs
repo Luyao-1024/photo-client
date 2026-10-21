@@ -12,6 +12,7 @@ pub struct BrowseIndex {
 pub struct SourceInfo {
     pub id: String,
     pub path: String,
+    pub kind: String,
     pub enabled: bool,
     pub availability: String,
 }
@@ -318,14 +319,16 @@ impl LocalLibrary {
     pub fn sources(&self) -> Result<Vec<SourceInfo>, String> {
         let library = self.library_id.clone();
         self.execute(move|c|{
-            let mut stmt=c.prepare("SELECT source_id,root_uri,enabled,availability FROM sources WHERE library_id=?1 ORDER BY root_uri").map_err(error)?;
-            stmt.query_map([library],|r|Ok(SourceInfo{id:r.get(0)?,path:r.get(1)?,enabled:r.get(2)?,availability:r.get(3)?})).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)
+            let mut stmt=c.prepare("SELECT source_id,root_uri,source_kind,enabled,availability FROM sources WHERE library_id=?1 ORDER BY root_uri").map_err(error)?;
+            stmt.query_map([library],|r|Ok(SourceInfo{id:r.get(0)?,path:r.get(1)?,kind:r.get(2)?,enabled:r.get(3)?,availability:r.get(4)?})).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)
         })
     }
     /// Disable and remove only this source's index; originals remain untouched.
     pub fn remove_source(&self, id: String) -> Result<(), String> {
         let library = self.library_id.clone();
         self.execute(move|c|{
+            let kind:Option<String>=c.query_row("SELECT source_kind FROM sources WHERE library_id=?1 AND source_id=?2",params![library,id],|r|r.get(0)).optional().map_err(error)?;
+            if kind.as_deref()==Some("managed"){return Err("ManagedSource".into());}
             let tx=c.transaction().map_err(error)?;
             tx.execute("INSERT OR IGNORE INTO excluded_paths SELECT library_id,root_uri FROM sources WHERE library_id=?1 AND source_id=?2",params![library,id]).map_err(error)?;
             // Keep rows for recoverable trash. Live entries become missing and can
@@ -402,7 +405,10 @@ impl LocalLibrary {
     /// Reflect file-manager trash / restore / empty operations for included roots.
     pub fn reconcile_trash(&self) -> Result<(), String> {
         let sources = self.sources()?;
-        let enabled: Vec<_> = sources.iter().filter(|s| s.enabled).collect();
+        let enabled: Vec<_> = sources
+            .iter()
+            .filter(|s| s.enabled && s.kind != "managed")
+            .collect();
         let mut entries = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for source in &enabled {
