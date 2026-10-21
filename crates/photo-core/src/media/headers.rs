@@ -68,7 +68,7 @@ impl Reader<'_> {
     }
 }
 
-fn header(
+pub(super) fn header(
     width: u32,
     height: u32,
     bytes_per_pixel: u64,
@@ -112,6 +112,19 @@ pub(super) fn read(file: &mut File, format: ImageFormat, size: u64) -> Result<He
         ImageFormat::Jpeg => jpeg(&mut r),
         ImageFormat::Png => png(&mut r),
         ImageFormat::WebP => webp(&mut r),
+        ImageFormat::Gif => {
+            let magic = r.fixed::<6>()?;
+            if magic != *b"GIF87a" && magic != *b"GIF89a" {
+                return Err("InvalidImageHeader".into());
+            }
+            let size = r.fixed::<4>()?;
+            header(
+                u16::from_le_bytes([size[0], size[1]]) as u32,
+                u16::from_le_bytes([size[2], size[3]]) as u32,
+                4,
+                None,
+            )
+        }
         _ => Err("UnsupportedSource: image format".into()),
     }
 }
@@ -269,7 +282,7 @@ fn ascii(exif: &exif::Exif, tag: Tag) -> Option<&[u8]> {
     }
 }
 
-fn capture_time(exif: &exif::Exif) -> Option<i64> {
+pub(super) fn capture_time(exif: &exif::Exif) -> Option<i64> {
     let mut time = exif::DateTime::from_ascii(ascii(exif, Tag::DateTimeOriginal)?).ok()?;
     // EXIF wall time without an offset does not identify a UTC instant.
     let offset_ascii = ascii(exif, Tag::OffsetTimeOriginal)?;

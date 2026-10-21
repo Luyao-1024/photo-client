@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +11,10 @@ import 'local_library_controller.dart';
 import 'local_library_pane.dart';
 import 'presentation_preferences.dart';
 import 'strings.dart';
+import 'local_settings_dialog.dart';
+import 'local_album_actions.dart';
+import 'runtime_controller.dart';
+import '../services/window_controller.dart';
 
 class LibraryShell extends ConsumerStatefulWidget {
   const LibraryShell({super.key});
@@ -22,66 +29,55 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
   static const double _sidebarWidth = 240;
   static const double _compactSidebarWidth = 72;
   _Destination _destination = _Destination.photos;
-
-  void _showPhotos() {
-    setState(() => _destination = _Destination.photos);
-    final controller = ref.read(localLibraryProvider.notifier);
-    controller
-      ..setTrashed(false)
-      ..setFavorites(false)
-      ..setFolder(null)
-      ..setMediaKind(null);
+  final _contentNavigator = GlobalKey<NavigatorState>();
+  final _navigationRevision = ValueNotifier(0);
+  void _notifyNavigation() {
+    _contentNavigator.currentState?.popUntil((route) => route.isFirst);
+    _navigationRevision.value++;
   }
 
-  void _showFavorites() {
-    setState(() => _destination = _Destination.favorites);
-    final controller = ref.read(localLibraryProvider.notifier);
-    controller
-      ..setTrashed(false)
-      ..setFolder(null)
-      ..setMediaKind(null)
-      ..setFavorites(true);
+  @override
+  void dispose() {
+    _navigationRevision.dispose();
+    super.dispose();
   }
 
-  void _showAlbum(LocalAlbum album) {
-    setState(() => _destination = _Destination.photos);
-    final controller = ref.read(localLibraryProvider.notifier);
-    controller
-      ..setTrashed(false)
-      ..setFavorites(false)
-      ..setMediaKind(null)
-      ..setFolder(album.path);
+  void _navigate(
+    _Destination destination, {
+    bool favorites = false,
+    String? folder,
+    String? kind,
+    bool trash = false,
+  }) {
+    if (WindowController.instance.confirmClose != null) return;
+    setState(() => _destination = destination);
+    _notifyNavigation();
+    unawaited(
+      ref
+          .read(localLibraryProvider.notifier)
+          .showDestination(
+            favorites: favorites,
+            folder: folder,
+            kind: kind,
+            trash: trash,
+          ),
+    );
   }
 
-  void _showMediaType(String? kind) {
-    setState(() => _destination = _Destination.photos);
-    final controller = ref.read(localLibraryProvider.notifier);
-    controller
-      ..setTrashed(false)
-      ..setFavorites(false)
-      ..setFolder(null)
-      ..setMediaKind(kind);
-  }
-
-  void _showSearch() {
-    setState(() => _destination = _Destination.search);
-    final controller = ref.read(localLibraryProvider.notifier);
-    controller
-      ..setTrashed(false)
-      ..setFavorites(false)
-      ..setFolder(null)
-      ..setMediaKind(null);
-  }
-
-  void _showTrash() {
-    setState(() => _destination = _Destination.trash);
-    ref.read(localLibraryProvider.notifier).setTrashed(true);
-  }
+  void _showPhotos() => _navigate(_Destination.photos);
+  void _showFavorites() => _navigate(_Destination.favorites, favorites: true);
+  void _showAlbum(LocalAlbum album) =>
+      _navigate(_Destination.photos, folder: album.path);
+  void _showMediaType(String? kind) =>
+      _navigate(_Destination.photos, kind: kind);
+  void _showSearch() => _navigate(_Destination.search);
+  void _showTrash() => _navigate(_Destination.trash, trash: true);
 
   void _openShortcuts() {
+    if (WindowController.instance.confirmClose != null) return;
     showDialog<void>(
       context: context,
-      builder: (context) => const _ShortcutReferenceDialog(),
+      builder: (context) => const ShortcutReferenceDialog(),
     );
   }
 
@@ -91,6 +87,8 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
     final library = ref.watch(localLibraryProvider);
     return CallbackShortcuts(
       bindings: {
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): () =>
+            _contentNavigator.currentState?.maybePop(),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
             _showSearch,
         const SingleActivator(LogicalKeyboardKey.comma, control: true):
@@ -100,6 +98,7 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
             _openShortcuts,
       },
       child: Scaffold(
+        key: const ValueKey('library-shell'),
         backgroundColor: Colors.transparent,
         body: SafeArea(
           child: LayoutBuilder(
@@ -127,11 +126,20 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
                     ),
                   ),
                   Expanded(
-                    child: LocalLibraryPane(
-                      onOpenSettings: _openSettings,
-                      onRequestSearch: _showSearch,
-                      trashMode: _destination == _Destination.trash,
-                      searchMode: _destination == _Destination.search,
+                    child: Navigator(
+                      key: _contentNavigator,
+                      onGenerateRoute: (_) => MaterialPageRoute<void>(
+                        builder: (_) => ValueListenableBuilder<int>(
+                          valueListenable: _navigationRevision,
+                          builder: (context, _, child) => LocalLibraryPane(
+                            onOpenSettings: _openSettings,
+                            onRequestSearch: _showSearch,
+                            trashMode: _destination == _Destination.trash,
+                            searchMode: _destination == _Destination.search,
+                            onCloseSearch: _showPhotos,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -144,14 +152,15 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
   }
 
   void _openSettings() {
+    if (WindowController.instance.confirmClose != null) return;
     showDialog<void>(
       context: context,
-      builder: (context) => const _SettingsDialog(),
+      builder: (context) => LocalSettingsDialog(onShortcuts: _openShortcuts),
     );
   }
 }
 
-class _Sidebar extends StatefulWidget {
+class _Sidebar extends ConsumerStatefulWidget {
   const _Sidebar({
     required this.destination,
     required this.library,
@@ -175,10 +184,10 @@ class _Sidebar extends StatefulWidget {
   final bool compact;
 
   @override
-  State<_Sidebar> createState() => _SidebarState();
+  ConsumerState<_Sidebar> createState() => _SidebarState();
 }
 
-class _SidebarState extends State<_Sidebar> {
+class _SidebarState extends ConsumerState<_Sidebar> {
   bool _albumsExpanded = true;
   bool _mediaTypesExpanded = true;
 
@@ -187,19 +196,30 @@ class _SidebarState extends State<_Sidebar> {
     final strings = AppStrings.of(context);
     final library = widget.library;
     final compact = widget.compact;
+    Widget albumRow(int index) => _AlbumSidebarRow(
+      album: library.albums[index],
+      selected: library.folder == library.albums[index].path,
+      onTap: () {
+        widget.onAlbum(library.albums[index]);
+      },
+      onReorder: (path) async {
+        final folders = library.albums.map((a) => a.path).toList();
+        final from = folders.indexOf(path);
+        if (from < 0) return;
+        folders.removeAt(from);
+        folders.insert(index.clamp(0, folders.length), path);
+        await ref.read(localLibraryProvider.notifier).localCommand({
+          'op': 'reorderAlbums',
+          'ids': folders,
+        });
+        await ref.read(localLibraryProvider.notifier).refresh();
+      },
+    );
+    final albumCount = _albumsExpanded ? library.albums.length : 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!compact)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-            child: Text(
-              strings.appTitle,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          )
-        else
-          const SizedBox(height: 12),
+        const SizedBox(height: 12),
         _NavRow(
           key: const ValueKey('sidebar-photos'),
           icon: Icons.photo_library_outlined,
@@ -217,76 +237,102 @@ class _SidebarState extends State<_Sidebar> {
           key: const ValueKey('sidebar-favorites'),
           icon: Icons.favorite_border,
           label: strings.albumFavorites,
-          selected:
-              widget.destination == _Destination.favorites ||
-              library.favoritesOnly,
+          selected: widget.destination == _Destination.favorites,
           onTap: widget.onFavorites,
           compact: compact,
         ),
-        if (!compact) ...[
-          _SectionHeader(
-            key: const ValueKey('sidebar-albums-header'),
+        if (compact)
+          _NavRow(
+            key: const ValueKey('sidebar-albums'),
+            icon: Icons.photo_album_outlined,
             label: strings.albums,
-            expanded: _albumsExpanded,
-            onTap: () => setState(() => _albumsExpanded = !_albumsExpanded),
-          ),
-          if (_albumsExpanded)
-            for (final album in library.albums)
-              _NavRow(
-                key: ValueKey('sidebar-album-${album.path}'),
-                icon: Icons.photo_album_outlined,
-                label: '${album.name}  ${album.count}',
-                selected: library.folder == album.path,
-                onTap: () => widget.onAlbum(album),
-                compact: false,
-                indent: true,
+            selected: library.folder != null,
+            compact: true,
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              builder: (context) => SafeArea(
+                child: SizedBox(
+                  height: 440,
+                  child: ListView.builder(
+                    itemCount: library.albums.length,
+                    itemBuilder: (context, index) => ListTile(
+                      title: Text(library.albums[index].name),
+                      subtitle: Text('${library.albums[index].count}'),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        widget.onAlbum(library.albums[index]);
+                      },
+                    ),
+                  ),
+                ),
               ),
-          _SectionHeader(
-            key: const ValueKey('sidebar-media-types-header'),
-            label: strings.mediaTypes,
-            expanded: _mediaTypesExpanded,
-            onTap: () =>
-                setState(() => _mediaTypesExpanded = !_mediaTypesExpanded),
+            ),
           ),
-          if (_mediaTypesExpanded) ...[
-            _NavRow(
-              key: const ValueKey('sidebar-media-images'),
-              icon: Icons.image_outlined,
-              label: strings.images,
-              selected: library.mediaKind == 'image',
-              onTap: () => widget.onMediaType('image'),
-              compact: false,
-              indent: true,
-            ),
-            _NavRow(
-              key: const ValueKey('sidebar-media-videos'),
-              icon: Icons.videocam_outlined,
-              label: strings.videos,
-              selected: library.mediaKind == 'video',
-              onTap: () => widget.onMediaType('video'),
-              compact: false,
-              indent: true,
-            ),
-          ],
-        ] else ...[
+        if (compact) ...[
           _NavRow(
             key: const ValueKey('sidebar-media-images'),
             icon: Icons.image_outlined,
             label: strings.images,
             selected: library.mediaKind == 'image',
-            onTap: () => widget.onMediaType('image'),
             compact: true,
+            onTap: () => widget.onMediaType('image'),
           ),
           _NavRow(
             key: const ValueKey('sidebar-media-videos'),
             icon: Icons.videocam_outlined,
             label: strings.videos,
             selected: library.mediaKind == 'video',
-            onTap: () => widget.onMediaType('video'),
             compact: true,
+            onTap: () => widget.onMediaType('video'),
           ),
         ],
-        const Spacer(),
+        Expanded(
+          child: compact
+              ? const SizedBox.shrink()
+              : ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: albumCount + 2 + (_mediaTypesExpanded ? 2 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return _SectionHeader(
+                        key: const ValueKey('sidebar-albums-header'),
+                        label: strings.albums,
+                        onAdd: () => unawaited(createLocalAlbum(context, ref)),
+                        expanded: _albumsExpanded,
+                        onTap: () =>
+                            setState(() => _albumsExpanded = !_albumsExpanded),
+                      );
+                    }
+                    if (index <= albumCount) return albumRow(index - 1);
+                    if (index == albumCount + 1) {
+                      return _SectionHeader(
+                        key: const ValueKey('sidebar-media-types-header'),
+                        label: strings.mediaTypes,
+                        expanded: _mediaTypesExpanded,
+                        onTap: () => setState(
+                          () => _mediaTypesExpanded = !_mediaTypesExpanded,
+                        ),
+                      );
+                    }
+                    final video = index == albumCount + 3;
+                    return _NavRow(
+                      key: ValueKey(
+                        video ? 'sidebar-media-videos' : 'sidebar-media-images',
+                      ),
+                      icon: video
+                          ? Icons.videocam_outlined
+                          : Icons.image_outlined,
+                      label: video ? strings.videos : strings.images,
+                      selected:
+                          library.mediaKind == (video ? 'video' : 'image'),
+                      onTap: () =>
+                          widget.onMediaType(video ? 'video' : 'image'),
+                      compact: false,
+                      indent: true,
+                    );
+                  },
+                ),
+        ),
         _NavRow(
           key: const ValueKey('sidebar-trash'),
           icon: Icons.delete_outline,
@@ -312,13 +358,235 @@ class _SidebarState extends State<_Sidebar> {
   }
 }
 
+class _AlbumSidebarRow extends ConsumerStatefulWidget {
+  const _AlbumSidebarRow({
+    required this.album,
+    required this.selected,
+    required this.onTap,
+    required this.onReorder,
+  });
+  final LocalAlbum album;
+  final bool selected;
+  final VoidCallback onTap;
+  final ValueChanged<String> onReorder;
+  @override
+  ConsumerState<_AlbumSidebarRow> createState() => _AlbumSidebarRowState();
+}
+
+class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
+  Future<String>? _cover;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_AlbumSidebarRow old) {
+    super.didUpdateWidget(old);
+    if (old.album.coverMediaId != widget.album.coverMediaId) _load();
+  }
+
+  void _load() {
+    final id = widget.album.coverMediaId;
+    final gateway = ref.read(coreGatewayProvider);
+    _cover = id != null && gateway is LocalLibraryGateway
+        ? (gateway as LocalLibraryGateway).thumbnail(id, sizeClass: 256)
+        : null;
+  }
+
+  Future<void> _menu(TapUpDetails details) async {
+    final strings = AppStrings.of(context);
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final action = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(
+          details.globalPosition.dx,
+          details.globalPosition.dy,
+          1,
+          1,
+        ),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem(value: 'rename', child: Text(strings.rename)),
+        PopupMenuItem(
+          value: 'remove',
+          child: Text(strings.pick('从图库移除相册', 'Remove album from library')),
+        ),
+      ],
+    );
+    if (!mounted || action == null) return;
+    final controller = ref.read(localLibraryProvider.notifier);
+    try {
+      if (action == 'rename') {
+        final text = TextEditingController(text: widget.album.name);
+        final name = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(strings.pick('重命名相册', 'Rename album')),
+            content: TextField(
+              controller: text,
+              autofocus: true,
+              onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(strings.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(text.text.trim()),
+                child: Text(strings.rename),
+              ),
+            ],
+          ),
+        );
+        text.dispose();
+        if (name == null || name.isEmpty || name == widget.album.name) return;
+        await controller.localCommand({
+          'op': 'renameAlbum',
+          'folder': widget.album.path,
+          'name': name,
+        });
+      } else {
+        final accepted = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(strings.pick('移除相册？', 'Remove album?')),
+            content: Text(
+              strings.pick(
+                '从图库移除此文件夹及其子文件夹，原始文件会保留。',
+                'Remove this folder and its subfolders from the library. Original files are kept.',
+              ),
+            ),
+            actions: [
+              TextButton(
+                autofocus: true,
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(strings.cancel),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(strings.pick('移除', 'Remove')),
+              ),
+            ],
+          ),
+        );
+        if (accepted != true) return;
+        await controller.localCommand({
+          'op': 'removeAlbum',
+          'folder': widget.album.path,
+        });
+      }
+      await controller.showDestination();
+      await controller.refresh(force: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(strings.actionFailed)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: widget.selected
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: .12)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          key: ValueKey('sidebar-album-${widget.album.path}'),
+          borderRadius: BorderRadius.circular(10),
+          onTap: widget.onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: FutureBuilder<String>(
+                      future: _cover,
+                      builder: (context, snapshot) => snapshot.hasData
+                          ? Image(
+                              image: FileImage(File(snapshot.data!)),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, error, stack) =>
+                                  const Icon(Icons.photo_album_outlined),
+                            )
+                          : const Icon(Icons.photo_album_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.album.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${widget.album.count}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    return GestureDetector(
+      onSecondaryTapUp: (details) => unawaited(_menu(details)),
+      child: DragTarget<String>(
+        onWillAcceptWithDetails: (data) => data.data != widget.album.path,
+        onAcceptWithDetails: (data) => widget.onReorder(data.data),
+        builder: (context, candidates, rejected) => DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: candidates.isEmpty
+                    ? Colors.transparent
+                    : Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
+            ),
+          ),
+          child: LongPressDraggable<String>(
+            data: widget.album.path,
+            feedback: Material(
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(widget.album.name),
+              ),
+            ),
+            childWhenDragging: Opacity(opacity: .4, child: row),
+            child: row,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     super.key,
     required this.label,
     required this.expanded,
     required this.onTap,
+    this.onAdd,
   });
+  final VoidCallback? onAdd;
   final String label;
   final bool expanded;
   final VoidCallback onTap;
@@ -333,6 +601,12 @@ class _SectionHeader extends StatelessWidget {
           Expanded(
             child: Text(label, style: Theme.of(context).textTheme.labelLarge),
           ),
+          if (onAdd != null)
+            IconButton(
+              tooltip: AppStrings.of(context).pick('新建相册', 'New album'),
+              onPressed: onAdd,
+              icon: const Icon(Icons.add, size: 18),
+            ),
           Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: 18),
         ],
       ),
@@ -400,142 +674,8 @@ class _NavRow extends StatelessWidget {
   }
 }
 
-class _SettingsDialog extends ConsumerWidget {
-  const _SettingsDialog();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final strings = AppStrings.of(context);
-    final preferences = ref.watch(presentationProvider);
-    final controller = ref.read(presentationProvider.notifier);
-    return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                strings.settings,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                strings.theme,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  for (final (mode, label) in [
-                    (ThemeMode.system, strings.system),
-                    (ThemeMode.light, strings.light),
-                    (ThemeMode.dark, strings.dark),
-                  ])
-                    ChoiceChip(
-                      label: Text(label),
-                      selected: preferences.themeMode == mode,
-                      onSelected: (_) => controller.setTheme(mode),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                strings.language,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  for (final (locale, label) in [
-                    (const Locale('zh', 'CN'), '简体中文'),
-                    (const Locale('en'), 'English'),
-                  ])
-                    ChoiceChip(
-                      label: Text(label),
-                      selected:
-                          Localizations.localeOf(context).languageCode ==
-                          locale.languageCode,
-                      onSelected: (_) => controller.setLocale(locale),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                strings.glass,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                value: preferences.glass,
-                onChanged: (value) => controller.setGlass(value),
-                title: Text(strings.glassOn),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                strings.scanFolders,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Builder(
-                builder: (context) {
-                  final picker = ref.watch(sourcePickerProvider);
-                  final library = ref.read(localLibraryProvider.notifier);
-                  final libraryState = ref.watch(localLibraryProvider);
-                  final busy = libraryState.scanning || libraryState.selecting;
-                  return Wrap(
-                    spacing: 8,
-                    children: [
-                      FilledButton.icon(
-                        key: const ValueKey('add-folder'),
-                        onPressed: picker == null || busy
-                            ? null
-                            : () => library.importSources(
-                                picker,
-                                directory: true,
-                              ),
-                        icon: const Icon(Icons.create_new_folder_outlined),
-                        label: Text(strings.addFolder),
-                      ),
-                      OutlinedButton.icon(
-                        key: const ValueKey('add-files'),
-                        onPressed: picker == null || busy
-                            ? null
-                            : () => library.importSources(
-                                picker,
-                                directory: false,
-                              ),
-                        icon: const Icon(Icons.note_add_outlined),
-                        label: Text(strings.addFiles),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                key: const ValueKey('settings-shortcuts'),
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => const _ShortcutReferenceDialog(),
-                ),
-                icon: const Icon(Icons.keyboard_outlined),
-                label: Text(strings.keyboardShortcuts),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ShortcutReferenceDialog extends StatelessWidget {
-  const _ShortcutReferenceDialog();
+class ShortcutReferenceDialog extends StatelessWidget {
+  const ShortcutReferenceDialog({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -572,6 +712,7 @@ class _ShortcutReferenceDialog extends StatelessWidget {
           ('Shift+F', strings.fullscreen),
           ('I', strings.details),
           ('H', strings.markFavorite),
+          ('R / Shift+R', strings.pick('右转 / 左转', 'Rotate right / left')),
           ('E', strings.edit),
           ('Delete', strings.moveToTrash),
           ('Esc', strings.close),

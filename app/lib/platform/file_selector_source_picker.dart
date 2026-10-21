@@ -11,7 +11,21 @@ final class FileSelectorSourcePicker implements LocalSourcePicker {
 
   static const XTypeGroup _images = XTypeGroup(
     label: 'Images',
-    extensions: ['jpg', 'jpeg', 'png', 'webp'],
+    extensions: [
+      'jpg',
+      'jpeg',
+      'png',
+      'webp',
+      'gif',
+      'heic',
+      'heif',
+      'mp4',
+      'm4v',
+      'mov',
+      'webm',
+      'mkv',
+      'avi',
+    ],
   );
 
   @override

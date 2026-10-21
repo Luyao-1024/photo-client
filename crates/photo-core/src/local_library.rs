@@ -13,7 +13,11 @@ use std::{
 use uuid::Uuid;
 
 const SCHEMA: &str = include_str!("storage/local-schema.sql");
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
+mod save;
+mod system_trash;
+mod tools;
+pub use tools::{BrowseIndex, SourceInfo};
 type Job = Box<dyn FnOnce(&mut Connection) + Send>;
 enum Message {
     Execute(Job),
@@ -26,7 +30,7 @@ pub struct LibraryInfo {
     pub count: u64,
     pub revision: u64,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalPhoto {
     pub id: String,
     pub path: String,
@@ -71,6 +75,8 @@ pub struct PhotoFilter {
     /// `image` or `video`, when a media-type view is active.
     pub media_kind: Option<String>,
     pub trashed: bool,
+    #[serde(default)]
+    pub order: String,
 }
 #[derive(Serialize, Deserialize)]
 struct Cursor {
@@ -112,6 +118,7 @@ pub struct LocalLibrary {
     actor: Arc<Actor>,
     pub root: PathBuf,
     pub library_id: String,
+    browse_index: Arc<Mutex<Option<BrowseIndex>>>,
 }
 
 fn error<T: std::fmt::Display>(value: T) -> String {
@@ -163,6 +170,9 @@ impl LocalLibrary {
         if current == 0 {
             let transaction = connection.transaction().map_err(error)?;
             transaction.execute_batch(SCHEMA).map_err(error)?;
+            transaction
+                .execute_batch(include_str!("storage/local-v3.sql"))
+                .map_err(error)?;
             let installation_id = Uuid::new_v4().to_string();
             let library_id = Uuid::new_v4().to_string();
             transaction
@@ -193,8 +203,39 @@ impl LocalLibrary {
                 .map_err(error)?;
             transaction.commit().map_err(error)?;
         } else if current < SCHEMA_VERSION {
-            return Err("SchemaUpgradeRequired".into());
+            // v1 predates local file operations. Preserve it rather than guessing
+            // column layouts; v2 -> v3 is additive and leaves originals intact.
+            if current != 2 {
+                return Err("SchemaUpgradeRequired".into());
+            }
+            let tx = connection.transaction().map_err(error)?;
+            tx.execute_batch(include_str!("storage/local-v3.sql"))
+                .map_err(error)?;
+            tx.pragma_update(None, "user_version", SCHEMA_VERSION)
+                .map_err(error)?;
+            tx.execute("UPDATE app_meta SET schema_version=?1", [SCHEMA_VERSION])
+                .map_err(error)?;
+            tx.execute(
+                "INSERT OR REPLACE INTO schema_migrations VALUES(?1,?2,?3)",
+                params![
+                    SCHEMA_VERSION,
+                    format!(
+                        "{:x}",
+                        Sha256::digest(
+                            [SCHEMA, include_str!("storage/local-v3.sql")]
+                                .concat()
+                                .as_bytes()
+                        )
+                    ),
+                    now_ms()
+                ],
+            )
+            .map_err(error)?;
+            tx.commit().map_err(error)?;
         }
+        connection
+            .execute_batch(include_str!("storage/local-v3.sql"))
+            .map_err(error)?;
         let library_id: String = connection
             .query_row(
                 "SELECT selected_library_id FROM app_settings WHERE singleton=1",
@@ -219,6 +260,24 @@ impl LocalLibrary {
                 [],
             )
             .map_err(error)?;
+        let has_hdr = connection
+            .prepare("PRAGMA table_info(media_details)")
+            .map_err(error)?
+            .query_map([], |r| r.get::<_, String>(1))
+            .map_err(error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(error)?
+            .iter()
+            .any(|name| name == "hdr");
+        if !has_hdr {
+            connection
+                .execute_batch(
+                    "ALTER TABLE media_details ADD COLUMN hdr INTEGER NOT NULL DEFAULT 0",
+                )
+                .map_err(error)?;
+        }
+        save::recover(&mut connection)?;
+        save::recover_purges(&mut connection)?;
         let (sender, receiver) = mpsc::sync_channel::<Message>(256);
         let worker = thread::Builder::new()
             .name("photo-local-db".into())
@@ -239,6 +298,7 @@ impl LocalLibrary {
             }),
             root,
             library_id,
+            browse_index: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -292,6 +352,7 @@ impl LocalLibrary {
         let path = path.to_str().ok_or("UnsupportedPathEncoding")?.to_owned();
         let library = self.library_id.clone();
         self.execute(move|c|{
+            c.execute("DELETE FROM excluded_paths WHERE library_id=?1 AND path=?2",params![library,path]).map_err(error)?;
             c.execute("INSERT INTO sources(library_id,source_id,root_uri,source_kind) VALUES(?1,?2,?3,?4) ON CONFLICT(library_id,root_uri) DO UPDATE SET enabled=1,availability='available'",params![library,Uuid::new_v4().to_string(),path,kind]).map_err(error)?;
             c.query_row("SELECT source_id FROM sources WHERE library_id=?1 AND root_uri=?2",params![library,path],|r|r.get(0)).map_err(error)
         })
@@ -308,7 +369,7 @@ impl LocalLibrary {
                 let previous:Option<(String,bool)>=tx.query_row("SELECT state,favorite FROM media WHERE library_id=?1 AND source_uri=?2",params![library,m.path],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(error)?;
                 if previous.as_ref().is_none_or(|p|p.0!="active") {active_delta+=1; if previous.as_ref().is_some_and(|p|p.1){favorite_delta+=1;}}
                 let size=i64::try_from(m.size_bytes).map_err(|_|"FileTooLarge")?;
-                changed+=tx.execute("INSERT INTO media(library_id,media_id,source_id,source_uri,display_name,parent_uri,size_bytes,modified_ns,media_kind,mime_type,width,height,orientation,capture_time_ms,sort_time_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,'image',?9,?10,?11,?12,?13,?14) ON CONFLICT(library_id,source_uri) DO UPDATE SET source_id=excluded.source_id,display_name=excluded.display_name,parent_uri=excluded.parent_uri,size_bytes=excluded.size_bytes,modified_ns=excluded.modified_ns,mime_type=excluded.mime_type,width=COALESCE(excluded.width,media.width),height=COALESCE(excluded.height,media.height),orientation=excluded.orientation,capture_time_ms=excluded.capture_time_ms,sort_time_ms=excluded.sort_time_ms,content_version=media.content_version+CASE WHEN media.size_bytes<>excluded.size_bytes OR media.modified_ns<>excluded.modified_ns THEN 1 ELSE 0 END,state='active',error_code=NULL,original_uri=NULL,trashed_at_ms=NULL WHERE media.size_bytes<>excluded.size_bytes OR media.modified_ns<>excluded.modified_ns OR media.source_id<>excluded.source_id OR media.state<>'active'",params![library,Uuid::new_v4().to_string(),source_id,m.path,m.name,m.parent,size,m.modified_ns,m.mime_type,m.width,m.height,m.orientation,m.capture_time_ms,m.capture_time_ms.unwrap_or(m.modified_ns/1_000_000)]).map_err(error)?;
+                changed+=tx.execute("INSERT INTO media(library_id,media_id,source_id,source_uri,display_name,parent_uri,size_bytes,modified_ns,media_kind,mime_type,width,height,orientation,capture_time_ms,sort_time_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,CASE WHEN ?9 LIKE 'video/%' THEN 'video' ELSE 'image' END,?9,?10,?11,?12,?13,?14) ON CONFLICT(library_id,source_uri) DO UPDATE SET source_id=excluded.source_id,display_name=excluded.display_name,parent_uri=excluded.parent_uri,size_bytes=excluded.size_bytes,modified_ns=excluded.modified_ns,mime_type=excluded.mime_type,media_kind=excluded.media_kind,width=COALESCE(excluded.width,media.width),height=COALESCE(excluded.height,media.height),orientation=excluded.orientation,capture_time_ms=excluded.capture_time_ms,sort_time_ms=excluded.sort_time_ms,content_version=media.content_version+CASE WHEN media.size_bytes<>excluded.size_bytes OR media.modified_ns<>excluded.modified_ns THEN 1 ELSE 0 END,state='active',error_code=NULL,original_uri=NULL,trashed_at_ms=NULL WHERE media.size_bytes<>excluded.size_bytes OR media.modified_ns<>excluded.modified_ns OR media.source_id<>excluded.source_id OR media.state<>'active'",params![library,Uuid::new_v4().to_string(),source_id,m.path,m.name,m.parent,size,m.modified_ns,m.mime_type,m.width,m.height,m.orientation,m.capture_time_ms,m.capture_time_ms.unwrap_or(m.modified_ns/1_000_000)]).map_err(error)?;
             }
             if changed>0 {
                 tx.execute("UPDATE libraries SET revision=revision+1,media_count=media_count+?2,favorite_count=favorite_count+?3 WHERE library_id=?1",params![library,active_delta,favorite_delta]).map_err(error)?;
@@ -348,19 +409,19 @@ impl LocalLibrary {
         self.execute(move |c| {
             let mut statement = c
                 .prepare(
-                    "SELECT m.parent_uri, COUNT(*), (
+                    "SELECT m.parent_uri, COUNT(*), COALESCE((SELECT ap.cover_media_id FROM album_preferences ap JOIN media cm ON cm.library_id=ap.library_id AND cm.media_id=ap.cover_media_id AND cm.state='active' WHERE ap.library_id=m.library_id AND ap.folder=m.parent_uri), (
                         SELECT m2.media_id FROM media m2
                         WHERE m2.library_id=m.library_id AND m2.parent_uri=m.parent_uri
                           AND m2.state='active'
                         ORDER BY m2.sort_time_ms DESC, m2.media_id DESC LIMIT 1
-                     )
+                     ))
                      FROM media m
                      WHERE m.library_id=?1 AND m.state='active' AND m.parent_uri<>''
                      GROUP BY m.parent_uri
-                     ORDER BY MAX(m.sort_time_ms) DESC, m.parent_uri ASC",
+                     ORDER BY COALESCE((SELECT position FROM album_preferences ap WHERE ap.library_id=m.library_id AND ap.folder=m.parent_uri),2147483647), MAX(m.sort_time_ms) DESC, m.parent_uri ASC",
                 )
                 .map_err(error)?;
-            let rows = statement
+            let mut rows = statement
                 .query_map([&library], |r| {
                     let path: String = r.get(0)?;
                     let name = Path::new(&path)
@@ -378,6 +439,9 @@ impl LocalLibrary {
                 .map_err(error)?
                 .collect::<rusqlite::Result<Vec<_>>>()
                 .map_err(error)?;
+            let mut empty=c.prepare("SELECT folder FROM album_preferences WHERE library_id=?1 ORDER BY position").map_err(error)?;
+            let folders=empty.query_map([&library],|r|r.get::<_,String>(0)).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
+            for folder in folders{if !rows.iter().any(|a|a.path==folder)&&Path::new(&folder).is_dir(){rows.push(AlbumInfo{ name:Path::new(&folder).file_name().unwrap_or_default().to_string_lossy().into_owned(),path:folder,count:0,cover_media_id:None});}}
             Ok(rows)
         })
     }
@@ -415,30 +479,8 @@ impl LocalLibrary {
 
         let library = self.library_id.clone();
         self.execute(move |c| {
+            let (mut clause, mut values) = tools::filter_sql(&library, &filter)?;
             let state = if filter.trashed { "trashed" } else { "active" };
-            let mut clause = "library_id=? AND state=?".to_owned();
-            let mut values = vec![Value::Text(library.clone()), Value::Text(state.to_owned())];
-            if filter.favorites_only {
-                clause.push_str(" AND favorite=1");
-            }
-            if !filter.search.is_empty() {
-                if scope == "date" {
-                    clause.push_str(
-                        " AND substr(datetime(sort_time_ms/1000,'unixepoch','localtime'),1,10) LIKE ?",
-                    );
-                } else {
-                    clause.push_str(" AND instr(lower(display_name),lower(?))>0");
-                }
-                values.push(Value::Text(filter.search.clone()));
-            }
-            if let Some(folder) = &filter.folder {
-                clause.push_str(" AND parent_uri=?");
-                values.push(Value::Text(folder.clone()));
-            }
-            if let Some(kind) = &filter.media_kind {
-                clause.push_str(" AND media_kind=?");
-                values.push(Value::Text(kind.clone()));
-            }
 
             let default_filter = state == "active"
                 && !filter.favorites_only
@@ -513,10 +555,11 @@ impl LocalLibrary {
     }
 
     pub fn trash_media(&self, media_ids: Vec<String>) -> Result<u64, String> {
+        let _mutation = self.mutation_guard()?;
         let library = self.library_id.clone();
-        let trash_dir = self.root.join("trash").join("files");
+        let data_root = self.root.clone();
         self.execute(move |c| {
-            fs::create_dir_all(&trash_dir).map_err(error)?;
+            let mut rollback=system_trash::FileRollback::new();
             let tx = c.transaction().map_err(error)?;
             let mut moved = 0_u64;
             let mut favorite_delta = 0_i64;
@@ -539,8 +582,10 @@ impl LocalLibrary {
                 if !source.is_file() {
                     return Err("SourceUnavailable".into());
                 }
-                let destination = unique_destination(&trash_dir, &display_name)?;
-                move_file(&source, &destination)?;
+                let _=display_name;
+                let (destination,info)=system_trash::move_to_trash(&source,&data_root)?;
+                rollback.moves.push((source.clone(),destination.clone()));
+                rollback.created.push(info);
                 let parent = destination
                     .parent()
                     .and_then(Path::to_str)
@@ -566,13 +611,17 @@ impl LocalLibrary {
                 .map_err(error)?;
             }
             tx.commit().map_err(error)?;
+            rollback.committed=true;
             Ok(moved)
         })
     }
 
     pub fn restore_media(&self, media_ids: Vec<String>) -> Result<u64, String> {
+        let _mutation = self.mutation_guard()?;
         let library = self.library_id.clone();
         self.execute(move |c| {
+            let mut rollback=system_trash::FileRollback::new();
+            let mut infos=Vec::new();
             let tx = c.transaction().map_err(error)?;
             let mut restored = 0_u64;
             let mut favorite_delta = 0_i64;
@@ -604,6 +653,8 @@ impl LocalLibrary {
                     original
                 };
                 move_file(&source, &destination)?;
+                rollback.moves.push((source.clone(),destination.clone()));
+                if let Some(info)=system_trash::info_for(&source){infos.push(info);}
                 let parent_uri = destination
                     .parent()
                     .and_then(Path::to_str)
@@ -612,8 +663,8 @@ impl LocalLibrary {
                     .to_str()
                     .ok_or("UnsupportedPathEncoding")?;
                 tx.execute(
-                    "UPDATE media SET source_uri=?3,parent_uri=?4,state='active',original_uri=NULL,trashed_at_ms=NULL WHERE library_id=?1 AND media_id=?2",
-                    params![library, media_id, destination_uri, parent_uri],
+                    "UPDATE media SET source_uri=?3,parent_uri=?4,display_name=?5,state='active',original_uri=NULL,trashed_at_ms=NULL WHERE library_id=?1 AND media_id=?2",
+                    params![library, media_id, destination_uri, parent_uri,destination.file_name().unwrap_or_default().to_string_lossy()],
                 )
                 .map_err(error)?;
                 restored += 1;
@@ -629,65 +680,9 @@ impl LocalLibrary {
                 .map_err(error)?;
             }
             tx.commit().map_err(error)?;
+            rollback.committed=true;
+            for info in infos{let _=fs::remove_file(info);}
             Ok(restored)
-        })
-    }
-
-    pub fn purge_media(&self, media_ids: Vec<String>) -> Result<u64, String> {
-        let library = self.library_id.clone();
-        self.execute(move |c| {
-            let tx = c.transaction().map_err(error)?;
-            let mut purged = 0_u64;
-            for media_id in media_ids {
-                let row = tx
-                    .query_row(
-                        "SELECT source_uri,state FROM media WHERE library_id=?1 AND media_id=?2",
-                        params![library, media_id],
-                        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-                    )
-                    .optional()
-                    .map_err(error)?;
-                let Some((source_uri, state)) = row else {
-                    continue;
-                };
-                if state != "trashed" {
-                    return Err("PhotoNotTrashed".into());
-                }
-                let source = PathBuf::from(&source_uri);
-                if source.exists() {
-                    fs::remove_file(&source).map_err(error)?;
-                }
-                tx.execute(
-                    "DELETE FROM thumbnails WHERE library_id=?1 AND media_id=?2",
-                    params![library, media_id],
-                )
-                .map_err(error)?;
-                tx.execute(
-                    "DELETE FROM album_members WHERE library_id=?1 AND media_id=?2",
-                    params![library, media_id],
-                )
-                .map_err(error)?;
-                tx.execute(
-                    "DELETE FROM file_operations WHERE library_id=?1 AND media_id=?2",
-                    params![library, media_id],
-                )
-                .map_err(error)?;
-                tx.execute(
-                    "DELETE FROM media WHERE library_id=?1 AND media_id=?2",
-                    params![library, media_id],
-                )
-                .map_err(error)?;
-                purged += 1;
-            }
-            if purged > 0 {
-                tx.execute(
-                    "UPDATE libraries SET revision=revision+1 WHERE library_id=?1",
-                    [&library],
-                )
-                .map_err(error)?;
-            }
-            tx.commit().map_err(error)?;
-            Ok(purged)
         })
     }
 
@@ -719,6 +714,7 @@ impl LocalLibrary {
         target_folder: String,
         move_files: bool,
     ) -> Result<u64, String> {
+        let _mutation = self.mutation_guard()?;
         let library = self.library_id.clone();
         let target = PathBuf::from(target_folder).canonicalize().map_err(error)?;
         if !target.is_dir() {
@@ -738,6 +734,7 @@ impl LocalLibrary {
                     |r| r.get(0),
                 )
                 .map_err(error)?;
+            let mut rollback=system_trash::FileRollback::new();
             let tx = c.transaction().map_err(error)?;
             let mut changed = 0_u64;
             for media_id in media_ids {
@@ -772,8 +769,10 @@ impl LocalLibrary {
                 let destination = unique_destination(&target, &display_name)?;
                 if move_files {
                     move_file(&source, &destination)?;
+                    rollback.moves.push((source.clone(),destination.clone()));
                 } else {
                     copy_file(&source, &destination)?;
+                    rollback.created.push(destination.clone());
                 }
                 let destination_uri = destination
                     .to_str()
@@ -819,7 +818,7 @@ impl LocalLibrary {
             }
             if changed > 0 {
                 let delta = if move_files { 0_i64 } else { changed as i64 };
-                let favorite_delta = if move_files { 0_i64 } else { 0_i64 };
+                let favorite_delta=0_i64;
                 tx.execute(
                     "UPDATE libraries SET revision=revision+1,media_count=media_count+?2,favorite_count=favorite_count+?3 WHERE library_id=?1",
                     params![library, delta, favorite_delta],
@@ -827,17 +826,20 @@ impl LocalLibrary {
                 .map_err(error)?;
             }
             tx.commit().map_err(error)?;
+            rollback.committed=true;
             Ok(changed)
         })
     }
 
     pub fn rename_media(&self, media_id: String, name: String) -> Result<LocalPhoto, String> {
+        let _mutation = self.mutation_guard()?;
         let library = self.library_id.clone();
         let requested = name.trim().to_owned();
         if requested.is_empty() || requested.contains('/') || requested.contains('\\') {
             return Err("InvalidFileName".into());
         }
         self.execute(move |c| {
+            let mut rollback=system_trash::FileRollback::new();
             let row = c
                 .query_row(
                     "SELECT source_uri FROM media WHERE library_id=?1 AND media_id=?2 AND state='active'",
@@ -852,7 +854,8 @@ impl LocalLibrary {
             let source = PathBuf::from(&source_uri);
             let parent = source.parent().ok_or("SourceUnavailable")?;
             let destination = unique_destination(parent, &requested)?;
-            fs::rename(&source, &destination).map_err(error)?;
+            move_file(&source,&destination)?;
+            rollback.moves.push((source.clone(),destination.clone()));
             let parent_uri = parent.to_str().ok_or("UnsupportedPathEncoding")?;
             let destination_uri = destination
                 .to_str()
@@ -873,158 +876,13 @@ impl LocalLibrary {
             )
             .map_err(error)?;
             tx.commit().map_err(error)?;
+            rollback.committed=true;
             c.query_row(
                 "SELECT media_id,source_uri,display_name,parent_uri,size_bytes,modified_ns,content_version,width,height,favorite,sort_time_ms,media_kind,mime_type,orientation,capture_time_ms,state,trashed_at_ms FROM media WHERE library_id=?1 AND media_id=?2",
                 params![library, media_id],
                 decode_photo,
             )
             .map_err(error)
-        })
-    }
-
-    /// Apply an editor adjustment set and persist the result either as a new
-    /// sibling file (`save_copy`) or over the original, keeping a private
-    /// backup outside the scanned tree so nothing is lost irrecoverably.
-    pub fn save_edited(
-        &self,
-        media_id: String,
-        adjustments: EditAdjustments,
-        save_copy: bool,
-    ) -> Result<LocalPhoto, String> {
-        if adjustments.is_identity() {
-            return Err("NoEdits".into());
-        }
-        let library = self.library_id.clone();
-        let root = self.root.clone();
-        self.execute(move |c| {
-            let row = c
-                .query_row(
-                    "SELECT source_uri,source_id,content_version,media_kind,capture_time_ms FROM media WHERE library_id=?1 AND media_id=?2 AND state='active'",
-                    params![library, media_id],
-                    |r| {
-                        Ok((
-                            r.get::<_, String>(0)?,
-                            r.get::<_, String>(1)?,
-                            r.get::<_, i64>(2)?,
-                            r.get::<_, String>(3)?,
-                            r.get::<_, Option<i64>>(4)?,
-                        ))
-                    },
-                )
-                .optional()
-                .map_err(error)?;
-            let Some((source_uri, source_id, version, media_kind, capture_time_ms)) = row else {
-                return Err("PhotoNotFound".into());
-            };
-            if media_kind != "image" {
-                return Err("UnsupportedEdit".into());
-            }
-            let source = PathBuf::from(&source_uri);
-            if !source.is_file() {
-                return Err("SourceUnavailable".into());
-            }
-            let (format, mime) =
-                crate::media::format_for_path(&source).ok_or("UnsupportedFormat")?;
-            let decoded = image::open(&source).map_err(|_| "DecodeFailed".to_owned())?;
-            let rendered = crate::edit::render(&decoded, adjustments);
-            let encoded = crate::edit::encode(&rendered, format)?;
-            let width = rendered.width();
-            let height = rendered.height();
-            let size = encoded.len() as i64;
-            let parent = source.parent().ok_or("SourceUnavailable")?.to_path_buf();
-            let extension = source
-                .extension()
-                .and_then(|v| v.to_str())
-                .ok_or("UnsupportedPathEncoding")?;
-            let modified_ns = now_ms().saturating_mul(1_000_000);
-
-            if save_copy {
-                let stem = source
-                    .file_stem()
-                    .and_then(|v| v.to_str())
-                    .ok_or("UnsupportedPathEncoding")?;
-                let destination =
-                    unique_destination(&parent, &format!("{stem} edited.{extension}"))?;
-                fs::write(&destination, &encoded).map_err(error)?;
-                let destination_uri = destination
-                    .to_str()
-                    .ok_or("UnsupportedPathEncoding")?
-                    .to_owned();
-                let destination_parent = destination
-                    .parent()
-                    .and_then(Path::to_str)
-                    .ok_or("UnsupportedPathEncoding")?
-                    .to_owned();
-                let name = destination
-                    .file_name()
-                    .and_then(|v| v.to_str())
-                    .ok_or("UnsupportedPathEncoding")?
-                    .to_owned();
-                let new_id = Uuid::new_v4().to_string();
-                let tx = c.transaction().map_err(error)?;
-                tx.execute(
-                    "INSERT INTO media(library_id,media_id,source_id,source_uri,display_name,parent_uri,size_bytes,modified_ns,content_version,media_kind,mime_type,width,height,orientation,capture_time_ms,sort_time_ms,favorite,state) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,1,'image',?9,?10,?11,1,?12,?13,0,'active')",
-                    params![
-                        library,
-                        new_id,
-                        source_id,
-                        destination_uri,
-                        name,
-                        destination_parent,
-                        size,
-                        modified_ns,
-                        mime,
-                        width,
-                        height,
-                        capture_time_ms,
-                        modified_ns / 1_000_000
-                    ],
-                )
-                .map_err(error)?;
-                tx.execute(
-                    "UPDATE libraries SET revision=revision+1,media_count=media_count+1 WHERE library_id=?1",
-                    [&library],
-                )
-                .map_err(error)?;
-                tx.commit().map_err(error)?;
-                return c
-                    .query_row(
-                        PHOTO_COLUMNS,
-                        params![library, new_id],
-                        decode_photo,
-                    )
-                    .map_err(error);
-            }
-
-            let backup_dir = root.join("backups").join(&media_id);
-            fs::create_dir_all(&backup_dir).map_err(error)?;
-            let backup = backup_dir.join(format!("v{version}.{extension}"));
-            if !backup.exists() {
-                fs::copy(&source, &backup).map_err(error)?;
-            }
-            let temp = parent.join(format!(".{media_id}.tmp-{}", Uuid::new_v4()));
-            fs::write(&temp, &encoded).map_err(error)?;
-            fs::rename(&temp, &source).map_err(error)?;
-            let tx = c.transaction().map_err(error)?;
-            tx.execute(
-                "UPDATE media SET size_bytes=?3,modified_ns=?4,content_version=content_version+1,width=?5,height=?6,orientation=1 WHERE library_id=?1 AND media_id=?2",
-                params![library, media_id, size, modified_ns, width, height],
-            )
-            .map_err(error)?;
-            tx.execute(
-                "DELETE FROM thumbnails WHERE library_id=?1 AND media_id=?2",
-                params![library, media_id],
-            )
-            .map_err(error)?;
-            tx.execute(
-                "UPDATE libraries SET revision=revision+1 WHERE library_id=?1",
-                [&library],
-            )
-            .map_err(error)?;
-            tx.commit().map_err(error)?;
-            let _ = fs::remove_dir_all(root.join("cache").join(&media_id));
-            c.query_row(PHOTO_COLUMNS, params![library, media_id], decode_photo)
-                .map_err(error)
         })
     }
 }
@@ -1091,29 +949,69 @@ fn unique_destination(folder: &Path, requested: &str) -> Result<PathBuf, String>
 }
 
 fn copy_file(source: &Path, destination: &Path) -> Result<(), String> {
+    let expected =
+        crate::media::Fingerprint::from_metadata(&fs::symlink_metadata(source).map_err(error)?)?;
     let mut input = File::open(source).map_err(error)?;
+    crate::media::check_source(source, &input, &expected)?;
     let mut output = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(destination)
         .map_err(error)?;
-    let result = std::io::copy(&mut input, &mut output);
-    if let Err(copy_error) = result {
+    let result = (|| {
+        std::io::copy(&mut input, &mut output).map_err(error)?;
+        crate::media::check_source(source, &input, &expected)?;
+        output
+            .set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(input.metadata().map_err(error)?.modified().map_err(error)?),
+            )
+            .map_err(error)?;
+        output.sync_all().map_err(error)?;
+        fs::set_permissions(destination, input.metadata().map_err(error)?.permissions())
+            .map_err(error)
+    })();
+    if result.is_err() {
         drop(output);
         let _ = fs::remove_file(destination);
-        return Err(error(copy_error));
     }
-    output.sync_all().map_err(error)?;
-    fs::set_permissions(destination, input.metadata().map_err(error)?.permissions()).map_err(error)
+    result
 }
-
 fn move_file(source: &Path, destination: &Path) -> Result<(), String> {
-    match fs::rename(source, destination) {
-        Ok(()) => Ok(()),
-        Err(rename_error) if rename_error.raw_os_error() == Some(18) => {
-            copy_file(source, destination)?;
-            fs::remove_file(source).map_err(error)
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let from = std::ffi::CString::new(source.as_os_str().as_bytes()).map_err(error)?;
+        let to = std::ffi::CString::new(destination.as_os_str().as_bytes()).map_err(error)?;
+        // SAFETY: both NUL-terminated paths stay alive for the syscall. NOREPLACE
+        // closes the exists/rename race with file managers and other processes.
+        let result = unsafe {
+            libc::renameat2(
+                libc::AT_FDCWD,
+                from.as_ptr(),
+                libc::AT_FDCWD,
+                to.as_ptr(),
+                libc::RENAME_NOREPLACE,
+            )
+        };
+        if result == 0 {
+            return Ok(());
         }
-        Err(rename_error) => Err(error(rename_error)),
+        let failure = std::io::Error::last_os_error();
+        if failure.raw_os_error() != Some(libc::EXDEV) {
+            return Err(error(failure));
+        }
     }
+    #[cfg(not(target_os = "linux"))]
+    {
+        if fs::hard_link(source, destination).is_ok() {
+            return fs::remove_file(source).map_err(error);
+        }
+    }
+    copy_file(source, destination)?;
+    if let Err(failure) = fs::remove_file(source) {
+        let _ = fs::remove_file(destination);
+        return Err(error(failure));
+    }
+    Ok(())
 }

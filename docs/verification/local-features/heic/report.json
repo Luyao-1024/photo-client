@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-21T13:04:11.526509+08:00",
+  "scope": "HEIC decoding dependencies and manual real-window review only",
+  "result": "PASS",
+  "automated_ux_test_added": false,
+  "fixture": "repository real_phone.heic copied into an isolated temporary source",
+  "source_dimensions": {
+    "width": 4096,
+    "height": 3584
+  },
+  "source_sha256_before": "2733dd6be446bcf96d405961ca8673b4756e0477f8c4b19404279719b0b9b3b8",
+  "source_sha256_after": "2733dd6be446bcf96d405961ca8673b4756e0477f8c4b19404279719b0b9b3b8",
+  "source_unchanged": true,
+  "thumbnail": {
+    "width": 256,
+    "height": 224,
+    "bytes": 9981,
+    "sha256": "fc4e4c1279a3eaa93d7cdf2c1ff3edd3d1f9cb44c1eb5e4147942119bba36293"
+  },
+  "viewer_preview": {
+    "width": 2560,
+    "height": 2240,
+    "bytes": 360053,
+    "sha256": "1bf5581b590edd51e7628b611ea3a7d57509c9d0b9925c2d7c31c7ed3215068d"
+  },
+  "real_window_image_observed": true,
+  "screenshot": "viewer.png",
+  "native_modules_observed": [
+    "/home/luyao/workspace/Photo/client/app/build/linux/x64/debug/bundle/lib/libde265-91206b2b.so.0.2.3",
+    "/home/luyao/workspace/Photo/client/app/build/linux/x64/debug/bundle/lib/libheif-e72ea93c.so.1.23.6"
+  ],
+  "archive": {
+    "version": "pillow-heif 1.8.1",
+    "sha256": "cf1f60ee05d1280f98c00a052829963e57790dce0ca8203828658b14f8c0cf7b",
+    "python_required_at_runtime": false,
+    "fresh_decoder_extraction_checked": true
+  },
+  "build": {
+    "mode": "debug",
+    "log": "debug-build.log",
+    "note": "HEIC runtime verified from this bundle; final whole-tree validation and Release build remain deferred"
+  },
+  "not_claimed": [
+    "Complete UX acceptance",
+    "Full HEIC/HEIF format, orientation and damaged-file matrix",
+    "HEIC performance acceptance",
+    "Release build acceptance"
+  ]
+}

@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
+
+import '../services/local_library_tools.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
@@ -10,7 +13,8 @@ import '../src/rust/api/local_library.dart' as native_library;
 import '../src/rust/frb_generated.dart';
 
 /// The only presentation adapter that knows the generated FFI API or native path.
-final class NativeCoreGateway implements CoreGateway, LocalLibraryGateway {
+final class NativeCoreGateway
+    implements CoreGateway, LocalLibraryGateway, LocalLibraryTools {
   NativeCoreGateway({
     this.expectedDigestOverride,
     this.protocolOverride,
@@ -158,6 +162,14 @@ final class NativeCoreGateway implements CoreGateway, LocalLibraryGateway {
   }
 
   @override
+  Future<Object?> localCommand(Map<String, Object?> command) async {
+    await native_library.openLibrary(dataRoot: dataRoot);
+    return jsonDecode(
+      await native_library.libraryTools(command: jsonEncode(command)),
+    );
+  }
+
+  @override
   Future<List<LocalAlbum>> listAlbums() async {
     final albums = await native_library.listAlbums();
     return [
@@ -230,6 +242,8 @@ final class NativeCoreGateway implements CoreGateway, LocalLibraryGateway {
       mediaId: mediaId,
       request: native_library.EditRequest(
         rotationDegrees: options.rotationDegrees,
+        flipHorizontal: options.flipHorizontal,
+        flipVertical: options.flipVertical,
         brightness: options.brightness,
         contrast: options.contrast,
         saturation: options.saturation,
@@ -238,6 +252,9 @@ final class NativeCoreGateway implements CoreGateway, LocalLibraryGateway {
         cropWidth: options.crop?.width,
         cropHeight: options.crop?.height,
         saveCopy: options.saveCopy,
+        expectedContentVersion: options.expectedContentVersion == null
+            ? null
+            : BigInt.from(options.expectedContentVersion!),
       ),
     );
     return LocalPhoto(

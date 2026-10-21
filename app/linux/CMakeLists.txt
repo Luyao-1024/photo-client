@@ -1,5 +1,8 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.13)
+# The application uses the system allocator; do not fetch an unrelated allocator
+# during an otherwise local build.
+set(MIMALLOC_USE_STATIC_LIBS OFF CACHE BOOL "Use system allocator" FORCE)
 project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
@@ -41,6 +44,14 @@ endif()
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_14)
+  # Resolve bundled codec dependencies transitively from the application lib/.
+  target_link_options(${TARGET} PRIVATE "-Wl,--disable-new-dtags")
+  get_target_property(PHOTO_TARGET_TYPE ${TARGET} TYPE)
+  if(PHOTO_TARGET_TYPE STREQUAL "SHARED_LIBRARY")
+    set_target_properties(${TARGET} PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "$ORIGIN")
+  else()
+    set_target_properties(${TARGET} PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "$ORIGIN/lib")
+  endif()
   target_compile_options(${TARGET} PRIVATE -Wall -Werror)
   target_compile_options(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-O3>")
   target_compile_definitions(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:NDEBUG>")
@@ -140,3 +151,13 @@ if(NOT EXISTS "${PHOTO_NATIVE_LIBRARY}")
   message(FATAL_ERROR "Build the native core first with tools/platform build --profile linux-x86_64")
 endif()
 install(FILES "${PHOTO_NATIVE_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime)
+
+# Include locally prepared shared codec libraries in dev and platform builds.
+file(GLOB PHOTO_MEDIA_LIBRARIES CONFIGURE_DEPENDS "${PHOTO_WORKSPACE_ROOT}/.tooling/media-runtime/usr/lib64/*.so*")
+if(PHOTO_MEDIA_LIBRARIES)
+  install(FILES ${PHOTO_MEDIA_LIBRARIES} DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime)
+endif()
+
+if(EXISTS "${PHOTO_WORKSPACE_ROOT}/.tooling/media-runtime/usr/share/licenses")
+  install(DIRECTORY "${PHOTO_WORKSPACE_ROOT}/.tooling/media-runtime/usr/share/licenses/" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/licenses/media" COMPONENT Runtime)
+endif()

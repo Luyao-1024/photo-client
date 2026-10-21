@@ -127,9 +127,9 @@ PY
   cd "$ROOT/app"
   echo "run_app: dev (flutter run -d linux) data-root=$data_root_label display=$display_label"
   if [ -n "$data_root" ]; then
-    exec flutter run -d linux --dart-define-from-file="$defines_file" -- --data-root="$data_root"
+    exec python3 "$ROOT/tools/prepare_linux_media.py" exec flutter run -d linux --dart-define-from-file="$defines_file" -- --data-root="$data_root"
   fi
-  exec flutter run -d linux --dart-define-from-file="$defines_file"
+  exec python3 "$ROOT/tools/prepare_linux_media.py" exec flutter run -d linux --dart-define-from-file="$defines_file"
 fi
 
 if [ "$do_build" = 1 ] || [ ! -x "$BUNDLE" ]; then

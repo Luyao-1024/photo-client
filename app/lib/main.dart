@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app.dart';
-import 'platform/file_selector_source_picker.dart';
 import 'platform/native_core_gateway.dart';
 import 'selftest/launch_options.dart';
 import 'selftest/local_journey.dart';
@@ -37,12 +36,7 @@ void main(List<String> arguments) {
     unawaited(LocalJourney.run(gateway, options).then((code) => exit(code)));
     return;
   }
-  runApp(
-    PhotoClientApp(
-      gateway: gateway,
-      sourcePicker: const FileSelectorSourcePicker(),
-    ),
-  );
+  runApp(PhotoClientApp(gateway: gateway));
 }
 
 /// A real-window check, separate from the product flow and fake widget tests.

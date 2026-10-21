@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,7 @@ import 'photos_grid.dart';
 import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
+import 'local_album_actions.dart';
 
 /// The Photos page: glass header (search + selection chrome), a quiet two-line
 /// overview, a date-sectioned square-tile grid, and the floating Year/Month/Day
@@ -24,6 +26,8 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
     this.onRequestSearch,
     this.trashMode = false,
     this.searchMode = false,
+    this.searchDetail = false,
+    this.onCloseSearch,
   });
 
   /// Supplied by the shell once Settings owns source management; null keeps
@@ -35,6 +39,8 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
   final VoidCallback? onRequestSearch;
   final bool trashMode;
   final bool searchMode;
+  final bool searchDetail;
+  final VoidCallback? onCloseSearch;
 
   @override
   ConsumerState<LocalLibraryPane> createState() => _LocalLibraryPaneState();
@@ -50,6 +56,45 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   GroupMode _mode = GroupMode.day;
   bool _selectionMode = false;
   final _selected = <String>{};
+  final _selectionSnapshots = <String, LocalPhoto>{};
+  bool _selectingAll = false;
+  bool _overviewOpen = false;
+  bool _viewerOpening = false;
+  final _scrollPositions = <String, double>{};
+  String? _queryIdentity;
+  double? _pendingOffset;
+  int? _pendingRank;
+  int _visibleRank = 0, _renderedRevision = -1;
+  double _withinRow = 0, _gridWidth = 0;
+  List<_GridSectionGeometry> _geometry = [];
+  void _changeMode(GroupMode value) {
+    if (value == _mode) return;
+    _captureAnchor();
+    setState(() {
+      _pendingRank = _visibleRank;
+      _mode = value;
+    });
+  }
+
+  void _captureAnchor() {
+    if (!_scroll.hasClients || _geometry.isEmpty) return;
+    final y = _scroll.offset;
+    var group = _geometry.first;
+    for (final candidate in _geometry) {
+      if (candidate.top > y) break;
+      group = candidate;
+    }
+    final row = ((y - group.top - group.header) / group.stride).floor().clamp(
+      0,
+      (group.count / group.columns).ceil() - 1,
+    );
+    _visibleRank = (group.start + row * group.columns).clamp(
+      group.start,
+      group.start + group.count - 1,
+    );
+    _withinRow = y - (group.top + group.header + row * group.stride);
+    ref.read(localLibraryProvider.notifier).noteViewport(_visibleRank);
+  }
 
   @override
   void initState() {
@@ -58,6 +103,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   }
 
   void _nearEnd() {
+    _captureAnchor();
     if (_scroll.hasClients && _scroll.position.extentAfter < 600) {
       unawaited(ref.read(localLibraryProvider.notifier).loadNext());
     }
@@ -129,6 +175,10 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   void _closeSearch() {
     if (!mounted) return;
+    if (widget.searchMode) {
+      widget.onCloseSearch?.call();
+      return;
+    }
     setState(() => _searchOpen = false);
   }
 
@@ -137,50 +187,84 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     setState(() {
       _selectionMode = false;
       _selected.clear();
+      _selectionSnapshots.clear();
     });
   }
 
   void _enterSelection(String id) => setState(() {
     _selectionMode = true;
     _selected.add(id);
+    _rememberSelection(id);
   });
 
   void _toggleSelection(String id) => setState(() {
     _selectionMode = true;
-    if (!_selected.remove(id)) _selected.add(id);
-  });
-
-  void _selectAll(LibraryViewState state) => setState(() {
-    _selectionMode = true;
-    for (var index = 0; index < state.extent; index += 1) {
-      final photo = state.photoAt(index);
-      if (photo != null) _selected.add(photo.id);
+    if (!_selected.remove(id)) {
+      _selected.add(id);
+      _rememberSelection(id);
+    } else {
+      _selectionSnapshots.remove(id);
     }
   });
 
-  void _deselectAll() => setState(() => _selected.clear());
-
-  bool _allLoadedSelected(LibraryViewState state) {
-    var loaded = 0;
-    for (var index = 0; index < state.extent; index += 1) {
+  void _rememberSelection(String id) {
+    final state = ref.read(localLibraryProvider);
+    final index = state.indexOf(id);
+    if (index != null) {
       final photo = state.photoAt(index);
-      if (photo == null) continue;
-      loaded += 1;
-      if (!_selected.contains(photo.id)) return false;
+      if (photo != null) _selectionSnapshots[id] = photo;
     }
-    return loaded > 0;
   }
 
-  List<LocalPhoto> _selectedPhotos(LibraryViewState state) {
-    final photos = <LocalPhoto>[];
-    for (final id in _selected) {
-      final index = state.indexOf(id);
-      if (index == null) continue;
-      final photo = state.photoAt(index);
-      if (photo != null) photos.add(photo);
+  Future<void> _selectAll(LibraryViewState state) async {
+    if (_selectingAll) return;
+    _selectingAll = true;
+    final epoch = state.queryEpoch;
+    try {
+      final photos = await ref
+          .read(localLibraryProvider.notifier)
+          .selectQuery();
+      if (!mounted || ref.read(localLibraryProvider).queryEpoch != epoch) {
+        return;
+      }
+      setState(() {
+        _selectionMode = true;
+        _selected.clear();
+        _selectionSnapshots.clear();
+        for (final photo in photos) {
+          _selected.add(photo.id);
+          _selectionSnapshots[photo.id] = photo;
+        }
+      });
+      if (state.total > photos.length && photos.length == 2000) {
+        _notify(
+          AppStrings.of(context).pick(
+            '已选择前 2,000 项（全选上限）',
+            'Selected the first 2,000 items (selection limit)',
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) _notify(AppStrings.of(context).actionFailed);
+    } finally {
+      _selectingAll = false;
     }
-    return photos;
   }
+
+  void _deselectAll() => setState(() {
+    _selected.clear();
+    _selectionSnapshots.clear();
+  });
+  bool _allLoadedSelected(LibraryViewState state) =>
+      _selected.isNotEmpty &&
+      _selected.length >= (state.total > 2000 ? 2000 : state.total);
+  List<LocalPhoto> _selectedPhotos(LibraryViewState state) => [
+    for (final id in _selected)
+      if (state.indexOf(id) case final int index)
+        state.photoAt(index)!
+      else if (_selectionSnapshots[id] case final LocalPhoto photo)
+        photo,
+  ];
 
   /// Smart heart: all favorited → unfavorite all; otherwise favorite every
   /// not-yet-favorited photo (a mixed set resolves toward favorited).
@@ -198,11 +282,28 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   // --- Destructive / structural batch operations -------------------------
 
-  void _notify(String message) {
+  void _notify(String message, {Future<void> Function()? undo}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 84),
+          duration: Duration(seconds: undo == null ? 3 : 6),
+          action: undo == null
+              ? null
+              : SnackBarAction(
+                  label: AppStrings.of(context).pick('撤销', 'Undo'),
+                  onPressed: () => unawaited(
+                    undo().catchError((Object error) {
+                      if (mounted) _notify(AppStrings.of(context).actionFailed);
+                    }),
+                  ),
+                ),
+        ),
+      );
   }
 
   Future<bool> _confirm({
@@ -242,16 +343,18 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   Future<void> _runBatch(
     Future<int> Function() operation,
-    String Function(int) message,
-  ) async {
+    String Function(int) message, {
+    Future<void> Function()? undo,
+  }) async {
     final strings = AppStrings.of(context);
     setState(() {
       _selectionMode = false;
       _selected.clear();
+      _selectionSnapshots.clear();
     });
     try {
       final count = await operation();
-      _notify(message(count));
+      _notify(message(count), undo: undo);
     } catch (_) {
       _notify(strings.actionFailed);
     }
@@ -264,7 +367,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   }
 
   List<String> _selectedIds(LibraryViewState state) =>
-      _selectedPhotos(state).map((photo) => photo.id).toList(growable: false);
+      _selected.toList(growable: false);
 
   Future<void> _batchTrash() async {
     final state = ref.read(localLibraryProvider);
@@ -281,6 +384,9 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     await _runBatch(
       () => ref.read(localLibraryProvider.notifier).trashPhotos(ids),
       strings.trashedCount,
+      undo: () async {
+        await ref.read(localLibraryProvider.notifier).restorePhotos(ids);
+      },
     );
   }
 
@@ -349,10 +455,8 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       builder: (context) => _AlbumPickerDialog(albums: albums),
     );
     if (selection != _AlbumPickerDialog.newAlbumSentinel) return selection;
-    final picker = ref.read(sourcePickerProvider);
-    if (picker == null) return null;
-    final directory = await picker.chooseDirectory();
-    return directory;
+    if (!mounted) return null;
+    return createLocalAlbum(context, ref);
   }
 
   Future<void> _trashOne(LocalPhoto photo) async {
@@ -366,7 +470,14 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     if (!ok || !mounted) return;
     try {
       await ref.read(localLibraryProvider.notifier).trashPhotos([photo.id]);
-      _notify(strings.trashedCount(1));
+      _notify(
+        strings.trashedCount(1),
+        undo: () async {
+          await ref.read(localLibraryProvider.notifier).restorePhotos([
+            photo.id,
+          ]);
+        },
+      );
     } catch (_) {
       _notify(strings.actionFailed);
     }
@@ -385,6 +496,135 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       _notify(strings.addedToAlbumCount(1));
     } catch (_) {
       _notify(strings.actionFailed);
+    }
+  }
+
+  Future<void> _restoreOne(LocalPhoto photo) async {
+    try {
+      await ref.read(localLibraryProvider.notifier).restorePhotos([photo.id]);
+      if (mounted) _notify(AppStrings.of(context).restoredCount(1));
+    } catch (_) {
+      if (mounted) _notify(AppStrings.of(context).actionFailed);
+    }
+  }
+
+  Future<void> _purgeOne(LocalPhoto photo) async {
+    final strings = AppStrings.of(context);
+    if (!await _confirm(
+      title: strings.confirmPurgeTitle(1),
+      body: strings.confirmPurgeBody,
+      confirmLabel: strings.deletePermanently,
+      danger: true,
+    )) {
+      return;
+    }
+    try {
+      await ref.read(localLibraryProvider.notifier).purgePhotos([photo.id]);
+      if (mounted) _notify(strings.purgedCount(1));
+    } catch (_) {
+      if (mounted) _notify(strings.actionFailed);
+    }
+  }
+
+  Future<void> _exportPhotos(List<String> ids) async {
+    final picker = ref.read(sourcePickerProvider);
+    if (picker == null || ids.isEmpty) return;
+    final directory = await picker.chooseDirectory();
+    if (directory == null) return;
+    try {
+      final count = await ref.read(localLibraryProvider.notifier).localCommand({
+        'op': 'export',
+        'ids': ids,
+        'directory': directory,
+      }) as int?;
+      if (mounted) {
+        _notify(
+          AppStrings.of(context)
+              .pick('已导出 ${count ?? 0} 个副本', 'Exported ${count ?? 0} copies'),
+        );
+      }
+    } catch (_) {
+      if (mounted) _notify(AppStrings.of(context).actionFailed);
+    }
+  }
+
+  Future<void> _setCover(LocalPhoto photo) async {
+    try {
+      final controller = ref.read(localLibraryProvider.notifier);
+      await controller.localCommand({
+        'op': 'albumCover',
+        'folder': photo.parent,
+        'id': photo.id,
+      });
+      await controller.refresh();
+    } catch (_) {
+      if (mounted) _notify(AppStrings.of(context).actionFailed);
+    }
+  }
+
+  Future<void> _openViewer(LocalPhoto photo, int rank) async {
+    if (_viewerOpening) return;
+    _viewerOpening = true;
+    final controller = ref.read(localLibraryProvider.notifier);
+    final oldKind = ref.read(localLibraryProvider).mediaKind;
+    final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+    final scoped = widget.searchMode && oldKind != photo.mediaKind;
+    try {
+      if (scoped) {
+        controller.setMediaKind(photo.mediaKind);
+        await controller.refresh(force: true);
+        rank =
+            (await controller.localCommand({
+              'op': 'rank',
+              'filter': controller.filterFor(ref.read(localLibraryProvider)),
+              'id': photo.id,
+            }) as int?) ??
+            ref.read(localLibraryProvider).indexOf(photo.id) ??
+            0;
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => LocalPhotoViewer(photo: photo, initialIndex: rank),
+        ),
+      );
+    } finally {
+      _viewerOpening = false;
+      if (mounted && scoped) {
+        controller.setMediaKind(oldKind);
+        await controller.refresh(force: true);
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _scroll.hasClients) {
+              _scroll.jumpTo(offset.clamp(0, _scroll.position.maxScrollExtent));
+            }
+          });
+        }
+      }
+    }
+  }
+
+  Future<void> _moreSearch(String kind) async {
+    final controller = ref.read(localLibraryProvider.notifier);
+    final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+    controller.setMediaKind(kind);
+    await controller.refresh(force: true);
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            const LocalLibraryPane(searchMode: true, searchDetail: true),
+      ),
+    );
+    if (!mounted) return;
+    controller.setMediaKind(null);
+    await controller.refresh(force: true);
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) {
+          _scroll.jumpTo(offset.clamp(0, _scroll.position.maxScrollExtent));
+        }
+      });
     }
   }
 
@@ -454,21 +694,30 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final state = ref.watch(localLibraryProvider);
     final controller = ref.read(localLibraryProvider.notifier);
     final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
+    final queryKey =
+        '${state.favoritesOnly}|${state.folder}|${state.mediaKind}|${state.trashed}|${state.search}|${state.searchScope}';
     if (_epoch != state.queryEpoch) {
+      if (_queryIdentity != null && _scroll.hasClients) {
+        _scrollPositions[_queryIdentity!] = _scroll.offset;
+        while (_scrollPositions.length > 32) {
+          _scrollPositions.remove(_scrollPositions.keys.first);
+        }
+      }
       _epoch = state.queryEpoch;
       _scheduledPages.clear();
-      if (_search.text != state.search) {
-        _search.text = state.search;
-      }
-      // Selection survives epoch changes on purpose: favorite toggles and
-      // background refreshes bump the epoch, and dropping the batch mid-action
-      // would strand the user. Stale ids simply resolve to no photo.
-      if (_scroll.hasClients && _scroll.offset != 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
-        });
-      }
+      _selectionMode = false;
+      _selected.clear();
+      _selectionSnapshots.clear();
+      _pendingOffset = _scrollPositions[queryKey] ?? 0;
+      _pendingRank = null;
+      if (_search.text != state.search) _search.text = state.search;
+    } else if (_renderedRevision >= 0 &&
+        _renderedRevision != state.revision &&
+        state.anchorRank != _visibleRank) {
+      _pendingRank = state.anchorRank;
     }
+    _queryIdentity = queryKey;
+    _renderedRevision = state.revision;
     final hasContent = state.extent > 0 || state.hasNext;
     final title = widget.searchMode
         ? strings.search
@@ -507,6 +756,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           selectedPhotos: _selectionMode ? _selectedPhotos(state) : const [],
           onBatchFavorite: () => _batchFavorite(state),
           onBatchTrash: _batchTrash,
+          onBatchExport: () => unawaited(_exportPhotos(_selected.toList())),
           onBatchRestore: _batchRestore,
           onBatchPurge: _batchPurge,
           onBatchAddToAlbum: (move) => _addToAlbum(move: move),
@@ -528,7 +778,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                     child: ModeSelector(
                       mode: _mode,
                       glass: preferences.glass,
-                      onChanged: (mode) => setState(() => _mode = mode),
+                      onChanged: _changeMode,
                     ),
                   ),
                 ),
@@ -547,12 +797,17 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     PresentationPreferences preferences,
   ) {
     final bindings = <ShortcutActivator, VoidCallback>{
-      // While the search field is open, Ctrl+A belongs to text editing.
-      if (!_searchOpen)
+      // A focused search field owns its own text editing shortcuts.
+      if (!_searchOpen && !widget.searchMode)
         const SingleActivator(LogicalKeyboardKey.keyA, control: true): () =>
             _selectAll(state),
+      if (!_searchFocus.hasFocus)
+        const SingleActivator(LogicalKeyboardKey.delete): () =>
+            unawaited(widget.trashMode ? _batchPurge() : _batchTrash()),
       if (_selectionMode)
         const SingleActivator(LogicalKeyboardKey.escape): _exitSelection,
+      if (widget.searchMode && !_selectionMode)
+        const SingleActivator(LogicalKeyboardKey.escape): _closeSearch,
     };
     return CallbackShortcuts(
       bindings: bindings,
@@ -584,92 +839,288 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final sections = widget.searchMode
         ? _searchSections(state, strings)
         : _sections(state);
-    return CustomScrollView(
-      key: const ValueKey('local-photo-grid'),
-      controller: _scroll,
-      slivers: [
-        SliverToBoxAdapter(child: _overview(strings, state, controller)),
-        for (final section in sections) ...[
+    return NotificationListener<ScrollNotification>(
+      onNotification: (event) {
+        if (event.metrics.pixels <= 0 &&
+            event is OverscrollNotification &&
+            event.overscroll < 0 &&
+            !_overviewOpen) {
+          setState(() => _overviewOpen = true);
+        }
+        if (event is ScrollUpdateNotification &&
+            (event.scrollDelta ?? 0) > 0 &&
+            _overviewOpen) {
+          setState(() => _overviewOpen = false);
+        }
+        return false;
+      },
+      child: CustomScrollView(
+        key: const ValueKey('local-photo-grid'),
+        controller: _scroll,
+        slivers: [
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 18, 24, 10),
-              child: Text(
-                widget.searchMode
-                    ? section.label ?? ''
-                    : sectionLabel(context, section, _mode),
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700, fontSize: 22),
-              ),
+            child: AnimatedSize(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
+              child: _overviewOpen || state.scanning
+                  ? _overview(strings, state, controller)
+                  : const SizedBox.shrink(),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: gridMaxCrossAxisExtent(_mode),
-                mainAxisSpacing: gridSpacing(_mode),
-                crossAxisSpacing: gridSpacing(_mode),
-                childAspectRatio: 1,
-              ),
-              delegate: SliverChildBuilderDelegate((context, tileIndex) {
-                final item = section.items[tileIndex];
-                // Builders only run for children in (or just outside) the
-                // viewport, so page loading stays lazy and bounded.
-                _ensureNear(item.index);
-                return PhotoTile(
-                  key: ValueKey('photo-${item.photo.id}'),
-                  photo: item.photo,
-                  gateway: gateway,
-                  selected: _selected.contains(item.photo.id),
-                  multiSelect: _selectionMode,
-                  onOpen: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => LocalPhotoViewer(
-                        photo: item.photo,
-                        initialIndex: item.index,
-                      ),
-                    ),
+          SliverLayoutBuilder(
+            builder: (context, constraints) {
+              final available = (constraints.crossAxisExtent - 40).clamp(
+                1.0,
+                double.infinity,
+              );
+              final columns = _mode == GroupMode.day && !widget.searchMode
+                  ? preferences.dayColumns
+                  : (available /
+                            gridMaxCrossAxisExtent(
+                              widget.searchMode ? GroupMode.year : _mode,
+                            ))
+                        .ceil()
+                        .clamp(1, 100);
+              final side = (available - 8 * (columns - 1)) / columns;
+              final previewCounts = {
+                for (final section in sections)
+                  section: widget.searchMode && !widget.searchDetail
+                      ? math.min(
+                          section.totalCount ?? section.items.length,
+                          columns * 2,
+                        )
+                      : section.totalCount ?? section.items.length,
+              };
+              final offsets = <int>[];
+              var rows = 0;
+              for (final section in sections) {
+                offsets.add(rows);
+                rows += 1 + (previewCounts[section]! / columns).ceil();
+              }
+              (PhotoSection, int) resolve(int row) {
+                var low = 0, high = offsets.length;
+                while (low + 1 < high) {
+                  final mid = (low + high) ~/ 2;
+                  if (offsets[mid] <= row) {
+                    low = mid;
+                  } else {
+                    high = mid;
+                  }
+                }
+                return (sections[low], row - offsets[low] - 1);
+              }
+
+              if (_gridWidth != 0 &&
+                  (_gridWidth - available).abs() > 1 &&
+                  _pendingOffset == null) {
+                _captureAnchor();
+                _pendingRank = _visibleRank;
+              }
+              _gridWidth = available;
+              final header = MediaQuery.textScalerOf(context).scale(22) + 34;
+              final layout = <_GridSectionGeometry>[];
+              var top = 0.0;
+              var fallbackRank = 0;
+              for (final section in sections) {
+                final count = previewCounts[section]!;
+                if (count == 0) continue;
+                layout.add(
+                  _GridSectionGeometry(
+                    top: top,
+                    start:
+                        section.startIndex ??
+                        (section.items.isNotEmpty
+                            ? section.items.first.index
+                            : fallbackRank),
+                    count: count,
+                    columns: columns,
+                    stride: side + 8,
+                    header: header,
                   ),
-                  onSelectToggle: () => _toggleSelection(item.photo.id),
-                  onEnterSelection: () => _enterSelection(item.photo.id),
-                  onToggleFavorite: () =>
-                      unawaited(controller.setFavorite(item.photo)),
-                  onShowDetails: () => showPhotoDetails(context, item.photo),
-                  onRename: () => _renamePhoto(item.photo),
-                  onMoveToTrash: widget.trashMode
-                      ? null
-                      : () => _trashOne(item.photo),
-                  onCopyToAlbum: widget.trashMode
-                      ? null
-                      : () => _addOneToAlbum(item.photo, move: false),
-                  onMoveToAlbum: widget.trashMode
-                      ? null
-                      : () => _addOneToAlbum(item.photo, move: true),
                 );
-              }, childCount: section.items.length),
-            ),
-          ),
-        ],
-        if (state.hasNext || state.loadingNext)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: state.loadingNext
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : TextButton(
-                        key: const ValueKey('load-next-page'),
-                        onPressed: controller.loadNext,
-                        child: Text(strings.loadMore),
+                top += header + (count / columns).ceil() * (side + 8);
+                fallbackRank += count;
+              }
+              _geometry = layout;
+              double? target = _pendingOffset;
+              if (target == null && _pendingRank != null) {
+                for (final group in layout) {
+                  if (_pendingRank! >= group.start &&
+                      _pendingRank! < group.start + group.count) {
+                    target =
+                        group.top +
+                        group.header +
+                        ((_pendingRank! - group.start) ~/ columns) *
+                            (side + 8) +
+                        _withinRow;
+                    break;
+                  }
+                }
+              }
+              if (target != null) {
+                final destination = target;
+                _pendingOffset = null;
+                _pendingRank = null;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && _scroll.hasClients) {
+                    _scroll.jumpTo(
+                      destination.clamp(0, _scroll.position.maxScrollExtent),
+                    );
+                    _captureAnchor();
+                  }
+                });
+              }
+              return SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 90),
+                sliver: SliverVariedExtentList.builder(
+                  itemCount: rows,
+                  itemExtentBuilder: (row, _) =>
+                      resolve(row).$2 < 0 ? header : side + 8,
+                  itemBuilder: (context, row) {
+                    final (section, localRow) = resolve(row);
+                    if (localRow < 0) {
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                section.label ??
+                                    (widget.searchMode
+                                        ? ''
+                                        : sectionLabel(
+                                            context,
+                                            section,
+                                            _mode,
+                                          )),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 22,
+                                    ),
+                              ),
+                            ),
+                            if (widget.searchMode &&
+                                !widget.searchDetail &&
+                                (section.totalCount ?? section.items.length) >
+                                    previewCounts[section]!)
+                              TextButton(
+                                onPressed: () => unawaited(
+                                  _moreSearch(
+                                    section.label == strings.videos
+                                        ? 'video'
+                                        : 'image',
+                                  ),
+                                ),
+                                child: Text(strings.pick('更多', 'More')),
+                              ),
+                          ],
+                        ),
+                      );
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          for (var column = 0; column < columns; column++) ...[
+                            if (column > 0) const SizedBox(width: 8),
+                            Expanded(
+                              child:
+                                  localRow * columns + column >=
+                                      previewCounts[section]!
+                                  ? const SizedBox.shrink()
+                                  : _gridTile(
+                                      section,
+                                      localRow * columns + column,
+                                      state,
+                                      controller,
+                                      gateway,
+                                    ),
+                            ),
+                          ],
+                        ],
                       ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+          if (!controller.indexed && (state.hasNext || state.loadingNext))
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: state.loadingNext
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : TextButton(
+                          key: const ValueKey('load-next-page'),
+                          onPressed: controller.loadNext,
+                          child: Text(strings.loadMore),
+                        ),
+                ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _gridTile(
+    PhotoSection section,
+    int tileIndex,
+    LibraryViewState state,
+    LocalLibraryController controller,
+    LocalLibraryGateway gateway,
+  ) {
+    final rank = section.startIndex == null
+        ? section.items[tileIndex].index
+        : section.startIndex! + tileIndex;
+    _ensureNear(rank);
+    final photo = section.startIndex == null
+        ? section.items[tileIndex].photo
+        : state.photoAt(rank);
+    if (photo == null) {
+      return SizedBox(
+        key: ValueKey('photo-placeholder-$rank'),
+        child: const Center(child: Icon(Icons.photo_outlined)),
+      );
+    }
+    final item = SectionItem(photo, rank);
+    return PhotoTile(
+      key: ValueKey('photo-${item.photo.id}'),
+      photo: item.photo,
+      gateway: gateway,
+      selected: _selected.contains(item.photo.id),
+      multiSelect: _selectionMode,
+      onOpen: () => unawaited(_openViewer(item.photo, item.index)),
+      onExport: () => unawaited(_exportPhotos([item.photo.id])),
+      onSetCover: widget.trashMode
+          ? null
+          : () => unawaited(_setCover(item.photo)),
+      onSelectToggle: () => _toggleSelection(item.photo.id),
+      onEnterSelection: () => _enterSelection(item.photo.id),
+      onToggleFavorite: () => unawaited(controller.setFavorite(item.photo)),
+      onShowDetails: () => showPhotoDetails(context, item.photo),
+      onRename: widget.trashMode ? null : () => _renamePhoto(item.photo),
+      onRestore: widget.trashMode
+          ? () => unawaited(_restoreOne(item.photo))
+          : null,
+      onPurge: widget.trashMode ? () => unawaited(_purgeOne(item.photo)) : null,
+      onMoveToTrash: widget.trashMode ? null : () => _trashOne(item.photo),
+      onCopyToAlbum: widget.trashMode
+          ? null
+          : () => _addOneToAlbum(item.photo, move: false),
+      onMoveToAlbum: widget.trashMode
+          ? null
+          : () => _addOneToAlbum(item.photo, move: true),
     );
   }
 
@@ -678,6 +1129,28 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   /// eagerly requesting every missing page would evict and reload endlessly.
   /// Page loading is driven by [_ensureNear] from visible tiles instead.
   List<PhotoSection> _sections(LibraryViewState state) {
+    if (state.groups.isNotEmpty) {
+      final sections = <PhotoSection>[];
+      var start = 0;
+      for (final group in state.groups) {
+        final date = DateTime.fromMillisecondsSinceEpoch(group.time);
+        final bucket = bucketOf(date, _mode);
+        if (sections.isNotEmpty && sections.last.bucket == bucket) {
+          sections.last.totalCount = sections.last.totalCount! + group.count;
+        } else {
+          sections.add(
+            PhotoSection(
+              bucket: bucket,
+              date: date,
+              startIndex: start,
+              totalCount: group.count,
+            ),
+          );
+        }
+        start += group.count;
+      }
+      return sections;
+    }
     final grouped = <int, PhotoSection>{};
     for (var index = 0; index < state.extent; index += 1) {
       final photo = state.photoAt(index);
@@ -705,6 +1178,26 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     AppStrings strings,
   ) {
     final now = DateTime.now();
+    if (state.groups.isNotEmpty && state.search.isNotEmpty) {
+      var start = 0;
+      return [
+        for (var i = 0; i < state.groups.length; i++)
+          (() {
+            final count = state.groups[i].count;
+            final section = PhotoSection(
+              bucket: i,
+              date: now,
+              label: state.groups[i].time == -1
+                  ? strings.videos
+                  : strings.images,
+              startIndex: start,
+              totalCount: count,
+            );
+            start += count;
+            return section;
+          })(),
+      ];
+    }
     final images = PhotoSection(bucket: 1, date: now, label: strings.images);
     final videos = PhotoSection(bucket: 0, date: now, label: strings.videos);
     for (var index = 0; index < state.extent; index += 1) {
@@ -728,8 +1221,18 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     LibraryViewState state,
     LocalLibraryController controller,
   ) {
+    if (widget.searchMode && state.search.isEmpty) {
+      return _StatusPage(title: strings.searchPrompt);
+    }
     if (state.scanning && state.extent == 0) {
-      return _StatusPage(title: strings.scanning, spinner: true);
+      return _StatusPage(
+        title: strings.scanning,
+        spinner: true,
+        action: TextButton(
+          onPressed: state.cancelRequested ? null : controller.cancelScan,
+          child: Text(strings.cancel),
+        ),
+      );
     }
     if (state.problem == LibraryProblem.scan) {
       return _StatusPage(
@@ -742,7 +1245,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
               ? null
               : () {
                   _scheduledPages.clear();
-                  unawaited(controller.refresh());
+                  unawaited(controller.retryScan());
                 },
           child: Text(strings.retryScan),
         ),
@@ -905,6 +1408,7 @@ class _Header extends StatelessWidget {
     required this.selectedPhotos,
     required this.onBatchFavorite,
     required this.onBatchTrash,
+    required this.onBatchExport,
     required this.onBatchRestore,
     required this.onBatchPurge,
     required this.onBatchAddToAlbum,
@@ -934,6 +1438,7 @@ class _Header extends StatelessWidget {
   final List<LocalPhoto> selectedPhotos;
   final VoidCallback onBatchFavorite;
   final VoidCallback onBatchTrash;
+  final VoidCallback onBatchExport;
   final VoidCallback onBatchRestore;
   final VoidCallback onBatchPurge;
   final ValueChanged<bool> onBatchAddToAlbum;
@@ -964,6 +1469,7 @@ class _Header extends StatelessWidget {
                         Flexible(
                           child: _SearchField(
                             controller: searchController,
+                            scope: scope,
                             focusNode: searchFocus,
                             onChanged: onSearchChanged,
                             onClose: searchMode ? null : onCloseSearch,
@@ -1112,6 +1618,11 @@ class _Header extends StatelessWidget {
     final mixed = !allFavorite && selectedPhotos.any((photo) => photo.favorite);
     return Row(
       children: [
+        IconButton(
+          tooltip: strings.pick('导出副本', 'Export copies'),
+          onPressed: selectedPhotos.isEmpty ? null : onBatchExport,
+          icon: const Icon(Icons.file_upload_outlined),
+        ),
         Tooltip(
           message: strings.addToAlbum,
           child: PopupMenuButton<bool>(
@@ -1335,6 +1846,7 @@ class _RoundSearchButton extends StatelessWidget {
 class _SearchField extends StatelessWidget {
   const _SearchField({
     required this.controller,
+    this.scope = SearchScope.all,
     required this.focusNode,
     required this.onChanged,
     required this.onClose,
@@ -1342,6 +1854,7 @@ class _SearchField extends StatelessWidget {
     required this.strings,
   });
 
+  final SearchScope scope;
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
@@ -1366,6 +1879,12 @@ class _SearchField extends StatelessWidget {
             Expanded(
               child: TextField(
                 controller: controller,
+                keyboardType: scope == SearchScope.date
+                    ? TextInputType.datetime
+                    : TextInputType.text,
+                inputFormatters: scope == SearchScope.date
+                    ? [const _DateQueryFormatter()]
+                    : null,
                 focusNode: focusNode,
                 autofocus: true,
                 onChanged: onChanged,
@@ -1510,6 +2029,56 @@ class _StatusPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _GridSectionGeometry {
+  const _GridSectionGeometry({
+    required this.top,
+    required this.start,
+    required this.count,
+    required this.columns,
+    required this.stride,
+    required this.header,
+  });
+  final double top, stride, header;
+  final int start, count, columns;
+}
+
+class _DateQueryFormatter extends TextInputFormatter {
+  const _DateQueryFormatter();
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (!newValue.composing.isCollapsed ||
+        !RegExp(r'^[0-9/年月日.\-]*$').hasMatch(newValue.text)) {
+      return newValue;
+    }
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length > 8) return newValue;
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i == 4 || i == 6) buffer.write('/');
+      buffer.write(digits[i]);
+    }
+    final text = buffer.toString();
+    final before = newValue.text
+        .substring(
+          0,
+          newValue.selection.extentOffset.clamp(0, newValue.text.length),
+        )
+        .replaceAll(RegExp(r'[^0-9]'), '')
+        .length;
+    final cursor = (before + (before > 4 ? 1 : 0) + (before > 6 ? 1 : 0)).clamp(
+      0,
+      text.length,
+    );
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: cursor),
     );
   }
 }

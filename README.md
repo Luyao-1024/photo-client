@@ -19,4 +19,6 @@ PhotoViewer跨平台重写：Flutter界面、独立Rust核心与SQLite。**一�
 - [统一验收矩阵](docs/design/acceptance.md)
 - [设计核查记录](docs/design/review.md)
 
-S01工程基础已验收；S02–S04已接通原生端到端链路（真实SQLite/FFI/文件/缩略图/窗口输入），阶段级验收记录见[一期阶段记录](docs/local-first/progress.md)与 `docs/verification/`。
+当前本地功能已经接通来源管理、目录监听、图片/视频查看、收藏与搜索、文件夹相册管理、系统回收站、导出和编辑。Linux窗口使用应用自绘标题栏与窗口按钮。详细变更见[本地功能与UX记录](docs/local-first/local-feature-delivery.md)。
+
+当前优先完成功能；按用户要求，新的UX自动化用例后续再补。原有S01–S04证据仍是各自版本的历史证据，不代表当前全部功能或十万张性能验收通过。云同步继续留到二期。

@@ -81,7 +81,8 @@ class _Segment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      button: true,
+      checked: active,
+      inMutuallyExclusiveGroup: true,
       selected: active,
       child: InkWell(
         onTap: onTap,
@@ -92,7 +93,9 @@ class _Segment extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 180),
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.2,
@@ -107,7 +110,9 @@ class _Segment extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
                 width: 22,
                 height: 3,
                 decoration: BoxDecoration(

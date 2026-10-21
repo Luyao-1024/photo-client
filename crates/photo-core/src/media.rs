@@ -2,7 +2,11 @@
 //!
 //! Run these blocking operations on the application's bounded media workers.
 //! Scanning reads container headers/EXIF, never decodes pixels or hashes originals.
+pub mod details;
+mod external;
 mod headers;
+mod heif;
+pub mod motion_photo;
 mod thumbnail;
 
 pub use thumbnail::prepare_thumbnail;
@@ -28,6 +32,7 @@ pub struct DiscoveredMedia {
     pub height: Option<u32>,
     pub orientation: u8,
     pub capture_time_ms: Option<i64>,
+    pub details: details::MediaDetails,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -47,8 +52,23 @@ pub(super) fn format_for_path(path: &Path) -> Option<(ImageFormat, &'static str)
         Some((ImageFormat::Png, "image/png"))
     } else if extension.eq_ignore_ascii_case("webp") {
         Some((ImageFormat::WebP, "image/webp"))
+    } else if extension.eq_ignore_ascii_case("gif") {
+        Some((ImageFormat::Gif, "image/gif"))
     } else {
         None
+    }
+}
+
+pub fn mime_from_extension(path: &Path) -> Option<&'static str> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    match extension.as_str() {
+        "heic" | "heif" => Some("image/heic"),
+        "mp4" | "m4v" => Some("video/mp4"),
+        "mov" => Some("video/quicktime"),
+        "webm" => Some("video/webm"),
+        "mkv" => Some("video/x-matroska"),
+        "avi" => Some("video/x-msvideo"),
+        _ => format_for_path(path).map(|(_, mime)| mime),
     }
 }
 
@@ -109,13 +129,23 @@ pub(super) fn check_source(
 }
 
 fn inspect(path: &Path) -> Result<DiscoveredMedia, String> {
-    let (format, mime) = format_for_path(path).ok_or("UnsupportedSource: extension")?;
+    let mime = mime_from_extension(path).ok_or("UnsupportedSource: extension")?;
     let initial = Fingerprint::from_metadata(
         &fs::symlink_metadata(path).map_err(|e| format!("SourceMetadata: {e}"))?,
     )?;
     let mut file = File::open(path).map_err(|e| format!("SourceRead: {e}"))?;
     check_source(path, &file, &initial)?;
-    let header = headers::read(&mut file, format, initial.size)?;
+    let header = if mime == "image/heic" {
+        heif::header(path)?
+    } else if mime.starts_with("video/") {
+        external::video_header(path)?
+    } else {
+        headers::read(
+            &mut file,
+            format_for_path(path).ok_or("UnsupportedSource")?.0,
+            initial.size,
+        )?
+    };
     check_source(path, &file, &initial)?;
     Ok(DiscoveredMedia {
         path: path.to_path_buf(),
@@ -132,6 +162,7 @@ fn inspect(path: &Path) -> Result<DiscoveredMedia, String> {
         height: Some(header.height),
         orientation: header.orientation,
         capture_time_ms: header.capture_time_ms,
+        details: details::read(path),
     })
 }
 
@@ -142,6 +173,14 @@ fn inspect(path: &Path) -> Result<DiscoveredMedia, String> {
 /// roots may emit the same source again; the library writer owns URI deduplication.
 pub fn scan_paths(
     paths: &[PathBuf],
+    cancel: &AtomicBool,
+    on_batch: impl FnMut(Vec<DiscoveredMedia>) -> Result<(), String>,
+) -> Result<ScanSummary, String> {
+    scan_paths_excluding(paths, &[], cancel, on_batch)
+}
+pub fn scan_paths_excluding(
+    paths: &[PathBuf],
+    exclusions: &[PathBuf],
     cancel: &AtomicBool,
     mut on_batch: impl FnMut(Vec<DiscoveredMedia>) -> Result<(), String>,
 ) -> Result<ScanSummary, String> {
@@ -191,10 +230,20 @@ pub fn scan_paths(
                 }
             };
             let kind = entry.file_type();
+            if exclusions.iter().any(|excluded| {
+                excluded.starts_with(&root)
+                    && excluded != &root
+                    && entry.path().starts_with(excluded)
+            }) {
+                if kind.is_dir() {
+                    entries.skip_current_dir();
+                }
+                continue;
+            }
             if kind.is_dir() {
                 continue;
             }
-            if kind.is_symlink() || !kind.is_file() || format_for_path(entry.path()).is_none() {
+            if kind.is_symlink() || !kind.is_file() || mime_from_extension(entry.path()).is_none() {
                 summary.skipped += 1;
                 continue;
             }
@@ -227,4 +276,47 @@ pub fn scan_paths(
         }
     }
     Ok(summary)
+}
+
+/// A cached, oriented preview for formats Flutter does not decode natively.
+pub fn prepare_preview(
+    source: &Path,
+    expected_size: u64,
+    expected_ns: i64,
+    max_edge: u32,
+    destination: &Path,
+) -> Result<(), String> {
+    let mime = mime_from_extension(source).ok_or("UnsupportedSource")?;
+    if mime != "image/heic" && !mime.starts_with("video/") {
+        return prepare_thumbnail(source, expected_size, expected_ns, max_edge, destination);
+    }
+    let expected = Fingerprint::from_metadata(
+        &fs::symlink_metadata(source).map_err(|_| "SourceUnavailable")?,
+    )?;
+    if expected.size != expected_size || expected.modified_ns != expected_ns {
+        return Err("SourceChanged".into());
+    }
+    let handle = File::open(source).map_err(|_| "SourceUnavailable")?;
+    fs::create_dir_all(destination.parent().ok_or("CacheUnavailable")?)
+        .map_err(|_| "CacheUnavailable")?;
+    if mime == "image/heic" {
+        let image = heif::decode(source)?.thumbnail(max_edge, max_edge);
+        let mut stage = tempfile::Builder::new()
+            .suffix(".jpg")
+            .tempfile_in(destination.parent().unwrap())
+            .map_err(|_| "CacheUnavailable")?;
+        image::codecs::jpeg::JpegEncoder::new_with_quality(stage.as_file_mut(), 90)
+            .encode_image(&image)
+            .map_err(|_| "EncodeFailed")?;
+        check_source(source, &handle, &expected)?;
+        stage.as_file().sync_all().map_err(|_| "CacheUnavailable")?;
+        stage.persist(destination).map_err(|_| "CacheUnavailable")?;
+    } else {
+        external::thumbnail(source, max_edge, destination)?;
+        if let Err(error) = check_source(source, &handle, &expected) {
+            let _ = fs::remove_file(destination);
+            return Err(error);
+        }
+    }
+    Ok(())
 }

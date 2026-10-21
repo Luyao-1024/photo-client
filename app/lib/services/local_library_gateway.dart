@@ -83,15 +83,19 @@ class CropBox {
 class EditOptions {
   const EditOptions({
     this.rotationDegrees = 0,
+    this.flipHorizontal = false,
+    this.flipVertical = false,
     this.brightness = 0,
     this.contrast = 0,
     this.saturation = 0,
     this.crop,
     this.saveCopy = false,
+    this.expectedContentVersion,
   });
 
   /// Clockwise 0 / 90 / 180 / 270.
   final int rotationDegrees;
+  final bool flipHorizontal, flipVertical;
 
   /// -100..100, 0 keeps the original.
   final int brightness;
@@ -101,9 +105,12 @@ class EditOptions {
 
   /// Write a new sibling file instead of overwriting the original.
   final bool saveCopy;
+  final int? expectedContentVersion;
 
   bool get isIdentity =>
       rotationDegrees % 360 == 0 &&
+      !flipHorizontal &&
+      !flipVertical &&
       brightness == 0 &&
       contrast == 0 &&
       saturation == 0 &&
@@ -111,19 +118,26 @@ class EditOptions {
 
   EditOptions copyWith({
     int? rotationDegrees,
+    bool? flipHorizontal,
+    bool? flipVertical,
     int? brightness,
     int? contrast,
     int? saturation,
     CropBox? crop,
     bool clearCrop = false,
     bool? saveCopy,
+    int? expectedContentVersion,
   }) => EditOptions(
     rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+    flipHorizontal: flipHorizontal ?? this.flipHorizontal,
+    flipVertical: flipVertical ?? this.flipVertical,
     brightness: brightness ?? this.brightness,
     contrast: contrast ?? this.contrast,
     saturation: saturation ?? this.saturation,
     crop: clearCrop ? null : crop ?? this.crop,
     saveCopy: saveCopy ?? this.saveCopy,
+    expectedContentVersion:
+        expectedContentVersion ?? this.expectedContentVersion,
   );
 }
 
@@ -157,6 +171,8 @@ class LocalPhoto {
     this.sortTimeMs,
     this.state = 'active',
     this.trashedAtMs,
+    this.durationMs,
+    this.motionOffset,
   });
   final String id;
   final String path;
@@ -175,6 +191,29 @@ class LocalPhoto {
   final int? sortTimeMs;
   final String state;
   final int? trashedAtMs;
+  final int? durationMs, motionOffset;
+
+  factory LocalPhoto.fromJson(Map<String, dynamic> data) => LocalPhoto(
+    id: data['id'] as String,
+    path: data['path'] as String,
+    name: data['name'] as String,
+    parent: data['parent'] as String,
+    sizeBytes: data['size_bytes'] as int,
+    modifiedMs: data['modified_ms'] as int,
+    contentVersion: data['content_version'] as int,
+    width: data['width'] as int?,
+    height: data['height'] as int?,
+    favorite: data['favorite'] as bool,
+    mediaKind: data['media_kind'] as String,
+    mimeType: data['mime_type'] as String,
+    orientation: data['orientation'] as int,
+    captureTimeMs: data['capture_time_ms'] as int?,
+    sortTimeMs: data['sort_time_ms'] as int?,
+    state: data['state'] as String,
+    trashedAtMs: data['trashed_at_ms'] as int?,
+    durationMs: data['duration_ms'] as int?,
+    motionOffset: data['motion_offset'] as int?,
+  );
 
   LocalPhoto withFavorite(bool value) => LocalPhoto(
     id: id,
@@ -194,6 +233,8 @@ class LocalPhoto {
     sortTimeMs: sortTimeMs,
     state: state,
     trashedAtMs: trashedAtMs,
+    durationMs: durationMs,
+    motionOffset: motionOffset,
   );
 }
 

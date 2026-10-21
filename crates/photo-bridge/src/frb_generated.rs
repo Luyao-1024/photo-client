@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 982870264;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1128262209;
 
 // Section: executor
 
@@ -300,6 +300,43 @@ fn wire__crate__api__bootstrap__initialize_impl(
                             api_bridge_protocol_version,
                         )
                         .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__local_library__library_tools_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "library_tools",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_command = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::local_library::library_tools(api_command).await?;
                         std::result::Result::Ok(output_ok)
                     })()
                     .await,
@@ -871,6 +908,8 @@ impl SseDecode for crate::api::local_library::EditRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_rotationDegrees = <i32>::sse_decode(deserializer);
+        let mut var_flipHorizontal = <bool>::sse_decode(deserializer);
+        let mut var_flipVertical = <bool>::sse_decode(deserializer);
         let mut var_brightness = <i32>::sse_decode(deserializer);
         let mut var_contrast = <i32>::sse_decode(deserializer);
         let mut var_saturation = <i32>::sse_decode(deserializer);
@@ -879,8 +918,11 @@ impl SseDecode for crate::api::local_library::EditRequest {
         let mut var_cropWidth = <Option<u32>>::sse_decode(deserializer);
         let mut var_cropHeight = <Option<u32>>::sse_decode(deserializer);
         let mut var_saveCopy = <bool>::sse_decode(deserializer);
+        let mut var_expectedContentVersion = <Option<u64>>::sse_decode(deserializer);
         return crate::api::local_library::EditRequest {
             rotation_degrees: var_rotationDegrees,
+            flip_horizontal: var_flipHorizontal,
+            flip_vertical: var_flipVertical,
             brightness: var_brightness,
             contrast: var_contrast,
             saturation: var_saturation,
@@ -889,6 +931,7 @@ impl SseDecode for crate::api::local_library::EditRequest {
             crop_width: var_cropWidth,
             crop_height: var_cropHeight,
             save_copy: var_saveCopy,
+            expected_content_version: var_expectedContentVersion,
         };
     }
 }
@@ -1096,6 +1139,17 @@ impl SseDecode for Option<u32> {
     }
 }
 
+impl SseDecode for Option<u64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for crate::api::bootstrap::RuntimeEvent {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1150,21 +1204,22 @@ fn pde_ffi_dispatcher_primary_impl(
         5 => wire__crate__api__local_library__empty_trash_impl(port, ptr, rust_vec_len, data_len),
         6 => wire__crate__api__bootstrap__init_app_impl(port, ptr, rust_vec_len, data_len),
         7 => wire__crate__api__bootstrap__initialize_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__local_library__list_albums_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__local_library__list_photos_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__local_library__open_library_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__local_library__purge_media_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__local_library__rename_media_impl(port, ptr, rust_vec_len, data_len),
-        13 => {
+        8 => wire__crate__api__local_library__library_tools_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__local_library__list_albums_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__local_library__list_photos_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__local_library__open_library_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__local_library__purge_media_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__local_library__rename_media_impl(port, ptr, rust_vec_len, data_len),
+        14 => {
             wire__crate__api__local_library__restore_media_impl(port, ptr, rust_vec_len, data_len)
         }
-        14 => wire__crate__api__bootstrap__round_trip_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__local_library__save_edited_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__local_library__set_favorite_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__bootstrap__shutdown_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__local_library__thumbnail_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__local_library__trash_media_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__bootstrap__watch_runtime_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__bootstrap__round_trip_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__local_library__save_edited_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__local_library__set_favorite_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__bootstrap__shutdown_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__local_library__thumbnail_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__local_library__trash_media_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__bootstrap__watch_runtime_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1212,6 +1267,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::local_library::EditRequest {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.rotation_degrees.into_into_dart().into_dart(),
+            self.flip_horizontal.into_into_dart().into_dart(),
+            self.flip_vertical.into_into_dart().into_dart(),
             self.brightness.into_into_dart().into_dart(),
             self.contrast.into_into_dart().into_dart(),
             self.saturation.into_into_dart().into_dart(),
@@ -1220,6 +1277,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::local_library::EditRequest {
             self.crop_width.into_into_dart().into_dart(),
             self.crop_height.into_into_dart().into_dart(),
             self.save_copy.into_into_dart().into_dart(),
+            self.expected_content_version.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1432,6 +1490,8 @@ impl SseEncode for crate::api::local_library::EditRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.rotation_degrees, serializer);
+        <bool>::sse_encode(self.flip_horizontal, serializer);
+        <bool>::sse_encode(self.flip_vertical, serializer);
         <i32>::sse_encode(self.brightness, serializer);
         <i32>::sse_encode(self.contrast, serializer);
         <i32>::sse_encode(self.saturation, serializer);
@@ -1440,6 +1500,7 @@ impl SseEncode for crate::api::local_library::EditRequest {
         <Option<u32>>::sse_encode(self.crop_width, serializer);
         <Option<u32>>::sse_encode(self.crop_height, serializer);
         <bool>::sse_encode(self.save_copy, serializer);
+        <Option<u64>>::sse_encode(self.expected_content_version, serializer);
     }
 }
 
@@ -1585,6 +1646,16 @@ impl SseEncode for Option<u32> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <u32>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u64>::sse_encode(value, serializer);
         }
     }
 }

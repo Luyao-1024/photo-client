@@ -58,7 +58,8 @@ def build(profile: dict, mode: str, root: Path = ROOT) -> Path:
     if not (root / "Cargo.lock").is_file():
         raise ProfileError("build: Cargo.lock is required for --locked builds")
     paths = generate(profile, root)
-    env = os.environ.copy()
+    from prepare_linux_media import environment, bundle_runtime
+    env, media_runtime = environment()
     env.update(dart_defines(profile))
     # Keep the native artifact location deterministic even with a caller override.
     env["CARGO_TARGET_DIR"] = str(root / "target")
@@ -77,6 +78,7 @@ def build(profile: dict, mode: str, root: Path = ROOT) -> Path:
     bundle = root / "app" / "build" / "linux" / "x64" / mode / "bundle"
     if not bundle.is_dir():
         raise ProfileError(f"build: Flutter did not produce expected bundle: {bundle}")
+    bundle_runtime(bundle, media_runtime)
     print(canonical_json({
         "profile_id": profile["profile_id"], "profile_digest": profile_digest(profile),
         "mode": mode, "native_library": str(native), "bundle": str(bundle),

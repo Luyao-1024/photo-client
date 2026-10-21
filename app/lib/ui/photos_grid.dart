@@ -24,7 +24,15 @@ double gridSpacing(GroupMode mode) => switch (mode) {
 
 /// One calendar bucket of the loaded window: a header plus its tiles.
 class PhotoSection {
-  PhotoSection({required this.bucket, required this.date, this.label});
+  PhotoSection({
+    required this.bucket,
+    required this.date,
+    this.label,
+    this.startIndex,
+    this.totalCount,
+  });
+  final int? startIndex;
+  int? totalCount;
   final int bucket;
   final DateTime date;
 
@@ -98,6 +106,10 @@ class PhotoTile extends StatefulWidget {
     this.onMoveToTrash,
     this.onCopyToAlbum,
     this.onMoveToAlbum,
+    this.onExport,
+    this.onSetCover,
+    this.onRestore,
+    this.onPurge,
   });
 
   final LocalPhoto photo;
@@ -115,6 +127,8 @@ class PhotoTile extends StatefulWidget {
   final VoidCallback? onMoveToTrash;
   final VoidCallback? onCopyToAlbum;
   final VoidCallback? onMoveToAlbum;
+  final VoidCallback? onExport, onSetCover;
+  final VoidCallback? onRestore, onPurge;
 
   @override
   State<PhotoTile> createState() => _PhotoTileState();
@@ -156,6 +170,15 @@ class _PhotoTileState extends State<PhotoTile> {
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.delete &&
+        !widget.multiSelect) {
+      final action = widget.onPurge ?? widget.onMoveToTrash;
+      if (action != null) {
+        action();
+        return KeyEventResult.handled;
+      }
+    }
     if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
       if (widget.multiSelect) {
         widget.onSelectToggle();
@@ -185,15 +208,23 @@ class _PhotoTileState extends State<PhotoTile> {
                 : strings.pick('选择', 'Select'),
           ),
         ),
-        PopupMenuItem<String>(
-          value: 'favorite',
-          child: Text(
-            widget.photo.favorite
-                ? strings.unmarkFavorite
-                : strings.markFavorite,
+        if (widget.photo.state != 'trashed')
+          PopupMenuItem<String>(
+            value: 'favorite',
+            child: Text(
+              widget.photo.favorite
+                  ? strings.unmarkFavorite
+                  : strings.markFavorite,
+            ),
           ),
-        ),
         PopupMenuItem<String>(value: 'details', child: Text(strings.details)),
+        if (widget.onRestore != null)
+          PopupMenuItem<String>(value: 'restore', child: Text(strings.restore)),
+        if (widget.onPurge != null)
+          PopupMenuItem<String>(
+            value: 'purge',
+            child: Text(strings.deletePermanently),
+          ),
         if (widget.onRename != null)
           PopupMenuItem<String>(value: 'rename', child: Text(strings.rename)),
         if (widget.onCopyToAlbum != null)
@@ -205,6 +236,16 @@ class _PhotoTileState extends State<PhotoTile> {
           PopupMenuItem<String>(
             value: 'move-album',
             child: Text(strings.moveToAlbum),
+          ),
+        if (widget.onExport != null)
+          PopupMenuItem<String>(
+            value: 'export',
+            child: Text(strings.pick('导出副本', 'Export copy')),
+          ),
+        if (widget.onSetCover != null)
+          PopupMenuItem<String>(
+            value: 'cover',
+            child: Text(strings.pick('设为相册封面', 'Set as album cover')),
           ),
         if (widget.onMoveToTrash != null)
           PopupMenuItem<String>(
@@ -231,6 +272,14 @@ class _PhotoTileState extends State<PhotoTile> {
         widget.onCopyToAlbum?.call();
       case 'move-album':
         widget.onMoveToAlbum?.call();
+      case 'restore':
+        widget.onRestore?.call();
+      case 'purge':
+        widget.onPurge?.call();
+      case 'export':
+        widget.onExport?.call();
+      case 'cover':
+        widget.onSetCover?.call();
       case 'trash':
         widget.onMoveToTrash?.call();
     }
@@ -281,9 +330,47 @@ class _PhotoTileState extends State<PhotoTile> {
               children: [
                 _thumbnailLayer(strings),
                 AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 120),
                   color: Colors.black.withValues(alpha: veil),
                 ),
+                if (widget.photo.mediaKind == 'video' ||
+                    widget.photo.motionOffset != null)
+                  Positioned(
+                    left: 6,
+                    bottom: 6,
+                    child: Semantics(
+                      label: widget.photo.mediaKind == 'video'
+                          ? strings.videos
+                          : strings.pick('动态照片', 'Motion photo'),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: .55),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 3,
+                          ),
+                          child: widget.photo.durationMs == null
+                              ? const Icon(
+                                  Icons.play_arrow_rounded,
+                                  size: 18,
+                                  color: Colors.white,
+                                )
+                              : Text(
+                                  '${(widget.photo.durationMs! ~/ 60000).toString().padLeft(2, '0')}:${((widget.photo.durationMs! ~/ 1000) % 60).toString().padLeft(2, '0')}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (widget.photo.favorite)
                   Positioned(
                     top: 6,
@@ -308,7 +395,9 @@ class _PhotoTileState extends State<PhotoTile> {
                   bottom: 6,
                   child: IgnorePointer(
                     child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 120),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 120),
                       opacity: checkOpacity,
                       child: DecoratedBox(
                         decoration: BoxDecoration(

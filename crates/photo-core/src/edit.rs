@@ -16,6 +16,8 @@ pub struct CropRect {
 pub struct EditAdjustments {
     /// 0 / 90 / 180 / 270, clockwise.
     pub rotation_degrees: i32,
+    pub flip_horizontal: bool,
+    pub flip_vertical: bool,
     /// -100..=100, 0 keeps the original exposure.
     pub brightness: i32,
     /// -100..=100.
@@ -28,6 +30,8 @@ pub struct EditAdjustments {
 impl EditAdjustments {
     pub fn is_identity(&self) -> bool {
         self.rotation_degrees.rem_euclid(360) == 0
+            && !self.flip_horizontal
+            && !self.flip_vertical
             && self.brightness == 0
             && self.contrast == 0
             && self.saturation == 0
@@ -44,6 +48,12 @@ pub fn render(image: &DynamicImage, adjustments: EditAdjustments) -> DynamicImag
         270 => image.rotate270(),
         _ => image.clone(),
     };
+    if adjustments.flip_horizontal {
+        out = out.fliph();
+    }
+    if adjustments.flip_vertical {
+        out = out.flipv();
+    }
     if let Some(crop) = adjustments.crop {
         out = apply_crop(&out, crop);
     }

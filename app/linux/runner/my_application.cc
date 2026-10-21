@@ -21,39 +21,76 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+struct WindowChannel {
+  GtkWindow* window;
+  FlMethodChannel* channel;
+};
+
+static void window_method_call(FlMethodChannel*, FlMethodCall* call,
+                               gpointer user_data) {
+  auto* state = static_cast<WindowChannel*>(user_data);
+  const gchar* method = fl_method_call_get_name(call);
+  GtkWindow* window = state->window;
+  if (g_str_equal(method, "minimize")) {
+    gtk_window_iconify(window);
+  } else if (g_str_equal(method, "maximize")) {
+    if (gtk_window_is_maximized(window)) gtk_window_unmaximize(window);
+    else gtk_window_maximize(window);
+  } else if (g_str_equal(method, "fullscreen")) {
+    FlValue* args = fl_method_call_get_args(call);
+    if (fl_value_get_bool(args)) gtk_window_fullscreen(window);
+    else gtk_window_unfullscreen(window);
+  } else if (g_str_equal(method, "drag") || g_str_equal(method, "resize")) {
+    GdkDisplay* display = gtk_widget_get_display(GTK_WIDGET(window));
+    GdkDevice* pointer = gdk_seat_get_pointer(gdk_display_get_default_seat(display));
+    gint x = 0, y = 0;
+    if (pointer) gdk_device_get_position(pointer, nullptr, &x, &y);
+    if (g_str_equal(method, "drag")) {
+      gtk_window_begin_move_drag(window, 1, x, y, GDK_CURRENT_TIME);
+    } else {
+      const int edge = static_cast<int>(fl_value_get_int(fl_method_call_get_args(call)));
+      if (edge >= 0 && edge <= 7) gtk_window_begin_resize_drag(
+          window, static_cast<GdkWindowEdge>(edge), 1, x, y, GDK_CURRENT_TIME);
+    }
+  } else if (g_str_equal(method, "close")) {
+    fl_method_call_respond_success(call, nullptr, nullptr);
+    gtk_widget_destroy(GTK_WIDGET(window));
+    return;
+  } else if (!g_str_equal(method, "state")) {
+    fl_method_call_respond_not_implemented(call, nullptr);
+    return;
+  }
+  g_autoptr(FlValue) result = fl_value_new_bool(gtk_window_is_maximized(window));
+  fl_method_call_respond_success(call, result, nullptr);
+}
+
+static gboolean window_delete(GtkWidget*, GdkEvent*, gpointer user_data) {
+  auto* state = static_cast<WindowChannel*>(user_data);
+  fl_method_channel_invoke_method(state->channel, "closeRequested", nullptr,
+                                 nullptr, nullptr, nullptr);
+  return TRUE;  // Dart confirms pending local edits / scans before destruction.
+}
+
+static gboolean window_state(GtkWidget*, GdkEventWindowState* event,
+                             gpointer user_data) {
+  auto* state = static_cast<WindowChannel*>(user_data);
+  g_autoptr(FlValue) maximized = fl_value_new_bool(
+      (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0);
+  fl_method_channel_invoke_method(state->channel, "stateChanged", maximized,
+                                 nullptr, nullptr, nullptr);
+  return FALSE;
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
-  gboolean use_header_bar = TRUE;
-#ifdef GDK_WINDOWING_X11
-  GdkScreen* screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
-    const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
-    if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
-      use_header_bar = FALSE;
-    }
-  }
-#endif
-  if (use_header_bar) {
-    GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
-    gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "photo_client");
-    gtk_header_bar_set_show_close_button(header_bar, TRUE);
-    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  } else {
-    gtk_window_set_title(window, "photo_client");
-  }
-
+  // Flutter owns all window chrome. Never create a GtkHeaderBar or request
+  // compositor decorations (including on non-GNOME window managers).
+  gtk_window_set_title(window, "PhotoViewer");
+  gtk_window_set_decorated(window, FALSE);
   // Deterministic window geometry for responsive/acceptance runs. The flag is
   // also forwarded to Dart, which ignores it.
   gint window_width = 1280;
@@ -93,6 +130,22 @@ static void my_application_activate(GApplication* application) {
   g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
+
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  FlMethodChannel* channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "photo_client/window", FL_METHOD_CODEC(codec));
+  auto* window_channel = new WindowChannel{window, channel};
+  fl_method_channel_set_method_call_handler(channel, window_method_call,
+                                           window_channel, nullptr);
+  g_signal_connect(window, "delete-event", G_CALLBACK(window_delete), window_channel);
+  g_signal_connect(window, "window-state-event", G_CALLBACK(window_state), window_channel);
+  g_object_set_data_full(G_OBJECT(window), "photo-window-channel", window_channel,
+                        [](gpointer data) {
+                          auto* state = static_cast<WindowChannel*>(data);
+                          g_object_unref(state->channel);
+                          delete state;
+                        });
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 

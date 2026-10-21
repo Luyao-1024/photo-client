@@ -96,8 +96,15 @@ Future<void> setFavorite({required String mediaId, required bool favorite}) =>
 Future<void> closeLibrary() =>
     RustLib.instance.api.crateApiLocalLibraryCloseLibrary();
 
+/// Local-only tools. JSON is used at the FFI boundary, never as catalog storage.
+/// Each command delegates to the same scoped local writer as typed library RPCs.
+Future<String> libraryTools({required String command}) =>
+    RustLib.instance.api.crateApiLocalLibraryLibraryTools(command: command);
+
 class EditRequest {
   final int rotationDegrees;
+  final bool flipHorizontal;
+  final bool flipVertical;
   final int brightness;
   final int contrast;
   final int saturation;
@@ -106,9 +113,12 @@ class EditRequest {
   final int? cropWidth;
   final int? cropHeight;
   final bool saveCopy;
+  final BigInt? expectedContentVersion;
 
   const EditRequest({
     required this.rotationDegrees,
+    required this.flipHorizontal,
+    required this.flipVertical,
     required this.brightness,
     required this.contrast,
     required this.saturation,
@@ -117,11 +127,14 @@ class EditRequest {
     this.cropWidth,
     this.cropHeight,
     required this.saveCopy,
+    this.expectedContentVersion,
   });
 
   @override
   int get hashCode =>
       rotationDegrees.hashCode ^
+      flipHorizontal.hashCode ^
+      flipVertical.hashCode ^
       brightness.hashCode ^
       contrast.hashCode ^
       saturation.hashCode ^
@@ -129,7 +142,8 @@ class EditRequest {
       cropY.hashCode ^
       cropWidth.hashCode ^
       cropHeight.hashCode ^
-      saveCopy.hashCode;
+      saveCopy.hashCode ^
+      expectedContentVersion.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -137,6 +151,8 @@ class EditRequest {
       other is EditRequest &&
           runtimeType == other.runtimeType &&
           rotationDegrees == other.rotationDegrees &&
+          flipHorizontal == other.flipHorizontal &&
+          flipVertical == other.flipVertical &&
           brightness == other.brightness &&
           contrast == other.contrast &&
           saturation == other.saturation &&
@@ -144,7 +160,8 @@ class EditRequest {
           cropY == other.cropY &&
           cropWidth == other.cropWidth &&
           cropHeight == other.cropHeight &&
-          saveCopy == other.saveCopy;
+          saveCopy == other.saveCopy &&
+          expectedContentVersion == other.expectedContentVersion;
 }
 
 class LocalAlbum {

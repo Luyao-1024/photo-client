@@ -27,7 +27,13 @@ fn write_photo(folder: &Path, name: &str, width: u32, height: u32) -> MediaInput
         name: name.into(),
         parent: folder.to_str().unwrap().into(),
         size_bytes: bytes.len() as u64,
-        modified_ns: 1_700_000_000_000_000_000,
+        modified_ns: fs::metadata(&path)
+            .unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as i64,
         mime_type: "image/png".into(),
         width: Some(width),
         height: Some(height),

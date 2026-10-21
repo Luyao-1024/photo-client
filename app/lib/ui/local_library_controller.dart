@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
+import '../services/local_library_tools.dart';
+import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 
 final sourcePickerProvider = Provider<LocalSourcePicker?>((ref) => null);
@@ -13,14 +15,21 @@ final localLibraryProvider =
 
 enum LibraryProblem { load, nextPage, picker, scan, cancel, favorite, events }
 
+class LibraryDateGroup {
+  const LibraryDateGroup(this.time, this.count);
+  final int time, count;
+}
+
 class LibraryViewState {
   const LibraryViewState({
     this.info,
     this.pages = const {},
+    this.groups = const [],
     this.total = 0,
     this.extent = 0,
     this.revision = 0,
     this.queryEpoch = 0,
+    this.anchorRank = 0,
     this.loading = true,
     this.loadingNext = false,
     this.hasNext = false,
@@ -40,7 +49,9 @@ class LibraryViewState {
   });
   final LocalLibraryInfo? info;
   final Map<int, List<LocalPhoto>> pages;
+  final List<LibraryDateGroup> groups;
   final int total, extent, revision, queryEpoch;
+  final int anchorRank;
   final bool loading, loadingNext, hasNext, favoritesOnly, scanning, selecting;
   final bool cancelRequested;
   final String search;
@@ -72,10 +83,12 @@ class LibraryViewState {
   LibraryViewState copyWith({
     LocalLibraryInfo? info,
     Map<int, List<LocalPhoto>>? pages,
+    List<LibraryDateGroup>? groups,
     int? total,
     int? extent,
     int? revision,
     int? queryEpoch,
+    int? anchorRank,
     bool? loading,
     bool? loadingNext,
     bool? hasNext,
@@ -99,10 +112,12 @@ class LibraryViewState {
   }) => LibraryViewState(
     info: info ?? this.info,
     pages: pages ?? this.pages,
+    groups: groups ?? this.groups,
     total: total ?? this.total,
     extent: extent ?? this.extent,
     revision: revision ?? this.revision,
     queryEpoch: queryEpoch ?? this.queryEpoch,
+    anchorRank: anchorRank ?? this.anchorRank,
     loading: loading ?? this.loading,
     loadingNext: loadingNext ?? this.loadingNext,
     hasNext: hasNext ?? this.hasNext,
@@ -139,6 +154,12 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
   final _requests = <int, Future<void>>{};
   final _recent = <int>{};
   int _scanGeneration = 0;
+  int _viewportIndex = 0;
+  List<String> _lastPaths = [];
+  bool get indexed => _gateway is LocalLibraryTools;
+  void noteViewport(int index) {
+    _viewportIndex = index;
+  }
 
   @override
   LibraryViewState build() {
@@ -159,8 +180,142 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         _started = true;
         scheduleMicrotask(refresh);
       }
+      if (previous?.runtimeStatus != next.runtimeStatus) {
+        if (next.runtimeStatus == 'local_scan_started') {
+          state = state.copyWith(scanning: true, clearScanResult: true);
+        }
+        if (next.runtimeStatus == 'local_scan_finished') {
+          state = state.copyWith(scanning: false, cancelRequested: false);
+        }
+        if (next.runtimeStatus == 'local_scan_failed') {
+          state = state.copyWith(scanning: false, problem: LibraryProblem.scan);
+        }
+      }
     }, fireImmediately: true);
+    ref.listen(presentationProvider.select((value) => value.order), (
+      before,
+      after,
+    ) {
+      if (before != null && before != after) {
+        ++_generation;
+        state = state.copyWith(
+          queryEpoch: state.queryEpoch + 1,
+          pages: {},
+          extent: 0,
+        );
+        unawaited(refresh());
+      }
+    });
     return const LibraryViewState();
+  }
+
+  Map<String, Object?> filterFor(LibraryViewState query) => {
+    'favorites_only': query.favoritesOnly,
+    'search': query.search,
+    'search_scope': query.searchScope.wire,
+    'folder': query.folder,
+    'media_kind': query.mediaKind,
+    'trashed': query.trashed,
+    'order': ref.read(presentationProvider).order,
+  };
+  Future<Object?> localCommand(Map<String, Object?> command) async {
+    final gateway = _gateway;
+    if (gateway is! LocalLibraryTools) return null;
+    return (gateway as LocalLibraryTools).localCommand(command);
+  }
+
+  Future<LocalPhotoPage> _queryPage(
+    LibraryViewState query,
+    int index, {
+    bool groups = false,
+  }) async {
+    if (!indexed) {
+      return _gateway.listPhotos(
+        cursor: _cursors[index],
+        limit: pageSize,
+        favoritesOnly: query.favoritesOnly,
+        search: query.search,
+        searchScope: query.searchScope,
+        folder: query.folder,
+        mediaKind: query.mediaKind,
+        trashed: query.trashed,
+      );
+    }
+    final data = await localCommand({
+      'op': 'window',
+      'filter': filterFor(query),
+      'start': index * pageSize,
+      'count': pageSize,
+      'groups': groups,
+    }) as Map;
+    _queriedGroups = groups
+        ? [
+            for (final row in data['groups'] as List)
+              LibraryDateGroup((row as List)[0] as int, row[1] as int),
+          ]
+        : _queriedGroups;
+    final items = [
+      for (final item in data['items'] as List)
+        LocalPhoto.fromJson(Map<String, dynamic>.from(item as Map)),
+    ];
+    return LocalPhotoPage(
+      items: items,
+      total: data['total'] as int,
+      revision: data['revision'] as int,
+      nextCursor: (index + 1) * pageSize < (data['total'] as int)
+          ? 'indexed'
+          : null,
+    );
+  }
+
+  List<LibraryDateGroup> _queriedGroups = [];
+  Future<List<LocalPhoto>> selectQuery({int limit = 2000}) async {
+    final query = state;
+    if (indexed) {
+      final data = await localCommand({
+        'op': 'selection',
+        'filter': filterFor(query),
+      }) as Map;
+      return [
+        for (final item in data['items'] as List)
+          LocalPhoto.fromJson(Map<String, dynamic>.from(item as Map)),
+      ];
+    }
+    final selected = <LocalPhoto>[];
+    String? cursor;
+    do {
+      final page = await _gateway.listPhotos(
+        cursor: cursor,
+        limit: pageSize,
+        favoritesOnly: query.favoritesOnly,
+        search: query.search,
+        searchScope: query.searchScope,
+        folder: query.folder,
+        mediaKind: query.mediaKind,
+        trashed: query.trashed,
+      );
+      selected.addAll(page.items.take(limit - selected.length));
+      cursor = page.nextCursor;
+    } while (cursor != null && selected.length < limit);
+    return selected;
+  }
+
+  Future<void> showDestination({
+    bool favorites = false,
+    String? folder,
+    String? kind,
+    bool trash = false,
+  }) async {
+    _searchTimer?.cancel();
+    _changeQuery(
+      search: '',
+      favoritesOnly: favorites,
+      folder: folder,
+      clearFolder: folder == null,
+      mediaKind: kind,
+      clearMediaKind: kind == null,
+      trashed: trash,
+    );
   }
 
   Future<void> _cancelEvents(StreamSubscription<void> events) async {
@@ -244,15 +399,27 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
           }
         },
       );
-      final page = await _gateway.listPhotos(
-        limit: pageSize,
-        favoritesOnly: query.favoritesOnly,
-        search: query.search,
-        searchScope: query.searchScope,
-        folder: query.folder,
-        mediaKind: query.mediaKind,
-        trashed: query.trashed,
-      );
+      var anchorRank = _viewportIndex;
+      var pageIndex = indexed ? (_viewportIndex ~/ pageSize) : 0;
+      if (indexed && _viewportIndex > 0) {
+        final anchor = query.photoAt(_viewportIndex);
+        if (anchor != null) {
+          final rank = await localCommand({
+            'op': 'rank',
+            'filter': filterFor(query),
+            'id': anchor.id,
+          }) as int?;
+          if (rank != null) {
+            pageIndex = rank ~/ pageSize;
+            anchorRank = rank;
+          }
+        }
+      }
+      var page = await _queryPage(query, pageIndex, groups: true);
+      if (pageIndex * pageSize >= page.total && pageIndex > 0) {
+        pageIndex = 0;
+        page = await _queryPage(query, 0, groups: true);
+      }
       final albums = query.trashed
           ? const <LocalAlbum>[]
           : await _gateway.listAlbums();
@@ -270,17 +437,18 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       _requests.clear();
       _recent
         ..clear()
-        ..add(0);
+        ..add(pageIndex);
       state = state.copyWith(
         info: info,
-        pages: {0: List.unmodifiable(page.items)},
+        anchorRank: anchorRank,
+        pages: {pageIndex: List.unmodifiable(page.items)},
+        groups: indexed ? List.unmodifiable(_queriedGroups) : const [],
         total: page.total,
-        extent: page.items.length,
+        extent: indexed ? page.total : page.items.length,
         revision: page.revision,
         loading: false,
         hasNext: page.nextCursor != null,
         albums: albums,
-        queryEpoch: state.queryEpoch + 1,
       );
     } catch (_) {
       if (!_disposed && generation == _generation) {
@@ -334,6 +502,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
     bool? trashed,
   }) {
     ++_generation;
+    _viewportIndex = 0;
     _cursors
       ..clear()
       ..[0] = null;
@@ -349,6 +518,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       clearMediaKind: clearMediaKind,
       trashed: trashed,
       pages: {},
+      groups: const [],
       extent: 0,
       hasNext: false,
       loading: true,
@@ -359,12 +529,16 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
   }
 
   Future<void> loadNext() async {
-    if (_disposed || state.loading || !state.hasNext) return;
+    if (indexed || _disposed || state.loading || !state.hasNext) return;
     await ensurePage((state.extent / pageSize).ceil());
   }
 
   Future<void> ensurePage(int pageIndex) {
-    if (_disposed || state.loading || !_cursors.containsKey(pageIndex)) {
+    if (pageIndex < 0 ||
+        (indexed && pageIndex * pageSize >= state.total) ||
+        _disposed ||
+        state.loading ||
+        (!indexed && !_cursors.containsKey(pageIndex))) {
       return Future<void>.value();
     }
     if (state.pages.containsKey(pageIndex)) {
@@ -384,16 +558,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
     final query = state;
     state = state.copyWith(loadingNext: true, clearProblem: true);
     try {
-      final page = await _gateway.listPhotos(
-        cursor: _cursors[pageIndex],
-        limit: pageSize,
-        favoritesOnly: query.favoritesOnly,
-        search: query.search,
-        searchScope: query.searchScope,
-        folder: query.folder,
-        mediaKind: query.mediaKind,
-        trashed: query.trashed,
-      );
+      final page = await _queryPage(query, pageIndex);
       if (_disposed || generation != _generation) return;
       if (page.revision != state.revision) {
         _invalidate();
@@ -413,7 +578,9 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       state = state.copyWith(
         pages: Map.unmodifiable(pages),
         total: page.total,
-        extent: frontier > state.extent ? frontier : state.extent,
+        extent: indexed
+            ? page.total
+            : (frontier > state.extent ? frontier : state.extent),
         hasNext: frontier >= state.extent
             ? page.nextCursor != null
             : state.hasNext,
@@ -464,6 +631,12 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       state = state.copyWith(selecting: false);
       return;
     }
+    await scanPaths(paths);
+  }
+
+  Future<void> scanPaths(List<String> paths) async {
+    if (_disposed || state.scanning) return;
+    _lastPaths = List.of(paths);
     ++_scanGeneration;
     state = state.copyWith(
       selecting: false,
@@ -489,6 +662,18 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         );
       }
     }
+  }
+
+  Future<void> retryScan() =>
+      _lastPaths.isEmpty ? rescanSources() : scanPaths(_lastPaths);
+  Future<void> rescanSources() async {
+    final data = await localCommand({'op': 'sources'}) as List?;
+    if (data == null) return;
+    final paths = [
+      for (final source in data)
+        if ((source as Map)['enabled'] == true) source['path'] as String,
+    ];
+    if (paths.isNotEmpty) await scanPaths(paths);
   }
 
   Future<void> cancelScan() async {

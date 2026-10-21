@@ -62,9 +62,10 @@
       "depends_on": [
         "S04"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "gate_status": "not_run",
-      "user_review": "not_recorded"
+      "user_review": "not_recorded",
+      "work_status": "feature_development"
     },
     {
       "id": "S06",
@@ -72,9 +73,10 @@
       "depends_on": [
         "S05"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "gate_status": "not_run",
-      "user_review": "not_recorded"
+      "user_review": "not_recorded",
+      "work_status": "feature_development"
     },
     {
       "id": "S07",
@@ -82,9 +84,10 @@
       "depends_on": [
         "S06"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "gate_status": "not_run",
-      "user_review": "not_recorded"
+      "user_review": "not_recorded",
+      "work_status": "feature_development"
     },
     {
       "id": "S08",
@@ -92,9 +95,10 @@
       "depends_on": [
         "S07"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "gate_status": "not_run",
-      "user_review": "not_recorded"
+      "user_review": "not_recorded",
+      "work_status": "feature_development"
     },
     {
       "id": "S09",
@@ -102,9 +106,10 @@
       "depends_on": [
         "S08"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "gate_status": "not_run",
-      "user_review": "not_recorded"
+      "user_review": "not_recorded",
+      "work_status": "feature_development"
     },
     {
       "id": "S10",
@@ -112,9 +117,10 @@
       "depends_on": [
         "S09"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "gate_status": "not_run",
-      "user_review": "not_recorded"
+      "user_review": "not_recorded",
+      "work_status": "feature_development"
     },
     {
       "id": "S11",
@@ -130,9 +136,10 @@
   "status": "active",
   "paused_by_user": false,
   "resume_checkpoint": "S04",
-  "gate_note": "S02-S04 real local journey passed every drivable end-to-end check (L02-01/02, L03-01/02/03, L04-01/02/03/04); gate stays INCOMPLETE while L02-03, L02-04, L03-01-dialog, L03-02-rescan, L03-03-bounds, L03-04, L04-02-viewer-gestures and L04-04-hover remain NOT RUN (component coverage only).",
+  "gate_note": "用户要求完成HEIC依赖打包与实机复核后停止本次修改；HEIC专项已通过，剩余验证记录在pending-verification.md。其余阶段门槛、最终静态检查与Release构建没有据此放行。",
   "paused_after": "local_catalog_component_and_current_worker_checks",
   "pause_record": "docs/local-first/progress.md",
   "paused_at": "2026-10-20T12:55:23.262076+00:00",
-  "resumed_at": "2026-10-20T16:05:00+00:00"
+  "resumed_at": "2026-10-20T16:05:00+00:00",
+  "work_stop_record": "docs/local-first/pending-verification.md"
 }
