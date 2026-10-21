@@ -129,8 +129,7 @@ for p in profiles:
 passed('Linux-first and planned Android/Windows profile design samples')
 tokens=json.loads((DESIGN/'ux/glass-tokens.json').read_text())
 assert tokens['quality']['full']['max_normal_viewport_area_ratio']<=0.2
-assert tokens['quality']['plain']['max_live_surfaces']==0
-assert tokens['quality']['plain']['blur_sigma']==0
+assert set(tokens['quality'])=={'default','full','reduced'}
 assert tokens['sizes']['touch_target_min']>=48
 assert tokens['light']['reading_alpha_floor']>=.9
 assert tokens['dark']['reading_alpha_floor']>=.9

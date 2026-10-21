@@ -8,10 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
 import 'glass_surface.dart';
+import 'photo_theme.dart';
 import 'local_library_controller.dart';
 import 'local_photo_editor.dart';
 import 'local_photo_image.dart';
-import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
 import 'local_video_stage.dart';
@@ -512,7 +512,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final preferences = ref.watch(presentationProvider);
     final library = ref.watch(localLibraryProvider);
     final index =
         library.indexOf(_photo.id) ??
@@ -734,7 +733,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                           index: index,
                           library: library,
                           controller: controller,
-                          glass: preferences.glass,
                         ),
                       ),
                       Positioned(
@@ -745,7 +743,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                           library: library,
                           index: index,
                           gateway: gateway,
-                          glass: preferences.glass,
                         ),
                       ),
                       Positioned(
@@ -774,7 +771,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                       ),
                     ],
                     if (_detailsOpen && index != null)
-                      _detailsPanel(strings, photo, preferences.glass),
+                      _detailsPanel(strings, photo),
                     if (_editing)
                       Positioned.fill(
                         child: LocalPhotoEditor(
@@ -1000,10 +997,8 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     required int? index,
     required LibraryViewState library,
     required LocalLibraryController controller,
-    required bool glass,
   }) => GlassSurface(
     key: const ValueKey('viewer-header'),
-    enabled: glass,
     radius: 18,
     child: SafeArea(
       bottom: false,
@@ -1181,13 +1176,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     required LibraryViewState library,
     required int? index,
     required LocalLibraryGateway gateway,
-    required bool glass,
   }) => Center(
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 720),
       child: GlassSurface(
         key: const ValueKey('viewer-filmstrip'),
-        enabled: glass,
         radius: 18,
         child: SizedBox(
           height: _stripHeight,
@@ -1280,7 +1273,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
 
   /// Overlay glass side panel sliding over the stage's right side; the media
   /// stays visible behind it and the stage is never re-laid-out.
-  Widget _detailsPanel(AppStrings strings, LocalPhoto photo, bool glass) {
+  Widget _detailsPanel(AppStrings strings, LocalPhoto photo) {
     final modified = DateTime.fromMillisecondsSinceEpoch(photo.modifiedMs)
         .toLocal();
     final localizations = MaterialLocalizations.of(context);
@@ -1305,7 +1298,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
               width: 340,
               child: GlassSurface(
                 key: const ValueKey('viewer-details-panel'),
-                enabled: glass,
                 radius: 18,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

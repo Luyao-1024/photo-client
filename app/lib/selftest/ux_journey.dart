@@ -153,7 +153,7 @@ extension UxJourney on LocalJourney {
       await _uxTapDropdown('settings-glass-quality');
       await _uxTapMenuText('Automatic');
       await _waitFor(
-        () => _uxPreferences.glassMode == 'auto' && _uxPreferences.glass,
+        () => _uxPreferences.glassMode == 'auto',
         reason: 'the material quality dropdown did not return to Automatic',
       );
       await _uxScrollToKey(

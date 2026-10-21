@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
 import 'glass_surface.dart';
+import 'photo_theme.dart';
 import 'local_library_controller.dart';
 import 'local_photo_image.dart';
 import 'presentation_preferences.dart';
@@ -313,7 +314,6 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
       GlassSurface(
         key: const ValueKey('editor-controls'),
         role: GlassRole.reading,
-        enabled: preferences.glass,
         radius: 0,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

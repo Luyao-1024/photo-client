@@ -57,7 +57,7 @@ python3 docs/design/contracts/validate_design.py --report /tmp/photo-client-desi
 3. 逻辑请求保存顺序动作、条件revision、类别事件和null字段删除；不会因后来的本地编辑而无法重建原请求。
 4. 资源准备与records真正发出分阶段，未知提交结果坚持原operation_id，不盲目重新创建照片。
 5. 根组/收藏/深路径使用事务维护读投影，十万窄键留在Rust，窗口数据才进入Dart。
-6. 默认玻璃、full固定质量、auto降级都参与性能验收；纯色模式不改变布局和操作。
+6. 默认玻璃、full固定质量、auto降级都参与性能验收；材质降级不改变布局和操作。
 7. “关闭同步”明确定义为保留工作并停止运行，与旧应用清历史操作分开；首版没有重置入口。
 8. hidden/trashed为已知受限可见状态，不公开进普通图库；未支持字段类型不静默跳过水位。
 

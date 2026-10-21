@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'package:photo_client/app.dart';
 import 'package:photo_client/services/core_gateway.dart';
+import 'package:photo_client/ui/glass_surface.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
 import 'package:photo_client/ui/local_library_pane.dart';
+import 'package:photo_client/ui/mode_selector.dart';
 import 'package:photo_client/ui/presentation_preferences.dart';
 import 'package:photo_client/ui/runtime_controller.dart';
 
@@ -217,7 +220,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings-category-1')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(ChoiceChip, 'Dark'), findsOneWidget);
-    expect(find.byKey(const ValueKey('settings-glass')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-glass-quality')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('settings-category-2')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('add-files')), findsOneWidget);
@@ -239,8 +242,20 @@ void main() {
     await mount(tester, gateway);
     await tester.pumpAndSettle();
     final container = containerOf(tester);
-    // The floating mode selector is the single live glass surface.
-    expect(find.byType(BackdropFilter), findsOneWidget);
+    // The floating mode selector is the single live glass surface: it is the
+    // only one that samples the backdrop. The rest are translucent panels.
+    final live = tester
+        .widgetList<GlassSurface>(find.byType(GlassSurface))
+        .where((surface) => surface.live)
+        .toList();
+    expect(live.length, 1);
+    expect(
+      find.descendant(
+        of: find.byType(ModeSelector),
+        matching: find.byType(GlassSurface),
+      ),
+      findsOneWidget,
+    );
 
     await openSettingsCategory(tester, 1);
     await tester.tap(find.widgetWithText(ChoiceChip, 'Dark'));
@@ -263,22 +278,48 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('settings-category-1')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('settings-glass')));
-    await tester.tap(find.byKey(const ValueKey('settings-glass')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-glass-quality')),
+    );
+    // Only transparent materials are offered; there is no solid variant.
+    final quality = tester.widget<DropdownButton<String>>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('settings-glass-quality')),
+            matching: find.byType(DropdownButton<String>),
+          )
+          .first,
+    );
+    expect(
+      quality.items!.map((item) => item.value).toList(),
+      ['auto', 'full', 'reduced'],
+    );
+    container.read(presentationProvider.notifier).setGlassMode('full');
     await tester.pumpAndSettle();
-    expect(container.read(presentationProvider).glass, isFalse);
-    expect(find.byType(BackdropFilter), findsNothing);
+    expect(container.read(presentationProvider).glassMode, 'full');
+    // The material is drawn by the glass layer, not by a hand-rolled blur, so
+    // the contract is the surface itself: it exists, and its body is
+    // translucent rather than solid.
+    final surfaces = tester.widgetList<GlassContainer>(
+      find.byType(GlassContainer),
+    );
+    expect(surfaces, isNotEmpty);
+    expect(
+      surfaces.every((surface) => surface.settings!.glassColor.a < 1),
+      isTrue,
+    );
 
-    // High contrast forces solid surfaces even with glass enabled again.
-    await tester.tap(find.byKey(const ValueKey('settings-glass')));
-    await tester.pumpAndSettle();
-    expect(container.read(presentationProvider).glass, isTrue);
-    expect(find.byType(BackdropFilter), findsOneWidget);
+    // High contrast forces opaque surfaces even with glass enabled.
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     tester.platformDispatcher.accessibilityFeaturesTestValue =
         const FakeAccessibilityFeatures(highContrast: true);
     await tester.pumpAndSettle();
-    expect(find.byType(BackdropFilter), findsNothing);
+    expect(
+      tester
+          .widgetList<GlassContainer>(find.byType(GlassContainer))
+          .every((surface) => surface.settings!.glassColor.a == 1),
+      isTrue,
+    );
     tester.platformDispatcher.clearAccessibilityFeaturesTestValue();
     await tester.pumpAndSettle();
 
@@ -573,5 +614,16 @@ void main() {
     expect(find.text('Settings'), findsWidgets);
     expect(tester.takeException(), isNull);
     await disposeApp(tester, gateway);
+  });
+
+  test('only transparent material modes are accepted', () {
+    expect(normalizeGlassMode('auto'), 'auto');
+    expect(normalizeGlassMode('full'), 'full');
+    expect(normalizeGlassMode('reduced'), 'reduced');
+    // The solid material is not a mode: it never resolves to a solid surface.
+    expect(normalizeGlassMode('plain'), 'auto');
+    expect(normalizeGlassMode(null), 'auto');
+    expect(normalizeGlassMode('unknown'), 'auto');
+    expect(glassModes, isNot(contains('plain')));
   });
 }

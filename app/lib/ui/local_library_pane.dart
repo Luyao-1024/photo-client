@@ -759,7 +759,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     return Column(
       children: [
         _Header(
-          glass: preferences.glass,
           title: title,
           trashMode: widget.trashMode,
           searchMode: widget.searchMode,
@@ -801,7 +800,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                     padding: const EdgeInsets.only(bottom: 20),
                     child: ModeSelector(
                       mode: _mode,
-                      glass: preferences.glass,
                       onChanged: _changeMode,
                     ),
                   ),
@@ -1411,7 +1409,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
 class _Header extends StatelessWidget {
   const _Header({
-    required this.glass,
     required this.title,
     required this.trashMode,
     required this.searchMode,
@@ -1441,7 +1438,6 @@ class _Header extends StatelessWidget {
     required this.strings,
   });
 
-  final bool glass;
   final String title;
   final bool trashMode;
   final bool searchMode;
@@ -1476,7 +1472,6 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return GlassSurface(
-      enabled: glass,
       radius: 0,
       child: SizedBox(
         height: 56,
@@ -1548,7 +1543,6 @@ class _Header extends StatelessWidget {
                           focusNode: searchFocus,
                           onChanged: onSearchChanged,
                           onClose: onCloseSearch,
-                          glass: glass,
                           strings: strings,
                         ),
                       ),
@@ -1560,7 +1554,6 @@ class _Header extends StatelessWidget {
                             child: _ScopeSelector(
                               scope: scope,
                               onChanged: onScopeChanged,
-                              glass: glass,
                             ),
                           ),
                         ),
@@ -1628,7 +1621,6 @@ class _Header extends StatelessWidget {
             message: strings.restore,
             child: _GlassActionButton(
               key: const ValueKey('batch-restore'),
-              glass: glass,
               icon: Icons.restore_from_trash_outlined,
               onPressed: selectedPhotos.isEmpty ? null : onBatchRestore,
             ),
@@ -1638,7 +1630,6 @@ class _Header extends StatelessWidget {
             message: strings.deletePermanently,
             child: _GlassActionButton(
               key: const ValueKey('batch-purge'),
-              glass: glass,
               icon: Icons.delete_forever_outlined,
               color: Theme.of(context).colorScheme.error,
               onPressed: selectedPhotos.isEmpty ? null : onBatchPurge,
@@ -1677,7 +1668,6 @@ class _Header extends StatelessWidget {
               ),
             ],
             child: _GlassActionButton(
-              glass: glass,
               icon: Icons.add,
               onPressed: selectedPhotos.isEmpty ? null : null,
             ),
@@ -1692,7 +1682,6 @@ class _Header extends StatelessWidget {
               : strings.markFavorite,
           child: _GlassActionButton(
             key: const ValueKey('batch-favorite'),
-            glass: glass,
             icon: allFavorite || mixed ? Icons.favorite : Icons.favorite_border,
             color: allFavorite ? const Color(0xb3e5534b) : null,
             badge: mixed,
@@ -1704,7 +1693,6 @@ class _Header extends StatelessWidget {
           message: strings.moveToTrash,
           child: _GlassActionButton(
             key: const ValueKey('batch-trash'),
-            glass: glass,
             icon: Icons.delete_outline,
             onPressed: selectedPhotos.isEmpty ? null : onBatchTrash,
           ),
@@ -1719,12 +1707,10 @@ class _ScopeSelector extends StatelessWidget {
   const _ScopeSelector({
     required this.scope,
     required this.onChanged,
-    required this.glass,
   });
 
   final SearchScope scope;
   final ValueChanged<SearchScope> onChanged;
-  final bool glass;
 
   @override
   Widget build(BuildContext context) {
@@ -1736,7 +1722,6 @@ class _ScopeSelector extends StatelessWidget {
     ];
     return GlassSurface(
       key: const ValueKey('search-scope'),
-      enabled: glass,
       radius: 18,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1887,7 +1872,6 @@ class _SearchField extends StatelessWidget {
     required this.focusNode,
     required this.onChanged,
     required this.onClose,
-    required this.glass,
     required this.strings,
   });
 
@@ -1896,14 +1880,12 @@ class _SearchField extends StatelessWidget {
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
   final VoidCallback? onClose;
-  final bool glass;
   final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
     return GlassSurface(
       key: const ValueKey('library-search'),
-      enabled: glass,
       radius: 20,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 280),
@@ -1960,14 +1942,12 @@ class _SearchField extends StatelessWidget {
 class _GlassActionButton extends StatelessWidget {
   const _GlassActionButton({
     super.key,
-    required this.glass,
     required this.icon,
     required this.onPressed,
     this.color,
     this.badge = false,
   });
 
-  final bool glass;
   final IconData icon;
   final VoidCallback? onPressed;
   final Color? color;
@@ -1976,7 +1956,6 @@ class _GlassActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassSurface(
-      enabled: glass,
       radius: 19,
       child: SizedBox(
         width: 38,

@@ -177,13 +177,6 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
             ),
           ]),
           section(strings.glass, [
-            SwitchListTile(
-              key: const ValueKey('settings-glass'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(strings.glass),
-              value: preferences.glass,
-              onChanged: controller.setGlass,
-            ),
             DropdownButtonFormField<String>(
               key: const ValueKey('settings-glass-quality'),
               isExpanded: true,
@@ -196,7 +189,6 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                   ('auto', strings.pick('自动', 'Automatic')),
                   ('full', strings.pick('液态玻璃', 'Liquid Glass')),
                   ('reduced', strings.pick('轻量', 'Reduced')),
-                  ('plain', strings.pick('纯色', 'Solid')),
                 ])
                   DropdownMenuItem(value: mode, child: Text(label)),
               ],
@@ -204,12 +196,17 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                 if (value != null) controller.setGlassMode(value);
               },
             ),
+            const SizedBox(height: 6),
+            Text(
+              strings.glassHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: 12),
             Text(strings.pick('透明度', 'Transparency')),
             Slider(
               key: const ValueKey('settings-transparency'),
               value: preferences.transparency,
-              onChanged: preferences.glass ? controller.setTransparency : null,
+              onChanged: controller.setTransparency,
             ),
             SwitchListTile(
               key: const ValueKey('settings-reduce-motion'),
@@ -425,7 +422,6 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
         constraints: const BoxConstraints(maxWidth: 900, maxHeight: 720),
         child: GlassSurface(
           role: GlassRole.reading,
-          enabled: preferences.glass,
           radius: 24,
           child: Column(
             mainAxisSize: MainAxisSize.min,

@@ -293,7 +293,16 @@ impl LocalLibrary {
         ) {
             return Err("InvalidPreference".into());
         }
-        let _: serde_json::Value = serde_json::from_str(&value).map_err(|_| "InvalidPreference")?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&value).map_err(|_| "InvalidPreference")?;
+        if key == "glassMode" {
+            // Only transparent materials exist. A solid material is not a
+            // preference this build can honour.
+            let mode = parsed.as_str().ok_or("InvalidPreference")?;
+            if !matches!(mode, "auto" | "full" | "reduced") {
+                return Err("InvalidPreference".into());
+            }
+        }
         self.execute(move|c|{c.execute("INSERT INTO local_preferences VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",params![key,value]).map_err(error)?;Ok(())})
     }
     pub fn sources(&self) -> Result<Vec<SourceInfo>, String> {

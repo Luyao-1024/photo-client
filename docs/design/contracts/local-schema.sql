@@ -31,7 +31,7 @@ CREATE TABLE app_settings (
   sync_enabled INTEGER NOT NULL DEFAULT 1 CHECK(sync_enabled IN (0,1)),
   locale TEXT NOT NULL DEFAULT 'zh-CN',
   theme TEXT NOT NULL DEFAULT 'system' CHECK(theme IN ('system','light','dark')),
-  glass_mode TEXT NOT NULL DEFAULT 'auto' CHECK(glass_mode IN ('auto','full','reduced','plain')),
+  glass_mode TEXT NOT NULL DEFAULT 'auto' CHECK(glass_mode IN ('auto','full','reduced')),
   transparency_strength REAL NOT NULL DEFAULT 0.5 CHECK(transparency_strength>=0 AND transparency_strength<=1),
   motion_preference TEXT NOT NULL DEFAULT 'system' CHECK(motion_preference IN ('system','reduced')),
   contrast_preference TEXT NOT NULL DEFAULT 'system' CHECK(contrast_preference IN ('system','high'))

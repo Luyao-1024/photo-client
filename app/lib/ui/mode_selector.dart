@@ -14,12 +14,10 @@ class ModeSelector extends StatelessWidget {
     super.key,
     required this.mode,
     required this.onChanged,
-    this.glass = true,
   });
 
   final GroupMode mode;
   final ValueChanged<GroupMode> onChanged;
-  final bool glass;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +30,6 @@ class ModeSelector extends StatelessWidget {
       height: 48,
       width: 264,
       child: GlassSurface(
-        enabled: glass,
         live: true,
         radius: 24,
         child: Row(

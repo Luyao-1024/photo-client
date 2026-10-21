@@ -1,0 +1,47 @@
+{
+  "feature": "liquid-glass",
+  "scope": "material_only_not_product_flow",
+  "renderer": "liquid_glass_widgets 1.14.0",
+  "host": {
+    "os": "Fedora Linux 44 (Workstation Edition)",
+    "kernel": "7.2.8-200.fc44.x86_64",
+    "gpu": "AMD Radeon Vega (Renoir), Mesa 26.2.3 radeonsi, OpenGL 4.6",
+    "flutter": "3.47.7 (Dart 3.13.5)",
+    "backend": "Impeller / OpenGLESSDF"
+  },
+  "method": {
+    "note": "The bench is an isolated app with no dependency on the photo client. A generated colour field is the backdrop, capsules are stacked on it, and the app writes its own rendered frame with RenderRepaintBoundary.toImage.",
+    "app": "demo/ (flutter create --platforms=linux,android, plus liquid_glass_widgets); the bench lives in the repository, not in a scratch directory",
+    "reproduction": "cd docs/verification/local-features/liquid-glass/demo && flutter build linux --debug --dart-define=SHOT=/tmp/glass.png && DISPLAY=:0 ./build/linux/x64/debug/bundle/glasslab — the rebuilt frame is byte-identical to glass-tiers-linux-impeller.png (sha256 b085c775996edf20d347cf1c4020ec74b52e1a6a9e553504deb8efc296b5754f)",
+    "capture": "in-process RenderRepaintBoundary.toImage at 1280x720",
+    "why_not_headless": "A headless widget snapshot runs on Skia, where ImageFilter.isShaderFilterSupported is false and the package falls back to the shader-free path. It cannot show the refraction, the specular rim or the edge quality."
+  },
+  "frames": [
+    {
+      "file": "glass-tiers-linux-impeller.png",
+      "content": "The shipping recipe at three tiers: A premium (full refraction, lens edge, chromatic split), B standard (translucent body, soft edge), C minimal (the reading-panel recipe, near-opaque and backdrop-free). Below them the package's own GlassSegmentedControl, GlassButton and GlassSlider."
+    },
+    {
+      "file": "glass-parameter-matrix-linux-impeller.png",
+      "content": "The parameter search that produced the shipping recipe. E was the first attempt (blur 6, thickness 28, chroma 0.012): the bevel pushed the displacement sampler past the captured backdrop, which showed as a jagged ring at the edge and read as low resolution. F (blur 2, thickness 16, chroma 0.004) kept the refraction and cleaned the edge. G is the Apple-style frost recipe, which is softer still. H is the standard tier."
+    },
+    {
+      "file": "glass-tiers-android-impeller.png",
+      "content": "The same bench on an Android 16 (API 36) emulator, captured with adb screencap. The premium tier refracts the backdrop here too."
+    }
+  ],
+  "findings": [
+    "The material renders on this host: the premium tier refracts the backdrop, so the liquid read is real, not a tint over a blur.",
+    "liquid_glass_widgets caps the tier at standard on Web/Windows/Linux, because Impeller there compiles the multi-pass SDF at runtime through ANGLE and the compile can stall the raster thread. The photo client lifts that cap for the explicit 'liquid glass' mode by raising the adaptive scope's lower bound to premium; 'automatic' keeps the platform cap and 'reduced' pins the standard tier.",
+    "The body alpha decides everything. At the 0.72-0.96 the old tokens used, the tint drowned the material and the surface read as a flat panel with a lit border. The shipping recipe uses 0.25 with a 0.12 floor.",
+    "A uniform bright rim reads as a drawn border. The shipping recipe uses a dark band just inside the edge (rimShade 0.9) with a restrained highlight (rimLight 0.35) on top of it."
+  ],
+  "android": {
+    "status": "verified",
+    "device": "Android 16 (API 36) x86_64 emulator, google_apis image, host GPU passthrough",
+    "backend": "Impeller / OpenGLES",
+    "build": "flutter build apk --debug --target-platform android-x64; the package's five fragment shaders compile for the Android backends as part of the normal Flutter asset pipeline",
+    "result": "The premium tier refracts the backdrop on Android as well. The package's static probe does not cap Android, so the premium tier is reachable there without the lower-bound override the desktop needs.",
+    "note": "The photo client itself has no Android target yet; this bench isolates the material from that."
+  }
+}

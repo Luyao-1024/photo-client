@@ -6,6 +6,8 @@
 
 参考旧项目[液态玻璃模块](../../../../photoViewer/docs/modules/ui-liquid-glass.md)的共享材质、单胶囊分段器、焦点与照片覆盖控件规则；Flutter 重新实现，不搬 GTK CSS。设计 token 在[样本文件](../ux/glass-tokens.json)，尚非实际 ThemeExtension。
 
+材质实现不自研：采用 `liquid_glass_widgets`（MIT，显式支持 Android/Linux/Windows/macOS/Web）作为渲染层，折射透镜、镜面高光、Fresnel 边缘与色散由它的 fragment shader 提供；本项目只负责角色、token 映射、档位策略与可读性约束。项目代码只做薄封装（`GlassSurface`），不复制其 shader。
+
 ## 接口与数据
 
 ```text
@@ -15,9 +17,11 @@ GlassPolicy.resolve(theme, capabilities, recent_frame_budget) -> EffectiveMateri
 GlassSurface(role, shape, interaction_state, content)
 ```
 
-user_mode 为 auto/full/reduced/plain；默认 auto，参考机首先按 full 验证。auto 才会按持续帧预算降级；full 仍服从无障碍和后端不支持的硬限制，不能启用不可用滤镜。plain 保留相同层级、圆角、焦点和交互，不是另一个布局。
+user_mode 为 auto/full/reduced；默认 auto。auto 才会按持续帧预算降级；full 是用户显式请求，不得被平台启发式静默降级。不存在纯色材质模式：所有表面都是半透明或高不透明度填充，降级只改变折射与高光强度，不改变层级、圆角、焦点和交互。
 
-公开质量选项为“自动/液态玻璃/轻量/纯色”和透明度；auto 可显示“自动”质量。有效模式与原因可在诊断查看，用户设置不因降级被覆盖。
+三档映射到 `liquid_glass_widgets` 的渲染档：full→premium（完整折射+色散+镜面高光）、reduced→standard（轻量 shader，无纹理捕获）、auto→由自适应范围在 minimal/standard/premium 之间按实测帧预算决定。该包的静态探测在 Web/Windows/Linux 上会封顶到 standard（ANGLE 运行时编译多趟 SDF 可能卡住光栅线程）；Android 不封顶。full 通过把自适应范围的下界抬到 premium 抵消该封顶，帧预算吃紧时先撤掉 frost，材质仍是 premium 外观。
+
+公开质量选项为“自动/液态玻璃/轻量”和透明度；auto 可显示“自动”质量。有效档位与降级原因必须能在诊断日志中读到（`GLASS_QUALITY` 行），用户设置不因降级被覆盖。
 
 ## 流程与状态
 
@@ -43,7 +47,7 @@ Light 使用低饱和浅灰底、深色文字和白色局部高光；Dark 使用
 
 照片覆盖按钮用局部暗色 scrim 与白色前景，收藏为填充心形；hover/pressed/selected/focus/disabled 状态各自明确。不能每帧读照片像素来决定文字颜色。hover 不改变分组或选中项，focus 不依赖玻璃透明边界。
 
-透明度strength取0–1，alpha=`clamp(base_alpha + (1-2*strength)*0.10, role_floor, 0.98)`；Chrome/Raised最小alpha为light 0.60、dark 0.72，Reading最小0.94，plain最小0.96，高对比为1.0。主题、slider与材质模式共同解析，不同页面不得各写一套映射。
+透明度strength取0–1，alpha=`clamp(base_alpha + (1-2*strength)*0.10, role_floor, ceiling)`。液态玻璃的主体是空气：Chrome/Raised 的 base_alpha 为 0.25，安全下限 0.12，上限 0.40；Reading 保持 0.94~0.98，高对比为 1.0。主体越不透明，折射与高光越被压死，材质会退化成"带亮边的实心面板"——这是上一版最严重的缺陷。主题、slider与材质模式共同解析，不同页面不得各写一套映射。
 
 普通文字目标对比度≥4.5:1、大字号/控件关键边界≥3:1；在明亮/暗色/高对比照片背景上验证。Reading 填充不低于 token 的安全 alpha floor，用户透明度滑块不得把表单文字变不可读。
 
@@ -55,29 +59,31 @@ reduce_motion 时删除空间滑动/缩放，保留即时状态或≤80ms淡变�
 
 ## 模糊与合成预算
 
-full必须包含精确裁切的后景模糊、静态边缘高光/镜面渐变和浮起层次，按压/选中保持短暂可打断反馈。整窗动态折射/色散shader不列首版依赖；以后加入须单独符合GPU与对比度预算。
+full 必须包含精确裁切的后景折射、静态边缘高光/镜面渐变和浮起层次，按压/选中保持短暂可打断反馈。折射与色散由 `liquid_glass_widgets` 的 shader 提供，本项目不自研 shader；整窗动态折射仍不列首版依赖。
 
-首版 full 的实时候选 sigma约12，reduced约6，plain为0；实际像素成本随DPR记录，不把逻辑尺寸当唯一成本。所有 BackdropFilter 必须有精确 ClipRect/ClipRRect，避免过滤整个窗口。
+该包 premium 档用 `toImageSync` 抓取后景纹理，因此 premium 表面必须自带渲染层（`useOwnLayer`），不能与自身捕获重叠；同一栈内多个 premium 表面各自捕获自己的后景。Reading 与大面积 Chrome 走不采样后景的路径，避免为看不见的模糊付出整帧代价。
 
-普通浏览同屏实时backdrop表面最多3个、合计面积不超过viewport的20%。侧栏大面板采用缓存/静态材质；照片tile和逐项badge不用BackdropFilter。模态表面超出普通面积预算时停止其后的动态玻璃并降低模态blur，Reading优先用实色。
+所有 BackdropFilter 必须有精确 ClipRect/ClipRRect，避免过滤整个窗口。
+
+普通浏览同屏实时backdrop表面最多3个、合计面积不超过viewport的20%。侧栏大面板采用缓存/静态材质；照片tile和逐项badge不用BackdropFilter。模态表面超出普通面积预算时停止其后的动态玻璃并降低模态blur，Reading提高填充不透明度。
 
 共享后景只在不重叠表面使用 BackdropGroup/分组滤镜优化；重叠表面不得复用同一 backdrop key。ImageFiltered 仅模糊自己的装饰内容时使用，不能用它冒充真实后景模糊。
 
 禁止全屏嵌套saveLayer、逐tile ShaderMask/多层Opacity、无限呼吸动效、滚动时逐图截图/像素下载。RepaintBoundary 只隔离真实需要独立重绘的可见子树，不为十万逻辑项预建层。
 
-auto 的质量控制：滚动时优先冻结非必要装饰和减少预取；连续两个2秒测量窗的 raster P95超预算则 full→reduced，再超则plain。恢复需连续10秒稳定并每次只升一级，5秒内不反复切换；切换用短淡变且保持几何。用户plain模式绝不自动升回玻璃。
+auto 的质量控制交给 `liquid_glass_widgets` 的三阶段适配器：静态探测（能力）→ 预热基准（180 帧 P75）→ 运行期迟滞（120 帧窗口 P95，超预算连续 2 窗降一档，连续 10 窗升一档，8 秒冷却）。降级只动档位不关材质本身；用户选 full 时该适配器只允许撤 frost，不允许降到 standard 以下的外观档。
 
-验收同时测 full 固定模式和 auto；默认 auto 一直退到plain才能达标时，报告为玻璃预算未达成，需要继续优化，不能只公布平均FPS。
+验收同时测 full 固定模式和 auto；默认 auto 一直退到 standard 才能达标时，报告为玻璃预算未达成，需要继续优化，不能只公布平均FPS。
 
 ## 异常与恢复
 
-后端不支持/驱动异常时使用plain并记录原因；页面仍可用。滤镜和动效变化不重建Engine、不触发同步配置变更。偏好在首帧前加载，避免先闪亮色/错误材质再切换。
+后端不支持/驱动异常时使用最低强度的半透明材质并记录原因；页面仍可用。滤镜和动效变化不重建Engine、不触发同步配置变更。偏好在首帧前加载，避免先闪亮色/错误材质再切换。
 
-透明/模糊视觉必须在真实合成桌面、打包应用中截图和输入验证；headless widget snapshot可证明布局，不能证明最终GPU玻璃效果。与参考旧项目的截图测试边界保持一致。
+透明/折射视觉必须在真实合成桌面、打包应用中截图和输入验证；headless widget snapshot可证明布局，不能证明最终GPU玻璃效果。与参考旧项目的截图测试边界保持一致。隔离验证用一个不依赖本项目的最小实验应用：彩色背景图 + 叠放胶囊，自带截图输出，用于在目标平台（Linux 桌面 / Android 模拟器）上判断材质本身是否成立。
 
 ## 验收
 
-- T17-01：明暗主题×full/reduced/plain×三宽度，层级和几何一致。
+- T17-01：明暗主题×full/reduced×三宽度，层级和几何一致。
 - T17-02：代表性照片背景的对比度、焦点、hover/pressed/disabled和无白边。
 - T17-03：10万图库full/auto同时测帧耗时、blur面积/数量与降级轨迹。
 - T17-04：高对比/reduce motion与透明度安全下限有效。
@@ -91,4 +97,9 @@ auto 的质量控制：滚动时优先冻结非必要装饰和减少预取；连
 - `https://api.flutter.dev/flutter/widgets/BackdropFilter-class.html`
 - `https://docs.flutter.dev/perf/best-practices`
 
-本页参数是项目预算，尚不是GPU实测结果。
+材质实现依据 `liquid_glass_widgets` 的公开实现与文档（MIT，1.14.0）：档位语义、`GlassAdaptiveScope` 的三阶段适配、`ImageFilter.isShaderFilterSupported` 探测、OpenGL ES 纹理朝向兼容（`gles_compat.glsl`，对 Flutter 3.44/3.45 与 3.46+ 两种约定自适应）：
+
+- `https://pub.dev/packages/liquid_glass_widgets`
+- `https://github.com/sdegenaar/liquid_glass_widgets`
+
+本页参数是项目预算与已实测结果，不是GPU实测结论；实际档位与降级原因以运行日志的 `GLASS_QUALITY` 行为准。

@@ -11,11 +11,17 @@ final presentationProvider =
       PresentationController.new,
     );
 
+/// Only transparent materials are supported. A solid material is not a mode:
+/// anything outside this set resolves to automatic.
+const Set<String> glassModes = {'auto', 'full', 'reduced'};
+
+String normalizeGlassMode(String? value) =>
+    value != null && glassModes.contains(value) ? value : 'auto';
+
 class PresentationPreferences {
   const PresentationPreferences({
     this.themeMode = ThemeMode.system,
     this.locale,
-    this.glass = true,
     this.glassMode = 'auto',
     this.transparency = .5,
     this.reduceMotion = false,
@@ -27,7 +33,7 @@ class PresentationPreferences {
   });
   final ThemeMode themeMode;
   final Locale? locale;
-  final bool glass, reduceMotion, saveFailed;
+  final bool reduceMotion, saveFailed;
   final String glassMode, logLevel, order;
   final double transparency;
   final int dayColumns, thumbnailWorkers;
@@ -35,7 +41,6 @@ class PresentationPreferences {
   PresentationPreferences copyWith({
     ThemeMode? themeMode,
     Locale? locale,
-    bool? glass,
     String? glassMode,
     double? transparency,
     bool? reduceMotion,
@@ -47,7 +52,6 @@ class PresentationPreferences {
   }) => PresentationPreferences(
     themeMode: themeMode ?? this.themeMode,
     locale: locale ?? this.locale,
-    glass: glass ?? this.glass,
     glassMode: glassMode ?? this.glassMode,
     transparency: transparency ?? this.transparency,
     reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -84,7 +88,7 @@ class PresentationController extends Notifier<PresentationPreferences> {
         'op': 'preferences',
       }) as Map;
       if (_disposed || edits != _edits) return;
-      final mode = data['glassMode'] as String? ?? 'auto';
+      final mode = normalizeGlassMode(data['glassMode'] as String?);
       state = PresentationPreferences(
         themeMode: ThemeMode.values.firstWhere(
           (m) => m.name == data['theme'],
@@ -93,7 +97,6 @@ class PresentationController extends Notifier<PresentationPreferences> {
         locale: data['locale'] == null
             ? null
             : Locale(data['locale'] as String),
-        glass: mode != 'plain',
         glassMode: mode,
         transparency: ((data['transparency'] as num?)?.toDouble() ?? .5).clamp(
           0,
@@ -139,10 +142,10 @@ class PresentationController extends Notifier<PresentationPreferences> {
     _persist('locale', value.languageCode);
   }
 
-  void setGlass(bool value) => setGlassMode(value ? 'auto' : 'plain');
   void setGlassMode(String value) {
-    state = state.copyWith(glassMode: value, glass: value != 'plain');
-    _persist('glassMode', value);
+    final mode = normalizeGlassMode(value);
+    state = state.copyWith(glassMode: mode);
+    _persist('glassMode', mode);
   }
 
   void setTransparency(double value) {

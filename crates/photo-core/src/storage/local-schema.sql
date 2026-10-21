@@ -18,7 +18,7 @@ CREATE TABLE app_settings (
   singleton INTEGER PRIMARY KEY CHECK(singleton=1),
   selected_library_id TEXT REFERENCES libraries(library_id),
   theme TEXT NOT NULL DEFAULT 'system' CHECK(theme IN ('system','light','dark')),
-  glass_mode TEXT NOT NULL DEFAULT 'auto' CHECK(glass_mode IN ('auto','full','reduced','plain')),
+  glass_mode TEXT NOT NULL DEFAULT 'auto' CHECK(glass_mode IN ('auto','full','reduced')),
   locale TEXT NOT NULL DEFAULT 'zh-CN'
 ) STRICT;
 CREATE TABLE sources (

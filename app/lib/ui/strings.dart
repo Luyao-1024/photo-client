@@ -55,11 +55,9 @@ class AppStrings {
     'Appearance affects the interface only. Choices last for this session.',
   );
   String get glass => pick('玻璃材质', 'Glass material');
-  String get glassOn => pick('开启', 'On');
-  String get glassOff => pick('纯色', 'Solid');
   String get glassHint => pick(
-    '仅工具栏使用裁切模糊；高对比度或系统关闭动效时使用纯色。',
-    'Only the toolbar uses clipped blur. High contrast or disabled system animations uses solid surfaces.',
+    '分段器使用裁切模糊，其余表面使用半透明填充；高对比度时提高不透明度。',
+    'The segmented control uses clipped blur; other surfaces use a translucent fill. High contrast raises opacity.',
   );
 
   String get localStage => pick('本地图库', 'Local library');

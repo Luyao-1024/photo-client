@@ -1,31 +1,21 @@
-import 'dart:ui';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
-/// Effective automatic quality is transient; the user's chosen mode is durable.
-final autoGlassProvider = NotifierProvider<AutoGlassPolicy, bool>(
+/// The material tier the adaptive scope settled on.
+///
+/// The user's choice in the settings is the ceiling; this is what the machine
+/// could actually sustain on the last measured frames. The scope reports it,
+/// so diagnostics can tell "the user asked for premium" apart from "premium
+/// is what the frame budget allowed".
+final autoGlassProvider = NotifierProvider<AutoGlassPolicy, GlassQuality>(
   AutoGlassPolicy.new,
 );
 
-class AutoGlassPolicy extends Notifier<bool> {
-  int _slow = 0, _steady = 0, _samples = 0;
+class AutoGlassPolicy extends Notifier<GlassQuality> {
   @override
-  bool build() => false;
-  void record(List<FrameTiming> timings) {
-    for (final timing in timings) {
-      if (++_samples < 60) continue;
-      final slow = timing.rasterDuration.inMicroseconds > 16700;
-      _slow = slow ? _slow + 1 : (_slow - 1).clamp(0, 60);
-      _steady = slow ? 0 : _steady + 1;
-      if (!state && _slow >= 20) {
-        state = true;
-        _steady = 0;
-      }
-      if (state && _steady >= 240) {
-        state = false;
-        _slow = 0;
-        _steady = 0;
-      }
-    }
+  GlassQuality build() => GlassQuality.standard;
+
+  void report(GlassQuality quality) {
+    if (quality != state) state = quality;
   }
 }

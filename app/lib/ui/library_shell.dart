@@ -9,7 +9,6 @@ import '../services/local_library_gateway.dart';
 import 'glass_surface.dart';
 import 'local_library_controller.dart';
 import 'local_library_pane.dart';
-import 'presentation_preferences.dart';
 import 'strings.dart';
 import 'local_settings_dialog.dart';
 import 'local_album_actions.dart';
@@ -83,7 +82,6 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
 
   @override
   Widget build(BuildContext context) {
-    final preferences = ref.watch(presentationProvider);
     final library = ref.watch(localLibraryProvider);
     return CallbackShortcuts(
       bindings: {
@@ -110,7 +108,6 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
                   SizedBox(
                     width: compact ? _compactSidebarWidth : _sidebarWidth,
                     child: GlassSurface(
-                      enabled: preferences.glass,
                       radius: 0,
                       child: _Sidebar(
                         destination: _destination,
