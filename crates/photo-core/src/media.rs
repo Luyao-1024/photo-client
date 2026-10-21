@@ -11,6 +11,7 @@ mod thumbnail;
 
 pub use thumbnail::prepare_thumbnail;
 
+use std::collections::HashMap;
 use std::fs::{self, File, Metadata};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -128,11 +129,22 @@ pub(super) fn check_source(
     Ok(())
 }
 
-fn inspect(path: &Path) -> Result<DiscoveredMedia, String> {
-    let mime = mime_from_extension(path).ok_or("UnsupportedSource: extension")?;
-    let initial = Fingerprint::from_metadata(
+/// Fingerprints of files that are already indexed, keyed by absolute path.
+///
+/// A file whose current size and modification time match its indexed
+/// fingerprint is unchanged, so a scan can skip it instead of re-reading its
+/// container header, EXIF and details.
+pub type KnownIndex = HashMap<String, (u64, i64)>;
+
+/// Identity of a file on disk, cheap enough to take for every walked entry.
+pub(super) fn fingerprint_of(path: &Path) -> Result<Fingerprint, String> {
+    Fingerprint::from_metadata(
         &fs::symlink_metadata(path).map_err(|e| format!("SourceMetadata: {e}"))?,
-    )?;
+    )
+}
+
+fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, String> {
+    let mime = mime_from_extension(path).ok_or("UnsupportedSource: extension")?;
     let mut file = File::open(path).map_err(|e| format!("SourceRead: {e}"))?;
     check_source(path, &file, &initial)?;
     let header = if mime == "image/heic" {
@@ -182,6 +194,22 @@ pub fn scan_paths_excluding(
     paths: &[PathBuf],
     exclusions: &[PathBuf],
     cancel: &AtomicBool,
+    on_batch: impl FnMut(Vec<DiscoveredMedia>) -> Result<(), String>,
+) -> Result<ScanSummary, String> {
+    scan_paths_excluding_known(paths, exclusions, cancel, &KnownIndex::new(), on_batch)
+}
+
+/// Scan with an index of already-known files.
+///
+/// A file that is already indexed under the same size and modification time is
+/// unchanged: it is counted as skipped and its metadata is not re-read. Only
+/// new or modified files reach the callback, so repeating a scan costs one
+/// stat per file instead of a full metadata extraction.
+pub fn scan_paths_excluding_known(
+    paths: &[PathBuf],
+    exclusions: &[PathBuf],
+    cancel: &AtomicBool,
+    known: &KnownIndex,
     mut on_batch: impl FnMut(Vec<DiscoveredMedia>) -> Result<(), String>,
 ) -> Result<ScanSummary, String> {
     let mut summary = ScanSummary::default();
@@ -247,7 +275,24 @@ pub fn scan_paths_excluding(
                 summary.skipped += 1;
                 continue;
             }
-            match inspect(entry.path()) {
+            // One stat decides everything: a file that is already indexed under
+            // the same fingerprint needs no metadata at all.
+            let fingerprint = match fingerprint_of(entry.path()) {
+                Ok(fingerprint) => fingerprint,
+                Err(_) => {
+                    summary.failed += 1;
+                    continue;
+                }
+            };
+            if entry.path().to_str().is_some_and(|path| {
+                known.get(path).is_some_and(|(size, modified_ns)| {
+                    *size == fingerprint.size && *modified_ns == fingerprint.modified_ns
+                })
+            }) {
+                summary.skipped += 1;
+                continue;
+            }
+            match inspect_with(entry.path(), fingerprint) {
                 Ok(media) => pending.push(media),
                 Err(_) => {
                     summary.failed += 1;

@@ -41,6 +41,8 @@ class LibraryViewState {
     this.trashed = false,
     this.albums = const [],
     this.scanning = false,
+    this.scanVisible = false,
+    this.backgroundScanning = false,
     this.selecting = false,
     this.cancelRequested = false,
     this.favoritePending = const {},
@@ -53,6 +55,14 @@ class LibraryViewState {
   final int total, extent, revision, queryEpoch;
   final int anchorRank;
   final bool loading, loadingNext, hasNext, favoritesOnly, scanning, selecting;
+  /// Whether the running scan may be announced to the user.
+  ///
+  /// Only indexing a newly added directory earns that attention: every other
+  /// scan keeps the library current without interrupting anyone.
+  final bool scanVisible;
+  /// A sweep the user never asked for: it refreshes the library on its own
+  /// and stays invisible.
+  final bool backgroundScanning;
   final bool cancelRequested;
   final String search;
   final SearchScope searchScope;
@@ -102,6 +112,8 @@ class LibraryViewState {
     bool? trashed,
     List<LocalAlbum>? albums,
     bool? scanning,
+    bool? scanVisible,
+    bool? backgroundScanning,
     bool? selecting,
     bool? cancelRequested,
     Set<String>? favoritePending,
@@ -129,6 +141,8 @@ class LibraryViewState {
     trashed: trashed ?? this.trashed,
     albums: albums ?? this.albums,
     scanning: scanning ?? this.scanning,
+    scanVisible: scanVisible ?? this.scanVisible,
+    backgroundScanning: backgroundScanning ?? this.backgroundScanning,
     selecting: selecting ?? this.selecting,
     cancelRequested: cancelRequested ?? this.cancelRequested,
     favoritePending: favoritePending ?? this.favoritePending,
@@ -181,14 +195,28 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         scheduleMicrotask(refresh);
       }
       if (previous?.runtimeStatus != next.runtimeStatus) {
-        if (next.runtimeStatus == 'local_scan_started') {
+        final status = next.runtimeStatus;
+        if (status == 'local_scan_started') {
           state = state.copyWith(scanning: true, clearScanResult: true);
         }
-        if (next.runtimeStatus == 'local_scan_finished') {
-          state = state.copyWith(scanning: false, cancelRequested: false);
+        if (status == 'local_scan_finished') {
+          state = state.copyWith(
+            scanning: false,
+            scanVisible: false,
+            cancelRequested: false,
+          );
         }
-        if (next.runtimeStatus == 'local_scan_failed') {
+        if (status == 'local_scan_failed') {
           state = state.copyWith(scanning: false, problem: LibraryProblem.scan);
+        }
+        // Background sweeps keep the library current behind the scenes. They
+        // never raise the user's attention and never show progress.
+        if (status == 'local_background_scan_started') {
+          state = state.copyWith(backgroundScanning: true);
+        }
+        if (status == 'local_background_scan_finished' ||
+            status == 'local_background_scan_failed') {
+          state = state.copyWith(backgroundScanning: false);
         }
       }
     }, fireImmediately: true);
@@ -636,16 +664,19 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       state = state.copyWith(selecting: false);
       return;
     }
-    await scanPaths(paths);
+    // Indexing a newly added directory is the one scan a user waits for;
+    // picking individual files keeps the library current on its own.
+    await scanPaths(paths, visible: directory);
   }
 
-  Future<void> scanPaths(List<String> paths) async {
+  Future<void> scanPaths(List<String> paths, {required bool visible}) async {
     if (_disposed || state.scanning) return;
     _lastPaths = List.of(paths);
     ++_scanGeneration;
     state = state.copyWith(
       selecting: false,
       scanning: true,
+      scanVisible: visible,
       cancelRequested: false,
       clearScanResult: true,
     );
@@ -654,6 +685,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       if (_disposed) return;
       state = state.copyWith(
         scanning: false,
+        scanVisible: false,
         cancelRequested: false,
         scanResult: result,
       );
@@ -662,6 +694,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       if (!_disposed) {
         state = state.copyWith(
           scanning: false,
+          scanVisible: false,
           cancelRequested: false,
           problem: LibraryProblem.scan,
         );
@@ -670,7 +703,7 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
   }
 
   Future<void> retryScan() =>
-      _lastPaths.isEmpty ? rescanSources() : scanPaths(_lastPaths);
+      _lastPaths.isEmpty ? rescanSources() : scanPaths(_lastPaths, visible: false);
   Future<void> rescanSources() async {
     final data = await localCommand({'op': 'sources'}) as List?;
     if (data == null) return;
@@ -678,7 +711,8 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
       for (final source in data)
         if ((source as Map)['enabled'] == true) source['path'] as String,
     ];
-    if (paths.isNotEmpty) await scanPaths(paths);
+    // A rescan of known sources is maintenance: it never interrupts the user.
+    if (paths.isNotEmpty) await scanPaths(paths, visible: false);
   }
 
   Future<void> cancelScan() async {

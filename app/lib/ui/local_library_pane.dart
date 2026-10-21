@@ -887,7 +887,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
               duration: MediaQuery.disableAnimationsOf(context)
                   ? Duration.zero
                   : const Duration(milliseconds: 180),
-              child: _overviewOpen || state.scanning
+              child: _overviewOpen || (state.scanning && state.scanVisible)
                   ? _overview(strings, state, controller)
                   : const SizedBox.shrink(),
             ),
@@ -1248,7 +1248,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     if (widget.searchMode && state.search.isEmpty) {
       return _StatusPage(title: strings.searchPrompt);
     }
-    if (state.scanning && state.extent == 0) {
+    if (state.scanning && state.scanVisible && state.extent == 0) {
       return _StatusPage(
         title: strings.scanning,
         spinner: true,
@@ -1357,7 +1357,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           const SizedBox(height: 4),
           DefaultTextStyle(
             style: theme.textTheme.bodySmall ?? const TextStyle(),
-            child: state.scanning
+            child: state.scanning && state.scanVisible
                 ? Row(
                     children: [
                       const SizedBox(

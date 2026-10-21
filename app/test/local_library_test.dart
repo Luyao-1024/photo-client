@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/app.dart';
+import 'package:photo_client/services/core_gateway.dart';
 import 'package:photo_client/services/local_library_gateway.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
 import 'package:photo_client/ui/runtime_controller.dart';
@@ -413,6 +414,94 @@ void main() {
       await disposeApp(tester, gateway);
     },
   );
+
+  testWidgets('background sweeps stay invisible while the library refreshes', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 1);
+    await mount(tester, gateway);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(const ValueKey('sidebar-photos'))),
+    );
+    // A startup or filesystem sweep keeps the library current on its own; it
+    // never announces itself and never offers a cancel button.
+    gateway.events.add(
+      const CoreRuntimeEvent(
+        sequence: 10,
+        status: 'local_background_scan_started',
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Indexing…'), findsNothing);
+    expect(find.text('Scanning local sources…'), findsNothing);
+    expect(find.byKey(const ValueKey('cancel-scan')), findsNothing);
+    final state = container.read(localLibraryProvider);
+    expect(state.backgroundScanning, isTrue);
+    expect(state.scanning, isFalse);
+
+    gateway.events.add(
+      const CoreRuntimeEvent(
+        sequence: 11,
+        status: 'local_background_scan_finished',
+      ),
+    );
+    await tester.pump();
+    expect(container.read(localLibraryProvider).backgroundScanning, isFalse);
+    expect(find.text('Indexing…'), findsNothing);
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('only indexing a newly added directory announces the scan', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 1);
+    final picker = FakePicker();
+    await mount(tester, gateway, picker: picker);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(const ValueKey('sidebar-photos'))),
+    );
+
+    // Picking files keeps the library current without announcing a scan.
+    gateway.pendingScan = Completer<LocalScanResult>();
+    await openSettings(tester);
+    await tester.tap(find.byKey(const ValueKey('add-files')));
+    await tester.pump();
+    await closeSettingsQuietly(tester);
+    expect(find.text('Indexing…'), findsNothing);
+    expect(find.text('Scanning local sources…'), findsNothing);
+    expect(container.read(localLibraryProvider).scanning, isTrue);
+    expect(container.read(localLibraryProvider).scanVisible, isFalse);
+    gateway.pendingScan!.complete(
+      const LocalScanResult(
+        discovered: 1,
+        skipped: 0,
+        failed: 0,
+        cancelled: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Indexing a newly added directory is the one scan the user waits for.
+    gateway.pendingScan = Completer<LocalScanResult>();
+    await openSettings(tester);
+    await tester.tap(find.byKey(const ValueKey('add-folder')));
+    await tester.pump();
+    await closeSettingsQuietly(tester);
+    expect(find.text('Indexing…'), findsOneWidget);
+    expect(find.byKey(const ValueKey('cancel-scan')), findsOneWidget);
+    expect(container.read(localLibraryProvider).scanVisible, isTrue);
+    gateway.pendingScan!.complete(
+      const LocalScanResult(
+        discovered: 1,
+        skipped: 0,
+        failed: 0,
+        cancelled: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Indexing…'), findsNothing);
+    await disposeApp(tester, gateway);
+  });
 
   testWidgets(
     'visible evicted pages reload on repeated visits without stuck placeholders',

@@ -378,6 +378,38 @@ impl LocalLibrary {
         })
     }
 
+    /// Fingerprints of the files already indexed for a source.
+    ///
+    /// A scan uses them to skip unchanged files: their metadata is already
+    /// stored, so re-reading it costs time without changing anything. Only
+    /// active rows qualify — a trashed or missing file must be re-ingested to
+    /// come back to the library.
+    pub fn indexed_fingerprints(
+        &self,
+        source_id: &str,
+    ) -> Result<crate::media::KnownIndex, String> {
+        let library = self.library_id.clone();
+        let source_id = source_id.to_owned();
+        self.execute(move |c| {
+            let mut statement = c
+                .prepare("SELECT source_uri,size_bytes,modified_ns FROM media WHERE library_id=?1 AND source_id=?2 AND state='active'")
+                .map_err(error)?;
+            let rows = statement
+                .query_map(params![library, source_id], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+                })
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)?;
+            Ok(rows
+                .into_iter()
+                .filter_map(|(path, size, modified_ns)| {
+                    u64::try_from(size).ok().map(|size| (path, (size, modified_ns)))
+                })
+                .collect())
+        })
+    }
+
     pub fn set_favorite(&self, media_id: String, favorite: bool) -> Result<bool, String> {
         let library = self.library_id.clone();
         self.execute(move|c|{

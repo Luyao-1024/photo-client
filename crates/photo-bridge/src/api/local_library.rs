@@ -8,8 +8,9 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex, OnceLock,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
+    time::{Duration, Instant},
 };
 use tokio::sync::Semaphore;
 
@@ -73,16 +74,37 @@ pub struct LocalScanResult {
     pub cancelled: bool,
 }
 
+/// Scan slot ownership. A background sweep yields to an explicit user scan.
+pub(super) const SCAN_IDLE: u8 = 0;
+pub(super) const SCAN_BACKGROUND: u8 = 1;
+pub(super) const SCAN_USER: u8 = 2;
+
 pub(super) struct Service {
     pub(super) store: LocalLibrary,
     pub(super) cancel: AtomicBool,
-    pub(super) scanning: AtomicBool,
+    pub(super) scan_state: AtomicU8,
     pub(super) closed: AtomicBool,
     pub(super) fs_dirty: AtomicBool,
     pub(super) watcher_running: AtomicBool,
     initial_scan: AtomicBool,
     pub(super) watcher: Mutex<Option<notify::RecommendedWatcher>>,
     thumbnails: Semaphore,
+}
+
+impl Service {
+    /// Claim the single scan slot. Background sweeps never displace a running
+    /// user scan; a user scan asks a sweep to stop and takes its place.
+    pub(super) fn claim_scan(&self, kind: u8) -> bool {
+        self.scan_state
+            .compare_exchange(SCAN_IDLE, kind, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+    pub(super) fn release_scan(&self) {
+        self.scan_state.store(SCAN_IDLE, Ordering::Release);
+    }
+    pub(super) fn scan_is_user(&self) -> bool {
+        self.scan_state.load(Ordering::Acquire) == SCAN_USER
+    }
 }
 fn global() -> &'static Mutex<Option<Arc<Service>>> {
     static INSTANCE: OnceLock<Mutex<Option<Arc<Service>>>> = OnceLock::new();
@@ -186,7 +208,7 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
             *slot = Some(Arc::new(Service {
                 store,
                 cancel: AtomicBool::new(false),
-                scanning: AtomicBool::new(false),
+                scan_state: AtomicU8::new(SCAN_IDLE),
                 closed: AtomicBool::new(false),
                 fs_dirty: AtomicBool::new(false),
                 watcher_running: AtomicBool::new(false),
@@ -209,18 +231,17 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
         }
         if active.initial_scan.swap(false, Ordering::AcqRel) && !active.store.sources()?.is_empty()
         {
-            let _ = super::bootstrap::runtime().notify("local_scan_started");
             let worker = active.clone();
+            // Startup reconciliation is background work: it refreshes the index
+            // silently and never asks the user for attention.
             std::thread::spawn(move || {
-                if worker
-                    .scanning
-                    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-                    .is_ok()
-                {
-                    let _guard = ScanGuard(worker.clone());
-                    let _ = super::local_watcher::refresh(&worker);
-                    changed();
+                if !worker.claim_scan(SCAN_BACKGROUND) {
+                    return;
                 }
+                let _ = super::bootstrap::runtime().notify("local_background_scan_started");
+                let _guard = ScanGuard::background(worker.clone());
+                let _ = super::local_watcher::refresh(&worker);
+                changed();
             });
         }
         let info = active.store.info()?;
@@ -483,11 +504,34 @@ pub async fn save_edited(media_id: String, request: EditRequest) -> Result<Local
     .map_err(join_error)?
 }
 
-pub(super) struct ScanGuard(pub(super) Arc<Service>);
+/// Releases the scan slot and announces the matching lifecycle status.
+pub(super) struct ScanGuard {
+    service: Arc<Service>,
+    kind: u8,
+}
+impl ScanGuard {
+    pub(super) fn user(service: Arc<Service>) -> Self {
+        Self {
+            service,
+            kind: SCAN_USER,
+        }
+    }
+    pub(super) fn background(service: Arc<Service>) -> Self {
+        Self {
+            service,
+            kind: SCAN_BACKGROUND,
+        }
+    }
+}
 impl Drop for ScanGuard {
     fn drop(&mut self) {
-        self.0.scanning.store(false, Ordering::Release);
-        let _ = super::bootstrap::runtime().notify("local_scan_finished");
+        self.service.release_scan();
+        let status = if self.kind == SCAN_USER {
+            "local_scan_finished"
+        } else {
+            "local_background_scan_finished"
+        };
+        let _ = super::bootstrap::runtime().notify(status);
     }
 }
 pub async fn add_paths(paths: Vec<String>) -> Result<LocalScanResult, String> {
@@ -495,17 +539,26 @@ pub async fn add_paths(paths: Vec<String>) -> Result<LocalScanResult, String> {
         return Err("InvalidSourceSelection".into());
     }
     let active = service()?;
-    if active
-        .scanning
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        return Err("ScanAlreadyRunning".into());
-    }
-    active.cancel.store(false, Ordering::Release);
-    let _ = super::bootstrap::runtime().notify("local_scan_started");
     tokio::task::spawn_blocking(move || {
-        let _guard = ScanGuard(active.clone());
+        // An explicit user scan outranks a background sweep: ask the sweep to
+        // stop and take its slot instead of rejecting the request.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if active.claim_scan(SCAN_USER) {
+                break;
+            }
+            if active.scan_is_user() {
+                return Err("ScanAlreadyRunning".into());
+            }
+            active.cancel.store(true, Ordering::Release);
+            if Instant::now() >= deadline {
+                return Err("ScanAlreadyRunning".into());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _guard = ScanGuard::user(active.clone());
+        active.cancel.store(false, Ordering::Release);
+        let _ = super::bootstrap::runtime().notify("local_scan_started");
         let mut total = LocalScanResult {
             discovered: 0,
             skipped: 0,
@@ -532,8 +585,14 @@ pub async fn add_paths(paths: Vec<String>) -> Result<LocalScanResult, String> {
             let mut invalid_paths = 0;
             let mut exclusions = active.store.exclusions()?;
             exclusions.push(active.store.root.clone());
-            let summary =
-                media::scan_paths_excluding(&[root], &exclusions, &active.cancel, |batch| {
+            // Re-adding a known folder or file only re-reads what changed.
+            let known = active.store.indexed_fingerprints(&source_id)?;
+            let summary = media::scan_paths_excluding_known(
+                &[root],
+                &exclusions,
+                &active.cancel,
+                &known,
+                |batch| {
                     if active.closed.load(Ordering::Acquire) {
                         return Err("LibraryClosed".into());
                     }
@@ -570,7 +629,8 @@ pub async fn add_paths(paths: Vec<String>) -> Result<LocalScanResult, String> {
                         changed();
                     }
                     Ok(())
-                })?;
+                },
+            )?;
             total.discovered += summary.discovered.saturating_sub(invalid_paths);
             total.skipped += summary.skipped;
             total.failed += summary.failed + invalid_paths;
