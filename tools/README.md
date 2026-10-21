@@ -3,13 +3,18 @@
 Run these commands from the repository root. Install the pinned Python dependency
 with `python3 -m pip install -r requirements-dev.txt` if PyYAML is unavailable.
 
+Verification must follow `AGENTS.md`: run only cases directly related to the
+change. Full test suites and complete acceptance matrices are prohibited.
+The commands below are examples to select from, not a batch to run after every
+change; documentation-only edits need content review and `git diff --check`.
+
 ```sh
 ./tools/platform validate --profile linux-x86_64
 ./tools/platform describe --profile android-arm64
 ./tools/platform generate --profile linux-x86_64
 PHOTO_FLUTTER_ROOT=/path/to/flutter ./tools/platform build --profile linux-x86_64 --mode release
 PHOTO_FLUTTER_ROOT=/path/to/flutter ./tools/platform run --profile linux-x86_64 --mode debug -- --example-application-argument
-python3 -B -m unittest discover -s tests/platform -p 'test_*.py' -v
+python3 -B -m unittest discover -s tests/platform -p 'test_platform.py' -v
 ./tools/acceptance run --stage S01 --evidence-dir /path/to/fresh-evidence-directory
 ```
 

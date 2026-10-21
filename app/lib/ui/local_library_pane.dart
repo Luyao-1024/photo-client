@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
+import 'glass_dialog.dart';
 import 'glass_surface.dart';
+import 'glass_theme.dart';
+import 'local_album_actions.dart';
 import 'local_library_controller.dart';
 import 'local_photo_viewer.dart';
 import 'mode_selector.dart';
@@ -14,7 +18,6 @@ import 'photos_grid.dart';
 import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
-import 'local_album_actions.dart';
 
 /// The Photos page: glass header (search + selection chrome), a quiet two-line
 /// overview, a date-sectioned square-tile grid, and the floating Year/Month/Day
@@ -340,7 +343,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final scheme = Theme.of(context).colorScheme;
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassAlertDialog(
         title: Text(title),
         content: Text(body),
         actions: [
@@ -657,7 +660,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final controller = TextEditingController(text: photo.name);
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassAlertDialog(
         title: Text(strings.renamePhoto),
         content: TextField(
           key: const ValueKey('rename-field'),
@@ -798,10 +801,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                   alignment: Alignment.bottomCenter,
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 20),
-                    child: ModeSelector(
-                      mode: _mode,
-                      onChanged: _changeMode,
-                    ),
+                    child: ModeSelector(mode: _mode, onChanged: _changeMode),
                   ),
                 ),
             ],
@@ -1471,106 +1471,109 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return GlassSurface(
-      radius: 0,
-      child: SizedBox(
-        height: 56,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              // Left: where the user is — all photos, an album, or a filter.
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: GlassSurface(
+        radius: 20,
+        child: SizedBox(
+          height: 56,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                // Left: where the user is — all photos, an album, or a filter.
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (selectionMode) ...[
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: TextButton(
+                              key: const ValueKey('select-all'),
+                              onPressed: allLoadedSelected
+                                  ? onDeselectAll
+                                  : onSelectAll,
+                              child: Text(
+                                allLoadedSelected
+                                    ? strings.deselectAll
+                                    : strings.selectAll,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          Flexible(
+                            child: TextButton(
+                              key: const ValueKey('exit-selection'),
+                              onPressed: onExitSelection,
+                              child: Text(
+                                strings.exitSelection,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                // Right: search and the actions that belong to the page.
+                Expanded(
+                  flex: _showField ? 2 : 1,
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Flexible(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+                      if (_showField) ...[
+                        Flexible(
+                          flex: 2,
+                          child: _SearchField(
+                            controller: searchController,
+                            scope: scope,
+                            focusNode: searchFocus,
+                            onChanged: onSearchChanged,
+                            onClose: onCloseSearch,
+                            strings: strings,
                           ),
                         ),
-                      ),
-                      if (selectionMode) ...[
+                        if (!trashMode) ...[
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: _ScopeSelector(
+                                scope: scope,
+                                onChanged: onScopeChanged,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ] else
+                        _RoundSearchButton(
+                          onPressed: onOpenSearch,
+                          tooltip: strings.search,
+                        ),
+                      if (_hasTrailing) ...[
                         const SizedBox(width: 10),
-                        Flexible(
-                          child: TextButton(
-                            key: const ValueKey('select-all'),
-                            onPressed: allLoadedSelected
-                                ? onDeselectAll
-                                : onSelectAll,
-                            child: Text(
-                              allLoadedSelected
-                                  ? strings.deselectAll
-                                  : strings.selectAll,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        Flexible(
-                          child: TextButton(
-                            key: const ValueKey('exit-selection'),
-                            onPressed: onExitSelection,
-                            child: Text(
-                              strings.exitSelection,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
+                        Flexible(child: _trailing(context)),
                       ],
                     ],
                   ),
                 ),
-              ),
-              // Right: search and the actions that belong to the page.
-              Expanded(
-                flex: _showField ? 2 : 1,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (_showField) ...[
-                      Flexible(
-                        flex: 2,
-                        child: _SearchField(
-                          controller: searchController,
-                          scope: scope,
-                          focusNode: searchFocus,
-                          onChanged: onSearchChanged,
-                          onClose: onCloseSearch,
-                          strings: strings,
-                        ),
-                      ),
-                      if (!trashMode) ...[
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: _ScopeSelector(
-                              scope: scope,
-                              onChanged: onScopeChanged,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ] else
-                      _RoundSearchButton(
-                        onPressed: onOpenSearch,
-                        tooltip: strings.search,
-                      ),
-                    if (_hasTrailing) ...[
-                      const SizedBox(width: 10),
-                      Flexible(child: _trailing(context)),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1656,20 +1659,36 @@ class _Header extends StatelessWidget {
             key: const ValueKey('batch-add-to-album'),
             tooltip: strings.addToAlbum,
             enabled: selectedPhotos.isNotEmpty,
+            color: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            menuPadding: EdgeInsets.zero,
+            clipBehavior: Clip.none,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GlassTheme.panelRadius),
+            ),
             onSelected: onBatchAddToAlbum,
             itemBuilder: (context) => [
-              PopupMenuItem<bool>(
-                value: false,
-                child: Text(strings.copyToAlbum),
-              ),
-              PopupMenuItem<bool>(
-                value: true,
-                child: Text(strings.moveToAlbum),
+              GlassMenuEntry<bool>(
+                items: [
+                  PopupMenuItem<bool>(
+                    value: false,
+                    child: Text(strings.copyToAlbum),
+                  ),
+                  PopupMenuItem<bool>(
+                    value: true,
+                    child: Text(strings.moveToAlbum),
+                  ),
+                ],
               ),
             ],
-            child: _GlassActionButton(
-              icon: Icons.add,
-              onPressed: selectedPhotos.isEmpty ? null : null,
+            icon: const Icon(Icons.add),
+            iconSize: 20,
+            style: IconButton.styleFrom(
+              minimumSize: const Size(38, 38),
+              padding: EdgeInsets.zero,
+              backgroundColor: GlassTheme.of(context).inset,
+              shape: const CircleBorder(),
             ),
           ),
         ),
@@ -1704,10 +1723,7 @@ class _Header extends StatelessWidget {
 
 /// All / Name / Date segmented scope control for the search field.
 class _ScopeSelector extends StatelessWidget {
-  const _ScopeSelector({
-    required this.scope,
-    required this.onChanged,
-  });
+  const _ScopeSelector({required this.scope, required this.onChanged});
 
   final SearchScope scope;
   final ValueChanged<SearchScope> onChanged;
@@ -1723,6 +1739,7 @@ class _ScopeSelector extends StatelessWidget {
     return GlassSurface(
       key: const ValueKey('search-scope'),
       radius: 18,
+      role: GlassRole.raised,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1757,21 +1774,32 @@ class _ScopeChip extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primary.withValues(alpha: .16)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: selected ? scheme.primary : scheme.onSurfaceVariant,
-          ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(18)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 3),
+            AnimatedContainer(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
+              width: 16,
+              height: 2,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                color: selected ? scheme.primary : Colors.transparent,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1789,26 +1817,41 @@ class _AlbumPickerDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return AlertDialog(
+    return GlassAlertDialog(
       title: Text(strings.chooseAlbum),
       content: SizedBox(
-        width: 360,
+        width: 480,
         child: albums.isEmpty
             ? Text(strings.noAlbums)
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final album in albums)
-                      ListTile(
-                        key: ValueKey('album-target-${album.path}'),
-                        leading: const Icon(Icons.photo_album_outlined),
-                        title: Text(album.name),
-                        subtitle: Text(strings.photosCountLabel(album.count)),
-                        onTap: () => Navigator.of(context).pop(album.path),
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = (constraints.maxWidth / 192).ceil().clamp(
+                    1,
+                    3,
+                  );
+                  final tileWidth =
+                      (constraints.maxWidth - (columns - 1) * 12) / columns;
+                  final rowHeight = tileWidth + 56;
+                  final rows = (albums.length / columns).ceil();
+                  return SizedBox(
+                    height: math.min(
+                      rows * rowHeight + (rows - 1) * 12,
+                      math.min(400, MediaQuery.sizeOf(context).height * .45),
+                    ),
+                    child: GridView.builder(
+                      primary: false,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        mainAxisExtent: rowHeight,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
                       ),
-                  ],
-                ),
+                      itemCount: albums.length,
+                      itemBuilder: (context, index) =>
+                          _AlbumTargetTile(album: albums[index]),
+                    ),
+                  );
+                },
               ),
       ),
       actions: [
@@ -1824,6 +1867,88 @@ class _AlbumPickerDialog extends StatelessWidget {
           child: Text(strings.cancel),
         ),
       ],
+    );
+  }
+}
+
+/// Cover cards reuse one modal material; the grid adds no per-photo shaders.
+class _AlbumTargetTile extends ConsumerStatefulWidget {
+  const _AlbumTargetTile({required this.album});
+  final LocalAlbum album;
+
+  @override
+  ConsumerState<_AlbumTargetTile> createState() => _AlbumTargetTileState();
+}
+
+class _AlbumTargetTileState extends ConsumerState<_AlbumTargetTile> {
+  Future<String>? _cover;
+
+  @override
+  void initState() {
+    super.initState();
+    final gateway = ref.read(coreGatewayProvider);
+    final id = widget.album.coverMediaId;
+    if (gateway is LocalLibraryGateway && id != null) {
+      _cover = (gateway as LocalLibraryGateway).thumbnail(id, sizeClass: 256);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: GlassTheme.of(context).inset,
+      borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: ValueKey('album-target-${widget.album.path}'),
+        onTap: () => Navigator.of(context).pop(widget.album.path),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: FutureBuilder<String>(
+                future: _cover,
+                builder: (context, snapshot) {
+                  final fallback = Center(
+                    child: Icon(
+                      Icons.photo_album_outlined,
+                      size: 32,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  );
+                  return snapshot.hasData
+                      ? Image.file(
+                          File(snapshot.data!),
+                          fit: BoxFit.cover,
+                          cacheWidth: 256,
+                          errorBuilder: (_, error, stack) => fallback,
+                        )
+                      : fallback;
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
+              child: Text(
+                widget.album.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+              child: Text(
+                AppStrings.of(context).photosCountLabel(widget.album.count),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1912,7 +2037,11 @@ class _SearchField extends StatelessWidget {
                   onSubmitted: (_) => onClose?.call(),
                   decoration: InputDecoration(
                     isDense: true,
+                    filled: false,
+                    contentPadding: EdgeInsets.zero,
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
                     hintText: strings.searchHint,
                   ),
                 ),
@@ -1956,6 +2085,7 @@ class _GlassActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassSurface(
+      role: GlassRole.raised,
       radius: 19,
       child: SizedBox(
         width: 38,

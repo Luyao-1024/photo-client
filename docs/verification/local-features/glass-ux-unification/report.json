@@ -1,0 +1,105 @@
+{
+  "date": "2026-10-21",
+  "scope": "Flutter local-library UX; previous GTK client read only",
+  "checks": {
+    "flutter_analyze": "PASS: no issues",
+    "existing_widget_tests": "PASS: 15 across responsive_widths, library_actions, window_frame, liquid_glass_evidence",
+    "linux_debug_build": "PASS",
+    "native_window_visual_review": "PASS: library, settings, menu, cover picker, viewer, details, editor and compact settings",
+    "native_menu_keyboard": "PASS: Down and Return open the album chooser; Escape dismisses"
+  },
+  "visual_environment": {
+    "window": [
+      1280,
+      900
+    ],
+    "compact_window": [
+      390,
+      844
+    ],
+    "display": "isolated Xvfb X11",
+    "renderer": "Impeller OpenGLESSDF, Mesa software rendering; DRI3 unavailable",
+    "effective_material": "automatic -> standard",
+    "fixtures": "synthetic images and isolated SQLite library under .tooling/glass-review; no user library modified"
+  },
+  "historical_journey": {
+    "status": "FAIL",
+    "phase": "provision",
+    "input": "framework",
+    "passed_through": "scan, grid, thumbnail, viewer, navigation, metadata and persisted favorite",
+    "failed_step": "library-summary-text",
+    "failure": "the library summary does not report the real count",
+    "context": "The current project already hides the overview until requested. The old journey expects library-info to be mounted unconditionally. The overview behavior was not changed in this task.",
+    "search": "NOT RUN: framework driver cannot type"
+  },
+  "not_claimed": [
+    "physical GPU refraction validation",
+    "full-mode performance and 100k library benchmarks",
+    "full historical UX journey pass",
+    "Android/Windows packaging",
+    "new UX automated coverage"
+  ],
+  "build_environment_note": "Host had libheif.so.1 but no development linker name. The build used an ignored local .tooling/glass-build-link/libheif.so symlink and LIBRARY_PATH; no system package or tracked build tooling changed.",
+  "screenshots": [
+    {
+      "file": "album-picker-light.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "f044ea5967fdebe1b00094bb3fbb3a4082a44020d72cf47e579019ce5eabe791"
+    },
+    {
+      "file": "details-dark.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "e386e0c72c465659fc911a0baf7aa347c1eb6e4a9a44487e73506d3f495eb776"
+    },
+    {
+      "file": "editor-dark.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "c0996eefb36c5720c449209410a66f3f2fd8f4ac8cb9f59102b204d48606df4f"
+    },
+    {
+      "file": "library-dark.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "16b998982fc3351f69d4d6bfebd277793b1bf2eb0e4663c292d2e76fcd9aa561"
+    },
+    {
+      "file": "library-light.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "f6de174614ee79f5fe676121c765e5eec3a758ed66a2b50d1e763cc3ad6e9f36"
+    },
+    {
+      "file": "menu-light.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "51431f1b0a5f65a29fa6a73a6b8bc1aa13a725f81fd2d40896fae04c937384e2"
+    },
+    {
+      "file": "settings-compact.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "fb17fd806b804660dbaa44bf4f73f4d58da9b21ce0262b04af9b15b48b2724c3"
+    },
+    {
+      "file": "settings-dark.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "b4cd98ef49d6c061de28d142aa4c156fbe0b539c857516d2cf606faa89a1e86a"
+    },
+    {
+      "file": "settings-light.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "7735254931fabaca442968c8fb52690b444bba4b317e1514e674808a9e30f740"
+    },
+    {
+      "file": "viewer-dark.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "e997022232e83430a0972e47b87f9e9f54e11fa1769df1947fcf17f5fabd909d"
+    }
+  ]
+}

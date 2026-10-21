@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/local_library_gateway.dart';
-import '../ui/glass_surface.dart';
+import '../ui/glass_dialog.dart';
+import '../ui/glass_theme.dart';
 import '../ui/strings.dart';
 
 /// Platform file access stays here; the picker uses the app's own window chrome.
@@ -181,263 +182,256 @@ class _LocalFileBrowserState extends State<_LocalFileBrowser> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final scheme = Theme.of(context).colorScheme;
-    return Dialog(
+    return GlassDialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 820, maxHeight: 680),
-        child: GlassSurface(
-          role: GlassRole.reading,
-          child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(
-                LogicalKeyboardKey.keyL,
-                control: true,
-              ): () =>
-                  _locationFocus.requestFocus(),
-              if (!widget.directory && !_locationFocus.hasFocus)
-                const SingleActivator(LogicalKeyboardKey.keyA, control: true):
-                    _selectAll,
-            },
-            child: Focus(
-              autofocus: true,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            strings.pick(
-                              widget.directory ? '选择文件夹' : '选择照片或视频',
-                              widget.directory
-                                  ? 'Choose folder'
-                                  : 'Choose photos or videos',
-                            ),
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: strings.close,
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: strings.pick('上一级', 'Parent folder'),
-                          onPressed:
-                              _loading || Directory(_path).parent.path == _path
-                              ? null
-                              : () => _navigate(Directory(_path).parent.path),
-                          icon: const Icon(Icons.arrow_upward),
-                        ),
-                        IconButton(
-                          tooltip: strings.pick('主目录', 'Home'),
-                          onPressed: () => _navigate(
-                            Platform.environment['HOME'] ??
-                                Directory.current.path,
-                          ),
-                          icon: const Icon(Icons.home_outlined),
-                        ),
-                        Expanded(
-                          child: TextField(
-                            key: const ValueKey('file-browser-location'),
-                            controller: _location,
-                            focusNode: _locationFocus,
-                            onSubmitted: _navigate,
-                            decoration: InputDecoration(
-                              isDense: true,
-                              border: const OutlineInputBorder(),
-                              hintText: strings.pick(
-                                '输入路径，按回车打开',
-                                'Enter a path and press Enter',
-                              ),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: strings.refresh,
-                          onPressed: () => _navigate(_location.text),
-                          icon: const Icon(Icons.refresh),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: SizedBox(
-                      height: 440,
-                      child: _loading
-                          ? const Center(child: CircularProgressIndicator())
-                          : _failed
-                          ? Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    strings.pick(
-                                      '无法打开此文件夹，请检查路径或访问权限。',
-                                      'This folder could not open. Check the path or permissions.',
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => _navigate(_location.text),
-                                    child: Text(strings.retry),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : _entries.isEmpty
-                          ? Center(
-                              child: Text(
-                                strings.pick(
-                                  widget.directory
-                                      ? '此文件夹没有子文件夹，可选择当前文件夹。'
-                                      : '此文件夹没有支持的照片或视频。',
-                                  widget.directory
-                                      ? 'No subfolders. You can choose the current folder.'
-                                      : 'No supported photos or videos in this folder.',
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _entries.length,
-                              itemBuilder: (context, index) {
-                                final entry = _entries[index];
-                                final directory = entry is Directory;
-                                final selected = directory
-                                    ? _selectedDirectory == entry.path
-                                    : _selected.contains(entry.path);
-                                return Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: () => setState(() {
-                                      if (directory) {
-                                        _selectedDirectory = entry.path;
-                                      } else if (!_selected.remove(
-                                        entry.path,
-                                      )) {
-                                        _selected.add(entry.path);
-                                      }
-                                    }),
-                                    onDoubleTap: () => directory
-                                        ? _navigate(entry.path)
-                                        : _accept(),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 4,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          if (!directory)
-                                            Checkbox(
-                                              value: selected,
-                                              onChanged: (_) => setState(() {
-                                                if (!_selected.remove(
-                                                  entry.path,
-                                                )) {
-                                                  _selected.add(entry.path);
-                                                }
-                                              }),
-                                            ),
-                                          Icon(
-                                            directory
-                                                ? Icons.folder_outlined
-                                                : Icons.image_outlined,
-                                            color: selected
-                                                ? scheme.primary
-                                                : null,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
-                                              _name(entry.path),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: selected
-                                                    ? scheme.primary
-                                                    : null,
-                                                fontWeight: selected
-                                                    ? FontWeight.w600
-                                                    : null,
-                                              ),
-                                            ),
-                                          ),
-                                          if (directory)
-                                            IconButton(
-                                              tooltip: strings.pick(
-                                                '打开文件夹',
-                                                'Open folder',
-                                              ),
-                                              onPressed: () =>
-                                                  _navigate(entry.path),
-                                              icon: const Icon(
-                                                Icons.chevron_right,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Checkbox(
-                          value: _hidden,
-                          onChanged: (value) {
-                            setState(() => _hidden = value ?? false);
-                            unawaited(_navigate(_path));
-                          },
-                        ),
-                        Flexible(
-                          child: Text(
-                            strings.pick('显示隐藏文件', 'Show hidden files'),
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: Text(strings.cancel),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          key: const ValueKey('file-browser-accept'),
-                          onPressed:
-                              _loading ||
-                                  _failed ||
-                                  (!widget.directory && _selected.isEmpty)
-                              ? null
-                              : _accept,
-                          child: Text(
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyL, control: true): () =>
+                _locationFocus.requestFocus(),
+            if (!widget.directory && !_locationFocus.hasFocus)
+              const SingleActivator(LogicalKeyboardKey.keyA, control: true):
+                  _selectAll,
+          },
+          child: Focus(
+            autofocus: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          strings.pick(
+                            widget.directory ? '选择文件夹' : '选择照片或视频',
                             widget.directory
-                                ? strings.pick('选择文件夹', 'Choose folder')
-                                : strings.pick(
-                                    '选择 ${_selected.length} 项',
-                                    'Choose ${_selected.length} items',
-                                  ),
+                                ? 'Choose folder'
+                                : 'Choose photos or videos',
+                          ),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: strings.close,
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: strings.pick('上一级', 'Parent folder'),
+                        onPressed:
+                            _loading || Directory(_path).parent.path == _path
+                            ? null
+                            : () => _navigate(Directory(_path).parent.path),
+                        icon: const Icon(Icons.arrow_upward),
+                      ),
+                      IconButton(
+                        tooltip: strings.pick('主目录', 'Home'),
+                        onPressed: () => _navigate(
+                          Platform.environment['HOME'] ??
+                              Directory.current.path,
+                        ),
+                        icon: const Icon(Icons.home_outlined),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('file-browser-location'),
+                          controller: _location,
+                          focusNode: _locationFocus,
+                          onSubmitted: _navigate,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: strings.pick(
+                              '输入路径，按回车打开',
+                              'Enter a path and press Enter',
+                            ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        tooltip: strings.refresh,
+                        onPressed: () => _navigate(_location.text),
+                        icon: const Icon(Icons.refresh),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                Flexible(
+                  child: SizedBox(
+                    height: 440,
+                    child: _loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _failed
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  strings.pick(
+                                    '无法打开此文件夹，请检查路径或访问权限。',
+                                    'This folder could not open. Check the path or permissions.',
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => _navigate(_location.text),
+                                  child: Text(strings.retry),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _entries.isEmpty
+                        ? Center(
+                            child: Text(
+                              strings.pick(
+                                widget.directory
+                                    ? '此文件夹没有子文件夹，可选择当前文件夹。'
+                                    : '此文件夹没有支持的照片或视频。',
+                                widget.directory
+                                    ? 'No subfolders. You can choose the current folder.'
+                                    : 'No supported photos or videos in this folder.',
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _entries.length,
+                            itemBuilder: (context, index) {
+                              final entry = _entries[index];
+                              final directory = entry is Directory;
+                              final selected = directory
+                                  ? _selectedDirectory == entry.path
+                                  : _selected.contains(entry.path);
+                              return Material(
+                                color: selected
+                                    ? GlassTheme.of(context).selection
+                                    : Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => setState(() {
+                                    if (directory) {
+                                      _selectedDirectory = entry.path;
+                                    } else if (!_selected.remove(entry.path)) {
+                                      _selected.add(entry.path);
+                                    }
+                                  }),
+                                  onDoubleTap: () => directory
+                                      ? _navigate(entry.path)
+                                      : _accept(),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        if (!directory)
+                                          Checkbox(
+                                            value: selected,
+                                            onChanged: (_) => setState(() {
+                                              if (!_selected.remove(
+                                                entry.path,
+                                              )) {
+                                                _selected.add(entry.path);
+                                              }
+                                            }),
+                                          ),
+                                        Icon(
+                                          directory
+                                              ? Icons.folder_outlined
+                                              : Icons.image_outlined,
+                                          color: selected
+                                              ? scheme.primary
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            _name(entry.path),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: selected
+                                                  ? scheme.primary
+                                                  : null,
+                                              fontWeight: selected
+                                                  ? FontWeight.w600
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                        if (directory)
+                                          IconButton(
+                                            tooltip: strings.pick(
+                                              '打开文件夹',
+                                              'Open folder',
+                                            ),
+                                            onPressed: () =>
+                                                _navigate(entry.path),
+                                            icon: const Icon(
+                                              Icons.chevron_right,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _hidden,
+                        onChanged: (value) {
+                          setState(() => _hidden = value ?? false);
+                          unawaited(_navigate(_path));
+                        },
+                      ),
+                      Flexible(
+                        child: Text(
+                          strings.pick('显示隐藏文件', 'Show hidden files'),
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(strings.cancel),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        key: const ValueKey('file-browser-accept'),
+                        onPressed:
+                            _loading ||
+                                _failed ||
+                                (!widget.directory && _selected.isEmpty)
+                            ? null
+                            : _accept,
+                        child: Text(
+                          widget.directory
+                              ? strings.pick('选择文件夹', 'Choose folder')
+                              : strings.pick(
+                                  '选择 ${_selected.length} 项',
+                                  'Choose ${_selected.length} items',
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),

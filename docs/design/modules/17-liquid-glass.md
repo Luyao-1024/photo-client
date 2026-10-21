@@ -4,7 +4,7 @@
 
 确定新客户端统一的液态玻璃风格、布局层级、动效、可读性和渲染预算。照片保持内容主体，玻璃用于导航与操作表面；主题、材质质量和透明度是独立设置。
 
-参考旧项目[液态玻璃模块](../../../../photoViewer/docs/modules/ui-liquid-glass.md)的共享材质、单胶囊分段器、焦点与照片覆盖控件规则；Flutter 重新实现，不搬 GTK CSS。设计 token 在[样本文件](../ux/glass-tokens.json)，尚非实际 ThemeExtension。
+参考旧项目[液态玻璃模块](../../../../photoViewer/docs/modules/ui-liquid-glass.md)的共享材质、单胶囊分段器、焦点与照片覆盖控件规则；Flutter 重新实现，不搬 GTK CSS。设计与预算参考见[token 文件](../ux/glass-tokens.json)；运行时共享颜色与几何已落在 `GlassTheme` ThemeExtension，角色透明度与渲染档位由 `GlassSurface` 统一解析。
 
 材质实现不自研：采用 `liquid_glass_widgets`（MIT，显式支持 Android/Linux/Windows/macOS/Web）作为渲染层，折射透镜、镜面高光、Fresnel 边缘与色散由它的 fragment shader 提供；本项目只负责角色、token 映射、档位策略与可读性约束。项目代码只做薄封装（`GlassSurface`），不复制其 shader。
 
@@ -47,7 +47,7 @@ Light 使用低饱和浅灰底、深色文字和白色局部高光；Dark 使用
 
 照片覆盖按钮用局部暗色 scrim 与白色前景，收藏为填充心形；hover/pressed/selected/focus/disabled 状态各自明确。不能每帧读照片像素来决定文字颜色。hover 不改变分组或选中项，focus 不依赖玻璃透明边界。
 
-透明度strength取0–1，alpha=`clamp(base_alpha + (1-2*strength)*0.10, role_floor, ceiling)`。液态玻璃的主体是空气：Chrome/Raised 的 base_alpha 为 0.25，安全下限 0.12，上限 0.40；Reading 保持 0.94~0.98，高对比为 1.0。主体越不透明，折射与高光越被压死，材质会退化成"带亮边的实心面板"——这是上一版最严重的缺陷。主题、slider与材质模式共同解析，不同页面不得各写一套映射。
+透明度strength取0–1，alpha=`clamp(base_alpha + (1-2*strength)*0.10, role_floor, ceiling)`。液态玻璃的主体是空气：Chrome 的 base_alpha 为 0.25，范围 0.12~0.40；Raised 为 0.40，范围 0.32~0.50；Overlay 为 0.88，范围 0.86~0.94；Reading 为 0.96，范围 0.94~0.98。高对比时全部为 1.0。主体越不透明，折射与高光越被压死，材质会退化成"带亮边的实心面板"——这是上一版最严重的缺陷。主题、slider与材质模式共同解析，不同页面不得各写一套映射。
 
 普通文字目标对比度≥4.5:1、大字号/控件关键边界≥3:1；在明亮/暗色/高对比照片背景上验证。Reading 填充不低于 token 的安全 alpha floor，用户透明度滑块不得把表单文字变不可读。
 
@@ -103,3 +103,16 @@ auto 的质量控制交给 `liquid_glass_widgets` 的三阶段适配器：静态
 - `https://github.com/sdegenaar/liquid_glass_widgets`
 
 本页参数是项目预算与已实测结果，不是GPU实测结论；实际档位与降级原因以运行日志的 `GLASS_QUALITY` 行为准。
+
+## 2026-10-21 覆盖统一
+
+对照旧客户端 `docs/modules/ui-liquid-glass.md`，本轮补齐此前默认 Material 弹窗/菜单和玻璃主界面之间的断层。
+
+- `GlassTheme` 统一材质色、边缘、阴影、内部分组和选中状态；按钮、输入框、Chip、ListTile、提示与下拉菜单复用主题几何。窗口只使用静态低饱和背景，不添加持续动画。
+- 侧栏与页面工具栏改为留出外边距的圆角表面；相册行与导航行共享轻量选中和按压反馈，无逐行玻璃滤镜。
+- `GlassDialog`/`GlassAlertDialog` 让设置、文件选择、快捷键、确认、重命名、相册选择和网格详情各自只有一个可见材质层。菜单复用 Flutter 原生路由的定位、键盘导航、Esc 和点外关闭，行内不增加玻璃滤镜。
+- 相册选择使用可滚动的真实封面网格，保留新建入口；少量相册按实际行数收缩高度。
+- 查看器工具栏与胶片条使用 Raised；详情、编辑面板使用 Overlay，正文更高不透明度；减少动画时详情面板取消滑入。
+- 年/月/日与搜索范围都采用单容器、文字加短指示线，不再给搜索的每段叠选中底块。照片内容和网格不加玻璃滤镜。
+
+记录与本轮验证范围见[视觉统一记录](../../local-first/glass-ux-unification.md)。

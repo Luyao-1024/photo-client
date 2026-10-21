@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'glass_dialog.dart';
 import 'local_library_controller.dart';
 import 'strings.dart';
 
@@ -13,7 +14,7 @@ Future<String?> createLocalAlbum(BuildContext context, WidgetRef ref) async {
   final name = TextEditingController();
   final result = await showDialog<String>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => GlassAlertDialog(
       title: Text(strings.pick('新建相册', 'New album')),
       content: TextField(
         key: const ValueKey('album-name-field'),

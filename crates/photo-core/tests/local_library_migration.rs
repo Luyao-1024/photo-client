@@ -7,9 +7,8 @@ use tempfile::TempDir;
 
 const SCHEMA: &str = include_str!("../src/storage/local-schema.sql");
 
-/// Mirrors `photo_core::local_library::SCHEMA_VERSION`; the pre-release build
-/// refuses any database written by a different version.
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+/// Older supported catalogs are upgraded; future writers are still rejected.
+const CURRENT_SCHEMA_VERSION: i64 = 3;
 
 fn input(folder: &std::path::Path, name: &str, ns: i64) -> MediaInput {
     let path = folder.join(name);
@@ -200,8 +199,8 @@ fn newer_schema_rejects_old_writer_without_wiping_the_library() {
     drop(connection);
 
     // Once the future writer restores the current version, all data is intact.
-    // The pre-release schema has no downgrade path, so only the exact version
-    // the writer was built for is accepted.
+    // A future schema must be restored by its own writer before this client
+    // may open it; unsupported downgrades never reset the catalog.
     let connection = Connection::open(&database).unwrap();
     connection
         .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)
@@ -246,4 +245,219 @@ fn reopen_settles_interrupted_scan_runs_and_keeps_the_catalog() {
         )
         .unwrap();
     assert_eq!(state, "interrupted");
+}
+
+fn legacy_catalog(root: &TempDir, photos: &TempDir, version: i64) {
+    let schema = if version == 1 {
+        SCHEMA
+            .replace("  original_uri TEXT,\n", "")
+            .replace("  trashed_at_ms INTEGER,\n", "")
+            .replace(
+                "('auto','full','reduced')",
+                "('auto','full','reduced','plain')",
+            )
+    } else {
+        SCHEMA.to_owned()
+    };
+    let photo = input(photos.path(), "keep.jpg", 1_000_000);
+    let c = Connection::open(root.path().join("library.sqlite")).unwrap();
+    c.execute_batch(&schema).unwrap();
+    c.execute(
+        "INSERT INTO app_meta VALUES(1,?1,'installation',0)",
+        [version],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO schema_migrations VALUES(?1,?2,1)",
+        rusqlite::params![version, "1".repeat(64)],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO libraries VALUES('legacy-library','Legacy',7,123,1,1)",
+        [],
+    )
+    .unwrap();
+    c.execute("INSERT INTO app_settings(singleton,selected_library_id,theme,glass_mode,locale) VALUES(1,'legacy-library','dark',?1,'en-US')", [if version == 1 { "plain" } else { "full" }]).unwrap();
+    c.execute("INSERT INTO sources(library_id,source_id,root_uri,source_kind) VALUES('legacy-library','source',?1,'linked_directory')", [photos.path().to_str().unwrap()]).unwrap();
+    c.execute("INSERT INTO media(library_id,media_id,source_id,source_uri,display_name,parent_uri,size_bytes,modified_ns,media_kind,mime_type,sort_time_ms,favorite) VALUES('legacy-library','photo','source',?1,'keep.jpg',?2,15,1000000,'image','image/jpeg',1,1)",rusqlite::params![photo.path,photo.parent]).unwrap();
+    c.execute(
+        "INSERT INTO albums VALUES('legacy-library','album','Keep',4)",
+        [],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO album_members VALUES('legacy-library','album','photo')",
+        [],
+    )
+    .unwrap();
+    c.pragma_update(None, "user_version", version).unwrap();
+}
+
+fn backup_files(root: &TempDir) -> Vec<std::path::PathBuf> {
+    fs::read_dir(root.path().join("backups"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "sqlite")
+        })
+        .collect()
+}
+
+#[test]
+fn v1_migration_preserves_catalog_preferences_and_originals() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    legacy_catalog(&root, &photos, 1);
+    let before = fs::read(photos.path().join("keep.jpg")).unwrap();
+    let library = LocalLibrary::open(root.path()).unwrap();
+    assert_eq!(library.library_id, "legacy-library");
+    assert_eq!(library.info().unwrap().count, 1);
+    assert_eq!(library.info().unwrap().revision, 7);
+    assert!(library.photo("photo".into()).unwrap().favorite);
+    assert_eq!(library.sources().unwrap().len(), 1);
+    let prefs: serde_json::Value = serde_json::from_str(&library.preferences().unwrap()).unwrap();
+    assert_eq!(prefs["theme"], "dark");
+    assert_eq!(prefs["glassMode"], "auto");
+    assert_eq!(prefs["locale"], "en");
+    library
+        .set_preference("transparency".into(), "0.25".into())
+        .unwrap();
+    let c = Connection::open(root.path().join("library.sqlite")).unwrap();
+    assert_eq!(
+        c.query_row("SELECT COUNT(*) FROM album_members", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        c.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        c.query_row("SELECT schema_version FROM app_meta", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        3
+    );
+    assert_eq!(fs::read(photos.path().join("keep.jpg")).unwrap(), before);
+    let backups = backup_files(&root);
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    assert_eq!(
+        backup
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        backup
+            .query_row(
+                "SELECT favorite FROM media WHERE media_id='photo'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+        1
+    );
+    drop(library);
+    let reopened = LocalLibrary::open(root.path()).unwrap();
+    assert_eq!(
+        backup_files(&root).len(),
+        1,
+        "reopening must not migrate again"
+    );
+    let prefs: serde_json::Value = serde_json::from_str(&reopened.preferences().unwrap()).unwrap();
+    assert_eq!(prefs["transparency"], 0.25);
+}
+
+#[test]
+fn v2_migration_keeps_already_saved_preferences() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    legacy_catalog(&root, &photos, 2);
+    let c = Connection::open(root.path().join("library.sqlite")).unwrap();
+    c.execute_batch("CREATE TABLE local_preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL) STRICT; INSERT INTO local_preferences VALUES('theme','\"light\"');").unwrap();
+    drop(c);
+    let library = LocalLibrary::open(root.path()).unwrap();
+    assert!(library.photo("photo".into()).unwrap().favorite);
+    let prefs: serde_json::Value = serde_json::from_str(&library.preferences().unwrap()).unwrap();
+    assert_eq!(prefs["theme"], "light");
+    assert_eq!(prefs["glassMode"], "full");
+    assert_eq!(backup_files(&root).len(), 1);
+}
+
+#[test]
+fn failed_v1_migration_rolls_back_schema_and_keeps_backup() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    legacy_catalog(&root, &photos, 1);
+    let c = Connection::open(root.path().join("library.sqlite")).unwrap();
+    c.execute_batch("CREATE TABLE local_preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL CHECK(value='reject')) STRICT;").unwrap();
+    drop(c);
+    assert!(LocalLibrary::open(root.path()).is_err());
+    let c = Connection::open(root.path().join("library.sqlite")).unwrap();
+    assert_eq!(
+        c.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        c.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('media') WHERE name='original_uri'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        c.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='album_preferences'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        c.query_row("SELECT favorite FROM media", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(backup_files(&root).len(), 1);
+}
+
+#[test]
+fn migration_backup_failure_leaves_database_untouched() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    legacy_catalog(&root, &photos, 1);
+    fs::write(
+        root.path().join("backups"),
+        b"cannot create a directory here",
+    )
+    .unwrap();
+    assert!(LocalLibrary::open(root.path()).is_err());
+    let c = Connection::open(root.path().join("library.sqlite")).unwrap();
+    assert_eq!(
+        c.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        c.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('media') WHERE name='original_uri'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        c.query_row("SELECT favorite FROM media", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
 }

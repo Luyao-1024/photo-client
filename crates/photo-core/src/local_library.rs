@@ -17,6 +17,7 @@ const SCHEMA_VERSION: i64 = 3;
 mod save;
 mod system_trash;
 mod tools;
+mod migrations;
 pub use tools::{BrowseIndex, SourceInfo};
 type Job = Box<dyn FnOnce(&mut Connection) + Send>;
 enum Message {
@@ -203,35 +204,7 @@ impl LocalLibrary {
                 .map_err(error)?;
             transaction.commit().map_err(error)?;
         } else if current < SCHEMA_VERSION {
-            // v1 predates local file operations. Preserve it rather than guessing
-            // column layouts; v2 -> v3 is additive and leaves originals intact.
-            if current != 2 {
-                return Err("SchemaUpgradeRequired".into());
-            }
-            let tx = connection.transaction().map_err(error)?;
-            tx.execute_batch(include_str!("storage/local-v3.sql"))
-                .map_err(error)?;
-            tx.pragma_update(None, "user_version", SCHEMA_VERSION)
-                .map_err(error)?;
-            tx.execute("UPDATE app_meta SET schema_version=?1", [SCHEMA_VERSION])
-                .map_err(error)?;
-            tx.execute(
-                "INSERT OR REPLACE INTO schema_migrations VALUES(?1,?2,?3)",
-                params![
-                    SCHEMA_VERSION,
-                    format!(
-                        "{:x}",
-                        Sha256::digest(
-                            [SCHEMA, include_str!("storage/local-v3.sql")]
-                                .concat()
-                                .as_bytes()
-                        )
-                    ),
-                    now_ms()
-                ],
-            )
-            .map_err(error)?;
-            tx.commit().map_err(error)?;
+            migrations::upgrade(&mut connection, &root, current)?;
         }
         connection
             .execute_batch(include_str!("storage/local-v3.sql"))

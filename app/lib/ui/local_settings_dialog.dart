@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'glass_surface.dart';
+import 'glass_dialog.dart';
+import 'glass_theme.dart';
 import 'local_library_controller.dart';
 import 'presentation_preferences.dart';
 import 'strings.dart';
@@ -61,7 +62,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
     final strings = AppStrings.of(context);
     final accepted = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassAlertDialog(
         title: Text(strings.pick('移除来源？', 'Remove source?')),
         content: Text(
           strings.pick(
@@ -109,13 +110,15 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
     ];
     Widget section(String title, List<Widget> children) => Padding(
       padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 10),
-          ...children,
-        ],
+      child: GlassSection(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 10),
+            ...children,
+          ],
+        ),
       ),
     );
     final pages = <Widget>[
@@ -417,96 +420,92 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
         ],
       ),
     ];
-    return Dialog(
+    return GlassDialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 900, maxHeight: 720),
-        child: GlassSurface(
-          role: GlassRole.reading,
-          radius: 24,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 12, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      strings.settings,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('settings-close'),
+                    tooltip: strings.close,
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            if (_failed || preferences.saveFailed)
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 12, 12),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
-                        strings.settings,
-                        style: Theme.of(context).textTheme.titleLarge,
+                        strings.pick(
+                          '设置读取或保存失败，请重试。',
+                          'Could not read or save settings. Please retry.',
+                        ),
                       ),
                     ),
-                    IconButton(
-                      key: const ValueKey('settings-close'),
-                      tooltip: strings.close,
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
+                    TextButton(onPressed: _reload, child: Text(strings.retry)),
                   ],
                 ),
               ),
-              if (_failed || preferences.saveFailed)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          strings.pick(
-                            '设置读取或保存失败，请重试。',
-                            'Could not read or save settings. Please retry.',
-                          ),
+            Flexible(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 600;
+                  final content = SingleChildScrollView(
+                    key: const ValueKey('settings-content'),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          titles[_category],
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
-                      ),
-                      TextButton(
-                        onPressed: _reload,
-                        child: Text(strings.retry),
-                      ),
-                    ],
-                  ),
-                ),
-              Flexible(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 600;
-                    final content = SingleChildScrollView(
-                      key: const ValueKey('settings-content'),
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            titles[_category],
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 24),
-                          pages[_category],
-                        ],
-                      ),
-                    );
-                    final navigation = compact
-                        ? SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: [
-                                for (var i = 0; i < categories.length; i++)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    child: ChoiceChip(
-                                      key: ValueKey('settings-category-$i'),
-                                      label: Text(categories[i]),
-                                      selected: _category == i,
-                                      onSelected: (_) =>
-                                          setState(() => _category = i),
-                                    ),
+                        const SizedBox(height: 24),
+                        pages[_category],
+                      ],
+                    ),
+                  );
+                  final navigation = compact
+                      ? SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (var i = 0; i < categories.length; i++)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
                                   ),
-                              ],
-                            ),
-                          )
-                        : SizedBox(
-                            width: 180,
+                                  child: ChoiceChip(
+                                    key: ValueKey('settings-category-$i'),
+                                    label: Text(categories[i]),
+                                    selected: _category == i,
+                                    onSelected: (_) =>
+                                        setState(() => _category = i),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        )
+                      : SizedBox(
+                          width: 180,
+                          child: Material(
+                            color: GlassTheme.of(context).inset,
                             child: ListView(
                               padding: const EdgeInsets.all(12),
                               children: [
@@ -522,28 +521,28 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                                   ),
                               ],
                             ),
-                          );
-                    return compact
-                        ? Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              navigation,
-                              Flexible(child: content),
-                            ],
-                          )
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              navigation,
-                              const VerticalDivider(width: 1),
-                              Expanded(child: content),
-                            ],
-                          );
-                  },
-                ),
+                          ),
+                        );
+                  return compact
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            navigation,
+                            Flexible(child: content),
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            navigation,
+                            const VerticalDivider(width: 1),
+                            Expanded(child: content),
+                          ],
+                        );
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

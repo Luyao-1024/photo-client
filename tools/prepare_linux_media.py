@@ -11,9 +11,11 @@ import ctypes
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import zipfile
 
@@ -106,13 +108,49 @@ def prepare():
     return RUNTIME if RUNTIME.exists() else None
 
 
+def prepare_heif_linker():
+    """Supply -lheif's linker name even when only the runtime is installed.
+
+    Prefer our bundled decoder. Otherwise ask the host compiler for the system
+    runtime, without assuming Fedora's /lib64 or Debian's multiarch layout.
+    Keep the development-only alias out of the application bundle.
+    """
+    library = RUNTIME / 'usr/lib64/libheif.so.1'
+    if not library.is_file():
+        compiler = shlex.split(os.environ.get('CC', 'cc'))
+        result = subprocess.run(
+            [*compiler, '-print-file-name=libheif.so.1'],
+            check=True, capture_output=True, text=True,
+        )
+        library = Path(result.stdout.strip())
+        if not library.is_absolute() or not library.is_file():
+            raise RuntimeError('Cannot locate libheif.so.1; install the libheif development package.')
+    library = library.resolve()
+    directory = ROOT / '.tooling/media-link'
+    directory.mkdir(parents=True, exist_ok=True)
+    link = directory / 'libheif.so'
+    if not link.is_symlink() or os.readlink(link) != str(library):
+        # Atomic replacement also allows two build commands to prepare together.
+        with tempfile.TemporaryDirectory(dir=directory) as pending:
+            temporary = Path(pending) / link.name
+            temporary.symlink_to(library)
+            temporary.replace(link)
+    return directory
+
+
 def environment(env=None):
     result = dict(os.environ if env is None else env)
     runtime = prepare()
+    linker = prepare_heif_linker()
+    library_paths = [str(linker)]
     if runtime:
+        library_paths.append(str(runtime / 'usr/lib64'))
         for key, value in [('PKG_CONFIG_PATH', str(runtime / 'usr/lib64/pkgconfig')),
                            ('LD_LIBRARY_PATH', str(runtime / 'usr/lib64'))]:
             result[key] = value + (os.pathsep + result[key] if result.get(key) else '')
+    if result.get('LIBRARY_PATH'):
+        library_paths.append(result['LIBRARY_PATH'])
+    result['LIBRARY_PATH'] = os.pathsep.join(library_paths)
     return result, runtime
 
 

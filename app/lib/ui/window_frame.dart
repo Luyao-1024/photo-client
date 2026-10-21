@@ -23,7 +23,7 @@ class WindowFrame extends StatelessWidget {
           children: [
             Positioned.fill(
               child: Material(
-                color: Theme.of(context).scaffoldBackgroundColor,
+                color: Colors.transparent,
                 child: Column(
                   children: [
                     if (!fullscreen)

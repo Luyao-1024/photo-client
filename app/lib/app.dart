@@ -5,19 +5,21 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import 'platform/in_app_source_picker.dart';
+import 'services/app_navigation.dart';
 import 'services/core_gateway.dart';
 import 'services/local_library_gateway.dart';
-import 'ui/photo_theme.dart';
-import 'ui/window_frame.dart';
 import 'services/window_controller.dart';
-import 'services/app_navigation.dart';
-import 'platform/in_app_source_picker.dart';
+import 'ui/auto_glass_policy.dart';
+import 'ui/glass_dialog.dart';
+import 'ui/glass_theme.dart';
 import 'ui/library_shell.dart';
 import 'ui/local_library_controller.dart';
+import 'ui/photo_theme.dart';
 import 'ui/presentation_preferences.dart';
 import 'ui/runtime_controller.dart';
 import 'ui/strings.dart';
-import 'ui/auto_glass_policy.dart';
+import 'ui/window_frame.dart';
 
 class PhotoClientApp extends StatelessWidget {
   const PhotoClientApp({super.key, required this.gateway, this.sourcePicker});
@@ -78,7 +80,7 @@ class _ApplicationState extends ConsumerState<_Application>
       final strings = AppStrings.of(context);
       return await showDialog<bool>(
             context: context,
-            builder: (context) => AlertDialog(
+            builder: (context) => GlassAlertDialog(
               title: Text(strings.pick('停止扫描并退出？', 'Stop scanning and close?')),
               content: Text(
                 strings.pick(
@@ -165,7 +167,11 @@ class _ApplicationState extends ConsumerState<_Application>
             'p75=${diagnostic.p75Ms} p95=${diagnostic.p95Ms} '
             'frames=${diagnostic.framesMeasured} '
             'requested=${preferences.glassMode} '
-            'bounds=${preferences.glassMode == 'full' ? 'premium' : preferences.glassMode == 'auto' ? 'minimal' : 'standard'}'
+            'bounds=${preferences.glassMode == 'full'
+                ? 'premium'
+                : preferences.glassMode == 'auto'
+                ? 'minimal'
+                : 'standard'}'
             '..${preferences.glassMode == 'reduced' ? 'standard' : 'premium'}',
           );
         },
@@ -185,7 +191,9 @@ class _ApplicationState extends ConsumerState<_Application>
                     preferences.reduceMotion ||
                     MediaQuery.disableAnimationsOf(context),
               ),
-              child: WindowFrame(child: child ?? const SizedBox.shrink()),
+              child: GlassBackdrop(
+                child: WindowFrame(child: child ?? const SizedBox.shrink()),
+              ),
             );
           },
         ),

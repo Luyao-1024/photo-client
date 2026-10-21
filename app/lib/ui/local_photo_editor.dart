@@ -3,16 +3,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import '../services/window_controller.dart';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
+import '../services/window_controller.dart';
+import 'glass_dialog.dart';
 import 'glass_surface.dart';
-import 'photo_theme.dart';
 import 'local_library_controller.dart';
 import 'local_photo_image.dart';
+import 'photo_theme.dart';
 import 'presentation_preferences.dart';
 import 'strings.dart';
 
@@ -135,7 +134,7 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
     try {
       return await showDialog<bool>(
             context: context,
-            builder: (context) => AlertDialog(
+            builder: (context) => GlassAlertDialog(
               title: Text(strings.discardEditsTitle),
               content: Text(strings.discardEditsBody),
               actions: [
@@ -171,7 +170,7 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
     if (!copy) {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => GlassAlertDialog(
           title: Text(strings.saveOverwrite),
           content: Text(
             strings.pick(
@@ -279,7 +278,10 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final preview = _preview(strings, preferences);
-                    final controls = _sidePanel(strings, preferences);
+                    final controls = Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: _sidePanel(strings, preferences),
+                    );
                     return constraints.maxWidth >= 700
                         ? Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -313,8 +315,8 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
   Widget _sidePanel(AppStrings strings, PresentationPreferences preferences) =>
       GlassSurface(
         key: const ValueKey('editor-controls'),
-        role: GlassRole.reading,
-        radius: 0,
+        role: GlassRole.overlay,
+        radius: 20,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

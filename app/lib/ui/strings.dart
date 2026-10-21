@@ -56,8 +56,8 @@ class AppStrings {
   );
   String get glass => pick('玻璃材质', 'Glass material');
   String get glassHint => pick(
-    '分段器使用裁切模糊，其余表面使用半透明填充；高对比度时提高不透明度。',
-    'The segmented control uses clipped blur; other surfaces use a translucent fill. High contrast raises opacity.',
+    '导航、工具栏与弹窗使用统一玻璃材质。表单与菜单保持更高不透明度，保证阅读清晰。',
+    'Navigation, toolbars and dialogs share one glass material. Forms and menus stay more opaque for clear reading.',
   );
 
   String get localStage => pick('本地图库', 'Local library');

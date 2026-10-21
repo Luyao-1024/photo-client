@@ -10,11 +10,7 @@ import 'strings.dart';
 /// per-segment filled background. See ui-design.md "Year/Month/Day Mode
 /// Selector" and ui-liquid-glass.md "Canonical Segmented Style".
 class ModeSelector extends StatelessWidget {
-  const ModeSelector({
-    super.key,
-    required this.mode,
-    required this.onChanged,
-  });
+  const ModeSelector({super.key, required this.mode, required this.onChanged});
 
   final GroupMode mode;
   final ValueChanged<GroupMode> onChanged;
@@ -30,6 +26,7 @@ class ModeSelector extends StatelessWidget {
       height: 48,
       width: 264,
       child: GlassSurface(
+        role: GlassRole.raised,
         live: true,
         radius: 24,
         child: Row(
@@ -45,7 +42,7 @@ class ModeSelector extends StatelessWidget {
                   label: label,
                   active: mode == value,
                   activeColor: scheme.onSurface,
-                  inactiveColor: scheme.onSurface.withValues(alpha: .55),
+                  inactiveColor: scheme.onSurfaceVariant,
                   indicatorColor: scheme.primary,
                   onTap: () => onChanged(value),
                 ),

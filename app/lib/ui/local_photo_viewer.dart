@@ -1,21 +1,22 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
+import '../services/window_controller.dart';
+import 'glass_dialog.dart';
 import 'glass_surface.dart';
-import 'photo_theme.dart';
 import 'local_library_controller.dart';
 import 'local_photo_editor.dart';
 import 'local_photo_image.dart';
+import 'local_video_stage.dart';
+import 'photo_theme.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
-import 'local_video_stage.dart';
-import '../services/window_controller.dart';
 
 /// Media-stage viewer per photoViewer/docs/modules/ui-design.md "Viewer Page":
 /// a full-bleed dark stage with floating glass chrome — header (date, position,
@@ -326,7 +327,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     final strings = AppStrings.of(context);
     final accepted = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassAlertDialog(
         title: Text(strings.confirmTrashTitle(1)),
         content: Text(strings.confirmTrashBody),
         actions: [
@@ -384,7 +385,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     final controller = TextEditingController(text: photo.name);
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassAlertDialog(
         title: Text(strings.renamePhoto),
         content: TextField(
           key: const ValueKey('viewer-rename-field'),
@@ -999,7 +1000,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     required LocalLibraryController controller,
   }) => GlassSurface(
     key: const ValueKey('viewer-header'),
-    radius: 18,
+    role: GlassRole.raised,
+    live: true,
+    radius: 20,
     child: SafeArea(
       bottom: false,
       child: Padding(
@@ -1181,7 +1184,8 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       constraints: const BoxConstraints(maxWidth: 720),
       child: GlassSurface(
         key: const ValueKey('viewer-filmstrip'),
-        radius: 18,
+        role: GlassRole.raised,
+        radius: 20,
         child: SizedBox(
           height: _stripHeight,
           child: LayoutBuilder(
@@ -1288,7 +1292,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
           constraints: const BoxConstraints(maxWidth: 340),
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 220),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             builder: (context, t, child) => Transform.translate(
               offset: Offset((1 - t) * 380, 0),
@@ -1298,7 +1304,8 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
               width: 340,
               child: GlassSurface(
                 key: const ValueKey('viewer-details-panel'),
-                radius: 18,
+                role: GlassRole.overlay,
+                radius: 20,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

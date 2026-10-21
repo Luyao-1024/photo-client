@@ -1,6 +1,6 @@
 {
   "contract_version": 1,
-  "purpose": "design_tokens_not_implemented_theme",
+  "purpose": "design_reference_with_shared_flutter_material_tokens",
   "spacing": [
     4,
     8,
@@ -93,5 +93,28 @@
     "base_alpha_delta": 0.1,
     "normal_max_alpha": 0.98,
     "high_contrast_alpha": 1.0
+  },
+  "implementation": "app/lib/ui/glass_theme.dart and app/lib/ui/glass_surface.dart",
+  "roles": {
+    "chrome": {
+      "base_alpha": 0.25,
+      "floor": 0.12,
+      "ceiling": 0.4
+    },
+    "raised": {
+      "base_alpha": 0.4,
+      "floor": 0.32,
+      "ceiling": 0.5
+    },
+    "overlay": {
+      "base_alpha": 0.88,
+      "floor": 0.86,
+      "ceiling": 0.94
+    },
+    "reading": {
+      "base_alpha": 0.96,
+      "floor": 0.94,
+      "ceiling": 0.98
+    }
   }
 }

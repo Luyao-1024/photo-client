@@ -2,12 +2,13 @@
 # One-click launcher for the photo-client Linux desktop app.
 #
 #   tools/run_app release            run the built release bundle (foreground)
+#   tools/run_app release --build    build current sources, then run
 #   tools/run_app dev                flutter run -d linux (debug, hot reload)
 #
 # By default this is your REAL environment: your real desktop (native Wayland
 # when present, else X11) and the app's real default library
 # ($XDG_DATA_HOME/photo-client/library, else ~/.local/share/...). No isolation.
-# Isolation is opt-in only: --headless (private Xvfb) and --data-root DIR.
+# Only automated test cases use isolation: --headless and --data-root DIR.
 #
 # Display selection: native Wayland when the user session exposes one, else
 # X11/XWayland; --x11 forces X11, --headless runs on a private Xvfb display so
@@ -15,7 +16,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FLUTTER_ROOT="${PHOTO_FLUTTER_ROOT:-$HOME/.local/share/photo-client/flutter}"
 BUNDLE="$ROOT/app/build/linux/x64/release/bundle/photo_client"
 
 mode="release"
@@ -24,6 +24,7 @@ display_mode="auto"
 do_build=0
 background=0
 XVFB_PID=""
+APP_PID=""
 
 usage() {
   cat <<'EOF'
@@ -34,12 +35,12 @@ Modes:
   dev                run `flutter run -d linux` (debug, hot reload, foreground)
 
 Options:
-  --data-root DIR    override the library data root
+  --data-root DIR    (tests only) override the library data root
                      (default: the app's real default library, no isolation)
   --x11              force X11/XWayland instead of native Wayland
   --headless         private Xvfb display; no window on your desktop (test only)
   --build            (release) rebuild via tools/platform before running
-  --background       detach with nohup; print PID and log path
+  --background       (release) detach with nohup; print PID and log path
   -h, --help         show this help
 EOF
 }
@@ -47,7 +48,12 @@ EOF
 while [ $# -gt 0 ]; do
   case "$1" in
     release|dev) mode="$1"; shift ;;
-    --data-root) data_root="${2:?--data-root needs a value}"; shift 2 ;;
+    --data-root)
+      if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" == --* ]]; then
+        echo "run_app: --data-root needs a directory" >&2
+        exit 2
+      fi
+      data_root="$2"; shift 2 ;;
     --x11) display_mode="x11"; shift ;;
     --headless) display_mode="headless"; shift ;;
     --build) do_build=1; shift ;;
@@ -57,7 +63,70 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-export PATH="$FLUTTER_ROOT/bin:$PATH"
+if [ -n "$data_root" ]; then
+  data_root="$(python3 -B - "$data_root" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).expanduser().absolute())
+PY
+)"
+fi
+
+if [ "$mode" = "dev" ] && [ "$background" = 1 ]; then
+  echo "run_app: dev uses foreground hot reload; --background requires release" >&2
+  exit 2
+fi
+if [ "$mode" = "dev" ] && [[ "$data_root" == *,* ]]; then
+  echo "run_app: Flutter dev splits arguments at commas; use a data-root without commas" >&2
+  exit 2
+fi
+
+setup_flutter() {
+  if [ -n "${PHOTO_FLUTTER_ROOT:-}" ]; then
+    if [ ! -x "$PHOTO_FLUTTER_ROOT/bin/flutter" ]; then
+      echo "run_app: PHOTO_FLUTTER_ROOT/bin/flutter is not executable" >&2
+      exit 2
+    fi
+    export PATH="$PHOTO_FLUTTER_ROOT/bin:$PATH"
+  elif command -v flutter >/dev/null 2>&1; then
+    return
+  else
+    local sdk="${XDG_DATA_HOME:-$HOME/.local/share}/photo-client/flutter"
+    if [ ! -x "$sdk/bin/flutter" ]; then
+      echo "run_app: Flutter not found; set PHOTO_FLUTTER_ROOT or add flutter to PATH" >&2
+      exit 2
+    fi
+    export PHOTO_FLUTTER_ROOT="$sdk" PATH="$sdk/bin:$PATH"
+  fi
+}
+
+cleanup() {
+  if [ -n "$APP_PID" ]; then
+    kill "$APP_PID" 2>/dev/null || true
+    wait "$APP_PID" 2>/dev/null || true
+  fi
+  if [ -n "$XVFB_PID" ]; then
+    kill "$XVFB_PID" 2>/dev/null || true
+    wait "$XVFB_PID" 2>/dev/null || true
+  fi
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Keep the parent alive to own/reap Xvfb, including when running Flutter dev.
+run_foreground() {
+  if [ "$display_mode" = "headless" ]; then
+    "$@" <&0 &
+    APP_PID=$!
+    local status=0
+    wait "$APP_PID" || status=$?
+    APP_PID=""
+    return "$status"
+  fi
+  exec "$@"
+}
 
 # An empty data_root means "let the app use its real default library"; we then
 # pass no --data-root at all, so there is no isolation by default.
@@ -74,9 +143,10 @@ setup_display() {
       if kill -0 "$XVFB_PID" 2>/dev/null; then
         export DISPLAY=":$n" GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1
         unset WAYLAND_DISPLAY || true
-        trap '[ -n "$XVFB_PID" ] && kill "$XVFB_PID" 2>/dev/null' EXIT
         return 0
       fi
+      wait "$XVFB_PID" 2>/dev/null || true
+      XVFB_PID=""
     done
     echo "run_app: no free Xvfb display in :90..:99" >&2
     exit 1
@@ -84,19 +154,20 @@ setup_display() {
   export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
   export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
   if [ "$display_mode" = "x11" ]; then
-    export GDK_BACKEND=x11 DISPLAY="${DISPLAY:-:1}"
-  elif [ -S "$XDG_RUNTIME_DIR/wayland-0" ]; then
+    export GDK_BACKEND=x11 DISPLAY="${DISPLAY:-:0}"
+    unset WAYLAND_DISPLAY || true
+  elif [ -S "${WAYLAND_DISPLAY:-$XDG_RUNTIME_DIR/wayland-0}" ] ||
+       [ -S "$XDG_RUNTIME_DIR/${WAYLAND_DISPLAY:-wayland-0}" ]; then
     export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
     unset GDK_BACKEND || true
   else
     export GDK_BACKEND=x11 DISPLAY="${DISPLAY:-:0}"
+    unset WAYLAND_DISPLAY || true
   fi
 }
 
-setup_display
-display_label="${WAYLAND_DISPLAY:-$DISPLAY}"
-
 if [ "$mode" = "dev" ]; then
+  setup_flutter
   # `flutter run` alone cannot bring the app up: the Dart side requires the
   # generated PHOTO_PROFILE_* dart-defines (otherwise the core refuses to
   # initialize with BuildProfileMissing), and the runner only installs whatever
@@ -115,8 +186,9 @@ for key, value in json.load(open(sys.argv[1], encoding="utf-8")).items():
 PY
 )"
   native_library="$ROOT/target/debug/libphoto_bridge.so"
+  export CARGO_TARGET_DIR="$ROOT/target" PHOTO_NATIVE_LIB_DIR="$ROOT/target/debug"
   echo "run_app: dev building native core (cargo build -p photo-bridge)"
-  if ! (cd "$ROOT" && cargo build --locked -p photo-bridge); then
+  if ! (cd "$ROOT" && python3 -B "$ROOT/tools/prepare_linux_media.py" exec cargo build --locked -p photo-bridge); then
     echo "run_app: dev native core build failed" >&2
     exit 1
   fi
@@ -125,17 +197,24 @@ PY
     exit 1
   fi
   cd "$ROOT/app"
+  setup_display
+  display_label="${WAYLAND_DISPLAY:-${DISPLAY:-}}"
   echo "run_app: dev (flutter run -d linux) data-root=$data_root_label display=$display_label"
+  flutter_args=(--no-version-check run -d linux "--dart-define-from-file=$defines_file")
   if [ -n "$data_root" ]; then
-    exec python3 "$ROOT/tools/prepare_linux_media.py" exec flutter run -d linux --dart-define-from-file="$defines_file" -- --data-root="$data_root"
+    flutter_args+=("--dart-entrypoint-args=--data-root=$data_root")
   fi
-  exec python3 "$ROOT/tools/prepare_linux_media.py" exec flutter run -d linux --dart-define-from-file="$defines_file"
+  run_foreground python3 -B "$ROOT/tools/prepare_linux_media.py" exec flutter "${flutter_args[@]}"
+  exit $?
 fi
 
 if [ "$do_build" = 1 ] || [ ! -x "$BUNDLE" ]; then
+  setup_flutter
   python3 -B "$ROOT/tools/platform" build --profile linux-x86_64 --mode release
 fi
 
+setup_display
+display_label="${WAYLAND_DISPLAY:-${DISPLAY:-}}"
 app_args=()
 if [ -n "$data_root" ]; then app_args=(--data-root="$data_root"); fi
 
@@ -146,10 +225,8 @@ if [ "$display_mode" = "headless" ]; then
   if [ "$background" = 1 ]; then
     echo "run_app: --background ignored with --headless; running foreground" >&2
   fi
-  "$BUNDLE" "${app_args[@]}" &
-  app_pid=$!
-  wait "$app_pid"
-  exit 0
+  run_foreground "$BUNDLE" "${app_args[@]}"
+  exit $?
 fi
 
 if [ "$background" = 1 ]; then
@@ -157,5 +234,5 @@ if [ "$background" = 1 ]; then
   nohup "$BUNDLE" "${app_args[@]}" >"$log" 2>&1 &
   echo "run_app: PID=$! log=$log"
 else
-  exec "$BUNDLE" "${app_args[@]}"
+  run_foreground "$BUNDLE" "${app_args[@]}"
 fi

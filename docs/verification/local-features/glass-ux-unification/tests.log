@@ -1,0 +1,78 @@
+00:00 +0: loading /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: (setUpAll)
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: batch delete confirms, moves to trash, and can be restored
+GLASS_EFFECTIVE premium/probe/frost=true
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+GLASS_EFFECTIVE premium/probe/frost=true
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/window_frame_test.dart: titlebar buttons minimize, maximize/restore, and close
+GLASS_EFFECTIVE premium/probe/frost=true
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: batch delete confirms, moves to trash, and can be restored
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/window_frame_test.dart: titlebar buttons minimize, maximize/restore, and close
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:00 +0: /home/luyao/workspace/Photo/photo-client/app/test/window_frame_test.dart: titlebar buttons minimize, maximize/restore, and close
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:00 +1: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+00:00 +2: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+00:00 +2: /home/luyao/workspace/Photo/photo-client/app/test/window_frame_test.dart: Shift+F fullscreen hides the titlebar and restores it
+GLASS_EFFECTIVE premium/probe/frost=true
+00:00 +3: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+00:00 +3: /home/luyao/workspace/Photo/photo-client/app/test/window_frame_test.dart: Shift+F fullscreen hides the titlebar and restores it
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:01 +4: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+00:01 +4: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: empty trash confirms before permanently deleting
+GLASS_EFFECTIVE premium/probe/frost=true
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:01 +5: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+00:01 +5: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: copy to album records the destination and copy semantics
+GLASS_EFFECTIVE premium/probe/frost=true
+00:01 +6: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 390x844 and hover changes nothing
+00:01 +6: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: copy to album records the destination and copy semantics
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:01 +7: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: copy to album records the destination and copy semantics
+00:01 +7: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 800x600 and hover changes nothing
+GLASS_EFFECTIVE premium/probe/frost=true
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:01 +8: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 800x600 and hover changes nothing
+00:01 +8: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: Ctrl+F opens search and the scope selector drives the query
+GLASS_EFFECTIVE premium/probe/frost=true
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:02 +9: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 800x600 and hover changes nothing
+00:02 +9: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: F1 opens the keyboard shortcut reference
+GLASS_EFFECTIVE premium/probe/frost=true
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:02 +10: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: F1 opens the keyboard shortcut reference
+00:02 +10: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 1440x900 and hover changes nothing
+GLASS_EFFECTIVE premium/probe/frost=true
+00:02 +11: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 1440x900 and hover changes nothing
+00:02 +11: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: viewer delete moves the current photo to trash and stays open
+GLASS_EFFECTIVE premium/probe/frost=true
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:02 +11: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 1440x900 and hover changes nothing
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:02 +12: /home/luyao/workspace/Photo/photo-client/app/test/responsive_widths_test.dart: library → viewer → favorite → back → favorite filter works at 1440x900 and hover changes nothing
+00:02 +12: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: editor rotates and overwrites the original on save
+GLASS_EFFECTIVE premium/probe/frost=true
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:02 +13: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: editor rotates and overwrites the original on save
+00:03 +14: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: search destination hides the date mode selector
+GLASS_EFFECTIVE premium/probe/frost=true
+GLASS_QUALITY premium->minimal phase=probe reason=staticProbe p75=null p95=null frames=0 requested=auto bounds=minimal..premium
+GLASS_EFFECTIVE minimal/probe/frost=true
+00:03 +15: /home/luyao/workspace/Photo/photo-client/app/test/library_actions_test.dart: (tearDownAll)
+00:03 +15: All tests passed!

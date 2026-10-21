@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' hide GlassTheme;
 
+import 'glass_theme.dart';
 import 'presentation_preferences.dart';
 
 /// Material roles. Chrome is a floating surface over the page; reading keeps
 /// text on a near-opaque panel.
-enum GlassRole { chrome, reading }
+enum GlassRole { chrome, raised, overlay, reading }
 
 /// A translucent surface.
 ///
@@ -35,6 +36,9 @@ class GlassSurface extends ConsumerWidget {
     final preferences = ref.watch(presentationProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final reading = role == GlassRole.reading;
+    final overlay = role == GlassRole.overlay;
+    final raised = role == GlassRole.raised;
+    final glass = GlassTheme.of(context);
     // High contrast is an accessibility limit, not a material style: the body
     // goes opaque and the refraction is dropped so text keeps its contrast.
     final opaque = media.highContrast;
@@ -42,12 +46,12 @@ class GlassSurface extends ConsumerWidget {
     // the bevel, the rim and the refraction do the reading. A body this
     // opaque turns the surface into a flat panel with a lit border, which is
     // the opposite of the effect.
-    final base = reading ? 0.96 : .25;
+    final base = reading ? .96 : (overlay ? .88 : (raised ? .40 : .25));
     final alpha = (base + (1 - 2 * preferences.transparency) * .10).clamp(
-      reading ? 0.94 : .12,
-      reading ? 0.98 : .40,
+      reading ? .94 : (overlay ? .86 : (raised ? .32 : .12)),
+      reading ? .98 : (overlay ? .94 : (raised ? .50 : .40)),
     );
-    final fill = dark ? const Color(0xff17202e) : Colors.white;
+    final fill = glass.tint;
     final settings = LiquidGlassSettings(
       glassColor: fill.withValues(alpha: opaque ? 1 : alpha),
       // A reading panel is a wall, not a lens: no bevel, no refraction.
@@ -56,7 +60,7 @@ class GlassSurface extends ConsumerWidget {
       // jagged ring at the edge. A shallow bevel with a tight blur keeps the
       // refraction and keeps the edge clean.
       thickness: reading ? 0 : (live ? 16 : 12),
-      blur: reading ? 0 : 2,
+      blur: reading ? 0 : (overlay ? 6 : 2),
       frost: 0,
       chromaticAberration: live ? 0.004 : 0,
       saturation: reading ? 1 : 1.4,
@@ -73,18 +77,42 @@ class GlassSurface extends ConsumerWidget {
       bodyShade: dark ? 0.2 : 0,
       shadowElevation: reading ? 0 : 1,
     );
-    return GlassContainer(
-      shape: LiquidRoundedSuperellipse(borderRadius: radius),
-      settings: settings,
-      // Reading panels stay on the shader-free path: a near-opaque body makes
-      // the backdrop invisible, so sampling it would only cost frames. The
-      // same goes for high contrast, where the body is fully opaque.
-      quality: reading || opaque
-          ? GlassQuality.minimal
-          : (live ? GlassQuality.premium : GlassQuality.standard),
-      useOwnLayer: true,
-      clipBehavior: Clip.antiAlias,
-      child: Material(type: MaterialType.transparency, child: child),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: radius == 0 || reading || opaque
+            ? const []
+            : [
+                BoxShadow(
+                  color: glass.shadow,
+                  blurRadius: overlay ? 32 : 16,
+                  offset: Offset(0, overlay ? 12 : 4),
+                ),
+              ],
+      ),
+      child: GlassContainer(
+        shape: LiquidRoundedSuperellipse(borderRadius: radius),
+        settings: settings,
+        // Reading panels stay on the shader-free path: a near-opaque body makes
+        // the backdrop invisible, so sampling it would only cost frames. The
+        // same goes for high contrast, where the body is fully opaque.
+        quality: reading || opaque
+            ? GlassQuality.minimal
+            : (live ? GlassQuality.premium : GlassQuality.standard),
+        useOwnLayer: true,
+        clipBehavior: Clip.antiAlias,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(
+              color: opaque
+                  ? Theme.of(context).colorScheme.outline
+                  : glass.edge,
+            ),
+          ),
+          child: Material(type: MaterialType.transparency, child: child),
+        ),
+      ),
     );
   }
 }

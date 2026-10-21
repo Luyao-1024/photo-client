@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/local_library_gateway.dart';
+import 'glass_dialog.dart';
 import 'local_photo_image.dart';
 import 'strings.dart';
 
@@ -206,7 +207,7 @@ class _PhotoTileState extends State<PhotoTile> {
     final overlay = Overlay.of(context).context.findRenderObject();
     if (overlay is! RenderBox || !overlay.hasSize) return;
     final origin = Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 1, 1);
-    final action = await showMenu<String>(
+    final action = await showGlassMenu<String>(
       context: context,
       position: RelativeRect.fromRect(origin, Offset.zero & overlay.size),
       items: [
@@ -515,7 +516,7 @@ Future<void> showPhotoDetails(BuildContext context, LocalPhoto photo) {
   final modified = DateTime.fromMillisecondsSinceEpoch(photo.modifiedMs);
   return showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => GlassAlertDialog(
       title: Text(photo.name),
       content: Column(
         mainAxisSize: MainAxisSize.min,

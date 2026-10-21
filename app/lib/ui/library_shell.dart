@@ -6,14 +6,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
+import '../services/window_controller.dart';
+import 'glass_dialog.dart';
 import 'glass_surface.dart';
+import 'glass_theme.dart';
+import 'local_album_actions.dart';
 import 'local_library_controller.dart';
 import 'local_library_pane.dart';
-import 'strings.dart';
 import 'local_settings_dialog.dart';
-import 'local_album_actions.dart';
 import 'runtime_controller.dart';
-import '../services/window_controller.dart';
+import 'strings.dart';
 
 class LibraryShell extends ConsumerStatefulWidget {
   const LibraryShell({super.key});
@@ -107,18 +109,21 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
                 children: [
                   SizedBox(
                     width: compact ? _compactSidebarWidth : _sidebarWidth,
-                    child: GlassSurface(
-                      radius: 0,
-                      child: _Sidebar(
-                        destination: _destination,
-                        library: library,
-                        onPhotos: _showPhotos,
-                        onFavorites: _showFavorites,
-                        onAlbum: _showAlbum,
-                        onMediaType: _showMediaType,
-                        onTrash: _showTrash,
-                        onSettings: _openSettings,
-                        compact: compact,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(compact ? 4 : 12, 12, 4, 12),
+                      child: GlassSurface(
+                        radius: GlassTheme.dialogRadius,
+                        child: _Sidebar(
+                          destination: _destination,
+                          library: library,
+                          onPhotos: _showPhotos,
+                          onFavorites: _showFavorites,
+                          onAlbum: _showAlbum,
+                          onMediaType: _showMediaType,
+                          onTrash: _showTrash,
+                          onSettings: _openSettings,
+                          compact: compact,
+                        ),
                       ),
                     ),
                   ),
@@ -247,18 +252,22 @@ class _SidebarState extends ConsumerState<_Sidebar> {
             compact: true,
             onTap: () => showModalBottomSheet<void>(
               context: context,
-              builder: (context) => SafeArea(
-                child: SizedBox(
-                  height: 440,
-                  child: ListView.builder(
-                    itemCount: library.albums.length,
-                    itemBuilder: (context, index) => ListTile(
-                      title: Text(library.albums[index].name),
-                      subtitle: Text('${library.albums[index].count}'),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        widget.onAlbum(library.albums[index]);
-                      },
+              builder: (context) => GlassSurface(
+                role: GlassRole.overlay,
+                radius: GlassTheme.dialogRadius,
+                child: SafeArea(
+                  child: SizedBox(
+                    height: 440,
+                    child: ListView.builder(
+                      itemCount: library.albums.length,
+                      itemBuilder: (context, index) => ListTile(
+                        title: Text(library.albums[index].name),
+                        subtitle: Text('${library.albums[index].count}'),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          widget.onAlbum(library.albums[index]);
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -395,7 +404,7 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
   Future<void> _menu(TapUpDetails details) async {
     final strings = AppStrings.of(context);
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final action = await showMenu<String>(
+    final action = await showGlassMenu<String>(
       context: context,
       position: RelativeRect.fromRect(
         Rect.fromLTWH(
@@ -426,7 +435,7 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
         final text = TextEditingController(text: widget.album.name);
         final name = await showDialog<String>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => GlassAlertDialog(
             title: Text(strings.pick('重命名相册', 'Rename album')),
             content: TextField(
               key: const ValueKey('album-rename-field'),
@@ -457,7 +466,7 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
       } else {
         final accepted = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => GlassAlertDialog(
             title: Text(strings.pick('移除相册？', 'Remove album?')),
             content: Text(
               strings.pick(
@@ -499,11 +508,8 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
   Widget build(BuildContext context) {
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Material(
-        color: widget.selected
-            ? Theme.of(context).colorScheme.primary.withValues(alpha: .12)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+      child: _NavigationSurface(
+        selected: widget.selected,
         child: InkWell(
           key: ValueKey('sidebar-album-${widget.album.path}'),
           borderRadius: BorderRadius.circular(10),
@@ -641,42 +647,80 @@ class _NavRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final row = InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 42,
-        margin: EdgeInsets.fromLTRB(indent ? 12 : 8, 1, 8, 1),
-        padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 12),
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primary.withValues(alpha: .14)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisAlignment: compact
-              ? MainAxisAlignment.center
-              : MainAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20, color: selected ? scheme.primary : null),
-            if (!compact) ...[
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+    final row = Padding(
+      padding: EdgeInsets.fromLTRB(indent ? 12 : 8, 2, 8, 2),
+      child: _NavigationSurface(
+        selected: selected,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
+          child: Container(
+            height: 44,
+            padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 12),
+            child: Row(
+              mainAxisAlignment: compact
+                  ? MainAxisAlignment.center
+                  : MainAxisAlignment.start,
+              children: [
+                Icon(icon, size: 20, color: selected ? scheme.primary : null),
+                if (!compact) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
-          ],
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
     return compact ? Tooltip(message: label, child: row) : row;
+  }
+}
+
+/// Selection is lightweight ink and tint inside the sidebar's single material.
+class _NavigationSurface extends StatelessWidget {
+  const _NavigationSurface({required this.selected, required this.child});
+  final bool selected;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final glass = GlassTheme.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      selected: selected,
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: selected ? glass.selection : Colors.transparent,
+          borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
+          border: Border.all(
+            color: selected
+                ? scheme.primary.withValues(alpha: .24)
+                : Colors.transparent,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
+          clipBehavior: Clip.antiAlias,
+          child: child,
+        ),
+      ),
+    );
   }
 }
 
@@ -725,7 +769,7 @@ class ShortcutReferenceDialog extends StatelessWidget {
         ],
       ),
     ];
-    return AlertDialog(
+    return GlassAlertDialog(
       title: Text(strings.keyboardShortcuts),
       content: SizedBox(
         width: 420,
