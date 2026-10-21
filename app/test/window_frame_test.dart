@@ -1,12 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/app.dart';
 import 'package:photo_client/services/window_controller.dart';
+import 'package:photo_client/ui/glass_theme.dart';
 
 import 'fakes/local_gateway.dart';
 
@@ -17,6 +21,7 @@ void main() {
   late String image;
   late List<MethodCall> calls;
   late bool maximized;
+  final boundaryKey = GlobalKey();
 
   setUpAll(() async {
     fixtures = await Directory.systemTemp.createTemp('photo-window-frame-');
@@ -75,7 +80,12 @@ void main() {
       tester.view.resetDevicePixelRatio();
       tester.platformDispatcher.clearLocaleTestValue();
     });
-    await tester.pumpWidget(PhotoClientApp(gateway: gateway));
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: PhotoClientApp(gateway: gateway),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -91,6 +101,63 @@ void main() {
   }
 
   List<String> methods() => [for (final call in calls) call.method];
+
+  testWidgets(
+    'entire restored frame has transparent rounded corners and retains resize hits',
+    (tester) async => runAsLinux(tester, () async {
+      final gateway = FakeLocalGateway(imagePath: image);
+      await mount(tester, gateway);
+      Future<int> alphaAt(int x, int y) async {
+        final alpha = await tester.runAsync(() async {
+          final boundary =
+              boundaryKey.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary;
+          final bitmap = await boundary.toImage(pixelRatio: 1);
+          final bytes = await bitmap.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          );
+          final alpha = bytes!.getUint8((y * bitmap.width + x) * 4 + 3);
+          bitmap.dispose();
+          return alpha;
+        });
+        return alpha!;
+      }
+
+      final clip = find.byKey(const ValueKey('window-clip'));
+      expect(
+        tester.widget<ClipRRect>(clip).borderRadius,
+        BorderRadius.circular(GlassTheme.windowRadius),
+      );
+      for (final point in [
+        const Offset(1, 1),
+        const Offset(1098, 1),
+        const Offset(1, 898),
+        const Offset(1098, 898),
+      ]) {
+        expect(await alphaAt(point.dx.toInt(), point.dy.toInt()), 0);
+      }
+      expect(await alphaAt(30, 1), 255);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.down(const Offset(1, 1));
+      await mouse.up();
+      await tester.pumpAndSettle();
+      expect(methods(), contains('resize'));
+
+      WindowController.instance.maximized.value = true;
+      await tester.pumpAndSettle();
+      expect(tester.widget<ClipRRect>(clip).borderRadius, BorderRadius.zero);
+      expect(await alphaAt(1, 1), 255);
+      WindowController.instance.maximized.value = false;
+      WindowController.instance.fullscreen.value = true;
+      await tester.pumpAndSettle();
+      expect(tester.widget<ClipRRect>(clip).borderRadius, BorderRadius.zero);
+      expect(find.byKey(const ValueKey('window-titlebar')), findsNothing);
+      WindowController.instance.fullscreen.value = false;
+      await tester.pumpAndSettle();
+      expect(await alphaAt(1, 1), 0);
+      await disposeApp(tester, gateway);
+    }),
+  );
 
   testWidgets(
     'titlebar buttons minimize, maximize/restore, and close',

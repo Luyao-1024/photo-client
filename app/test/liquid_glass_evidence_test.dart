@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:photo_client/ui/glass_surface.dart';
 import 'package:photo_client/ui/mode_selector.dart';
+import 'package:photo_client/ui/photo_theme.dart';
 import 'package:photo_client/ui/photos_grid.dart';
 import 'package:photo_client/ui/presentation_preferences.dart';
 
@@ -91,17 +92,7 @@ class _FixedModeController extends PresentationController {
 
 void _noop(GroupMode _) {}
 
-ThemeData _theme(Brightness brightness) => ThemeData(
-  useMaterial3: true,
-  brightness: brightness,
-  colorScheme: ColorScheme.fromSeed(
-    seedColor: const Color(0xff4f8eff),
-    brightness: brightness,
-  ),
-  scaffoldBackgroundColor: brightness == Brightness.dark
-      ? const Color(0xff121721)
-      : const Color(0xffeef1f6),
-);
+ThemeData _theme(Brightness brightness) => photoTheme(brightness);
 
 class _Sidebar extends StatelessWidget {
   const _Sidebar({required this.brightness});
@@ -130,7 +121,10 @@ class _Sidebar extends StatelessWidget {
                   const SizedBox(width: 12),
                   Text(
                     label,
-                    style: TextStyle(fontSize: 13, color: on.withValues(alpha: .8)),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: on.withValues(alpha: .8),
+                    ),
                   ),
                 ],
               ),
@@ -148,7 +142,10 @@ class _Sidebar extends StatelessWidget {
                 const SizedBox(width: 12),
                 Text(
                   '设置',
-                  style: TextStyle(fontSize: 13, color: on.withValues(alpha: .8)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: on.withValues(alpha: .8),
+                  ),
                 ),
               ],
             ),
@@ -180,7 +177,11 @@ class _ReadingPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          for (final line in ['2026-10-21 17:20', '4032 × 3024 · HEIC', '4.2 MB'])
+          for (final line in [
+            '2026-10-21 17:20',
+            '4032 × 3024 · HEIC',
+            '4.2 MB',
+          ])
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
@@ -195,6 +196,49 @@ class _ReadingPanel extends StatelessWidget {
 }
 
 void main() {
+  for (final mode in ['auto', 'reduced']) {
+    testWidgets('$mode honors the focal lens above a desktop quality ceiling', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            presentationProvider.overrideWith(() => _FixedModeController(mode)),
+          ],
+          child: MaterialApp(
+            theme: photoTheme(Brightness.light),
+            home: const GlassAdaptiveScope(
+              minQuality: GlassQuality.standard,
+              maxQuality: GlassQuality.standard,
+              child: Center(
+                child: ModeSelector(mode: GroupMode.day, onChanged: _noop),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final lens = find
+          .descendant(
+            of: find.byType(ModeSelector),
+            matching: find.byType(GlassContainer),
+          )
+          .first;
+      final expected = mode == 'reduced'
+          ? GlassQuality.standard
+          : GlassQuality.premium;
+      expect(tester.widget<GlassContainer>(lens).quality, expected);
+      expect(
+        GlassAdaptiveScopeData.of(tester.element(lens)).effectiveQuality,
+        expected,
+      );
+      // No blue body tint: all channels of the product glass are neutral.
+      final tint = tester.widget<GlassContainer>(lens).settings!.glassColor;
+      expect(tint.r, tint.g);
+      expect(tint.g, tint.b);
+    });
+  }
+
   testWidgets('the glass material over a photo backdrop', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
@@ -236,7 +280,10 @@ void main() {
           .first,
     );
     expect(capsule.quality, GlassQuality.premium);
-    expect(capsule.settings!.chromaticAberration, lessThanOrEqualTo(.004));
+    expect(capsule.settings!.lensModel, GlassLensModel.paraxial);
+    expect(capsule.settings!.thickness, greaterThanOrEqualTo(32));
+    expect(capsule.settings!.refractiveIndex, greaterThan(1.24));
+    expect(capsule.settings!.chromaticAberration, inExclusiveRange(.004, .02));
   });
 
   testWidgets('high contrast makes every surface opaque', (tester) async {

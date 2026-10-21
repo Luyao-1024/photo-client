@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'glass_surface.dart';
+import 'glass_theme.dart';
 import 'photos_grid.dart';
 import 'strings.dart';
 
-/// The canonical segmented control: one raised glass capsule floating at the
-/// bottom-center of the Photos page. Equal-width segments; the active segment
+/// The canonical segmented control: one raised glass strip floating at the
+/// bottom centre of the Photos page. Equal-width segments; the active segment
 /// reads through label contrast plus a short bottom indicator — never a
 /// per-segment filled background. See ui-design.md "Year/Month/Day Mode
 /// Selector" and ui-liquid-glass.md "Canonical Segmented Style".
@@ -19,16 +20,14 @@ class ModeSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final scheme = Theme.of(context).colorScheme;
-    // The capsule must give GlassSurface tight constraints: with the loose
-    // ones from the Align, the 20% blur-area budget would measure the whole
-    // stage instead of this surface, and the live glass could never engage.
+    // Tight constraints keep the lens capture within the control's bounds.
     return SizedBox(
       height: 48,
-      width: 264,
+      width: 216,
       child: GlassSurface(
         role: GlassRole.raised,
         live: true,
-        radius: 24,
+        radius: GlassTheme.panelRadius,
         child: Row(
           children: [
             for (final (value, label, key) in [
@@ -80,7 +79,7 @@ class _Segment extends StatelessWidget {
       selected: active,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(4, 8, 4, 7),
           child: Column(

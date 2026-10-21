@@ -12,14 +12,15 @@ enum GlassRole { chrome, raised, overlay, reading }
 /// A translucent surface.
 ///
 /// The rendering comes from `liquid_glass_widgets`, which draws the real
-/// liquid glass pipeline: a refracting bevel, a specular rim, Fresnel
-/// lighting and chromatic aberration over the live backdrop.
+/// liquid glass pipeline: a refracting bevel and chromatic aberration over the live backdrop.
+/// A directional native rim defines depth without an application-drawn outline.
 class GlassSurface extends ConsumerWidget {
+  static final _reportedLenses = <String>{};
   const GlassSurface({
     super.key,
     required this.child,
     this.live = false,
-    this.radius = 20,
+    this.radius = GlassTheme.panelRadius,
     this.role = GlassRole.chrome,
   });
   final Widget child;
@@ -39,44 +40,85 @@ class GlassSurface extends ConsumerWidget {
     final overlay = role == GlassRole.overlay;
     final raised = role == GlassRole.raised;
     final glass = GlassTheme.of(context);
+    final nested =
+        context
+            .dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>()
+            ?.avoidsRefraction ??
+        false;
     // High contrast is an accessibility limit, not a material style: the body
     // goes opaque and the refraction is dropped so text keeps its contrast.
     final opaque = media.highContrast;
-    // A liquid material is mostly air. The body only tints what is behind it;
-    // the bevel, the rim and the refraction do the reading. A body this
-    // opaque turns the surface into a flat panel with a lit border, which is
-    // the opposite of the effect.
-    final base = reading ? .96 : (overlay ? .88 : (raised ? .40 : .25));
+    final base = reading ? .96 : (overlay ? .52 : (raised ? .18 : .22));
     final alpha = (base + (1 - 2 * preferences.transparency) * .10).clamp(
-      reading ? .94 : (overlay ? .86 : (raised ? .32 : .12)),
-      reading ? .98 : (overlay ? .94 : (raised ? .50 : .40)),
+      reading ? .94 : (overlay ? .42 : .10),
+      reading ? .98 : (overlay ? .62 : (raised ? .28 : .32)),
     );
-    final fill = glass.tint;
-    final settings = LiquidGlassSettings(
-      glassColor: fill.withValues(alpha: opaque ? 1 : alpha),
-      // A reading panel is a wall, not a lens: no bevel, no refraction.
-      // A deep bevel plus a wide blur costs resolution and pushes the
-      // displacement sampler past the captured backdrop, which shows up as a
-      // jagged ring at the edge. A shallow bevel with a tight blur keeps the
-      // refraction and keeps the edge clean.
-      thickness: reading ? 0 : (live ? 16 : 12),
-      blur: reading ? 0 : (overlay ? 6 : 2),
-      frost: 0,
-      chromaticAberration: live ? 0.004 : 0,
-      saturation: reading ? 1 : 1.4,
-      lightAngle: -1.2,
-      lightIntensity: dark ? 0.26 : 0.3,
-      // A uniform bright rim reads as a drawn border, not as glass. The depth
-      // comes from a dark band just inside the edge, with only a restrained
-      // highlight on top of it.
-      fresnelStrength: reading ? 0 : 0.4,
-      rimLight: reading ? 0.2 : 0.35,
-      rimShade: reading ? 0 : 0.9,
+    final flat = reading || opaque;
+    // Start from the package's native-material example: paraxial folded lens,
+    // independent frost and blur, and directional rim shading. A low blur
+    // preserves the displaced backdrop rather than hiding it under frosting.
+    final native = dark
+        ? LiquidGlassSettings.ios27Dark
+        : LiquidGlassSettings.ios27Light;
+    final settings = native.copyWith(
+      glassColor: glass.tint.withValues(alpha: opaque ? 1 : alpha),
+      thickness: flat ? 0 : (live ? 42 : 32),
+      refractiveIndex: flat ? 1 : (live ? 1.34 : 1.26),
+      blur: flat ? 0 : (live ? .6 : 1.2),
+      frost: flat ? 0 : (overlay ? 14 : 6),
+      frostWeight: live ? .6 : 1,
+      blurWeight: dark ? 1.4 : .8,
+      chromaticAberration: flat ? 0 : (live ? .012 : .006),
+      saturation: flat ? 1 : 1.35,
+      lightAngle: -1.5707963267948966,
+      lightIntensity: 0,
+      fresnelStrength: 0,
+      rimLight: flat ? 0 : .65,
+      rimShade: flat ? 0 : 1,
       rimShadeEnds: 0,
-      edgeAbsorption: reading ? 0 : 0.035,
-      bodyShade: dark ? 0.2 : 0,
-      shadowElevation: reading ? 0 : 1,
+      edgeAbsorption: flat ? 0 : .06,
+      bodyShade: dark && !flat ? .18 : 0,
+      shadowElevation: 0,
+      shadow: const [],
     );
+    final premium =
+        !flat &&
+        !nested &&
+        preferences.glassMode != 'reduced' &&
+        (live || preferences.glassMode == 'full');
+    final quality = flat
+        ? GlassQuality.minimal
+        : (premium ? GlassQuality.premium : GlassQuality.standard);
+    // Standard has a hard-coded white perimeter. Premium uses its directional
+    // native rim and needs the complete boundary to draw the folded lens.
+    final overscan = premium ? 0.0 : 2.0;
+    Widget background = GlassContainer(
+      shape: LiquidRoundedSuperellipse(borderRadius: radius + overscan),
+      settings: nested ? null : settings,
+      quality: quality,
+      useOwnLayer: !nested,
+      child: const SizedBox.expand(),
+    );
+    if (premium && live) {
+      // The README promotes fixed bars to premium. The outer Linux auto probe
+      // stops at standard without timing any frames; override it only for
+      // these bounded fixed controls, never for scrolling photo tiles.
+      final lens = background;
+      background = GlassAdaptiveScope(
+        minQuality: GlassQuality.premium,
+        maxQuality: GlassQuality.premium,
+        frostStep: true,
+        child: Builder(
+          builder: (context) {
+            final data = GlassAdaptiveScopeData.of(context);
+            final report =
+                '${role.name}/${data.effectiveQuality.name}/frost=${data.frostEnabled}';
+            if (_reportedLenses.add(report)) debugPrint('GLASS_LENS $report');
+            return lens;
+          },
+        ),
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
@@ -90,27 +132,41 @@ class GlassSurface extends ConsumerWidget {
                 ),
               ],
       ),
-      child: GlassContainer(
-        shape: LiquidRoundedSuperellipse(borderRadius: radius),
-        settings: settings,
-        // Reading panels stay on the shader-free path: a near-opaque body makes
-        // the backdrop invisible, so sampling it would only cost frames. The
-        // same goes for high contrast, where the body is fully opaque.
-        quality: reading || opaque
-            ? GlassQuality.minimal
-            : (live ? GlassQuality.premium : GlassQuality.standard),
-        useOwnLayer: true,
-        clipBehavior: Clip.antiAlias,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(
-              color: opaque
-                  ? Theme.of(context).colorScheme.outline
-                  : glass.edge,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Stack(
+          fit: StackFit.passthrough,
+          children: [
+            Positioned.fill(
+              left: -overscan,
+              top: -overscan,
+              right: -overscan,
+              bottom: -overscan,
+              child: background,
             ),
-          ),
-          child: Material(type: MaterialType.transparency, child: child),
+            // Keep the package's container contract even though its background
+            // is a sibling (so the standard rim can be clipped independently).
+            // Nested search/buttons use vibrancy, not another backdrop read.
+            InheritedLiquidGlass(
+              settings: settings,
+              quality: quality,
+              avoidsRefraction: true,
+              child: Material(type: MaterialType.transparency, child: child),
+            ),
+            if (opaque)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(radius),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

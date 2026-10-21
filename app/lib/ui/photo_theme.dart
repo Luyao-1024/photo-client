@@ -8,7 +8,8 @@ import 'glass_theme.dart';
 ThemeData photoTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xff4f8eff),
+    seedColor: const Color(0xff808080),
+    dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
     brightness: brightness,
   );
   final glass = GlassTheme.fromScheme(scheme);
@@ -21,8 +22,8 @@ ThemeData photoTheme(Brightness brightness) {
     colorScheme: scheme,
     extensions: [glass],
     scaffoldBackgroundColor: dark
-        ? const Color(0xff121721)
-        : const Color(0xffeef1f6),
+        ? const Color(0xff151515)
+        : const Color(0xfff5f5f5),
     visualDensity: VisualDensity.standard,
     iconButtonTheme: IconButtonThemeData(
       style:
@@ -103,9 +104,9 @@ ThemeData photoTheme(Brightness brightness) {
       thickness: 1,
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: dark ? const Color(0xf0273346) : const Color(0xf0172033),
+      backgroundColor: dark ? const Color(0xf02b2b2b) : const Color(0xf0232323),
       contentTextStyle: const TextStyle(color: Colors.white),
-      actionTextColor: const Color(0xffa9c8ff),
+      actionTextColor: const Color(0xffeeeeee),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GlassTheme.panelRadius),
       ),

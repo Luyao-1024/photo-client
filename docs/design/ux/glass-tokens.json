@@ -12,42 +12,45 @@
   "radius": {
     "photo": 8,
     "control": 12,
-    "panel": 20,
+    "panel": 18,
     "dialog": 24,
-    "pill": 999
+    "pill": 999,
+    "window": 24
   },
   "sizes": {
     "toolbar_height": 56,
     "touch_target_min": 48,
     "mouse_target_min": 36,
-    "grid_gap": 8
+    "grid_gap": 8,
+    "grouping_control_width": 216,
+    "page_action_diameter": 48
   },
   "accent": {
-    "source": "system_when_available",
-    "fallback": "#4F8EFF"
+    "source": "neutral_monochrome",
+    "fallback": "#808080"
   },
   "light": {
-    "background": "#EEF1F6",
-    "foreground": "#172033",
+    "background": "#F5F5F5",
+    "foreground": "#1B1B1B",
     "glass_fill": "#FFFFFF",
-    "glass_alpha": 0.25,
+    "glass_alpha": 0.22,
     "reading_fill": "#FFFFFF",
     "reading_alpha_floor": 0.94,
     "highlight": "#FFFFFF",
-    "highlight_alpha": 0.7,
+    "highlight_alpha": 0,
     "shadow": "#000000",
     "shadow_alpha": 0.16,
     "chrome_alpha_floor": 0.12
   },
   "dark": {
-    "background": "#121721",
-    "foreground": "#F3F6FC",
-    "glass_fill": "#17202E",
-    "glass_alpha": 0.25,
-    "reading_fill": "#17202E",
+    "background": "#151515",
+    "foreground": "#F1F1F1",
+    "glass_fill": "#181818",
+    "glass_alpha": 0.22,
+    "reading_fill": "#181818",
     "reading_alpha_floor": 0.94,
     "highlight": "#FFFFFF",
-    "highlight_alpha": 0.16,
+    "highlight_alpha": 0,
     "shadow": "#000000",
     "shadow_alpha": 0.3,
     "chrome_alpha_floor": 0.12
@@ -62,12 +65,33 @@
     "full": {
       "blur_sigma": 12,
       "max_live_surfaces": 3,
-      "max_normal_viewport_area_ratio": 0.2
+      "max_normal_viewport_area_ratio": 0.2,
+      "lens_model": "paraxial",
+      "thickness_focal": 42,
+      "thickness_other": 32,
+      "refractive_index_focal": 1.34,
+      "refractive_index_other": 1.26,
+      "chromatic_aberration_focal": 0.012,
+      "chromatic_aberration_other": 0.006,
+      "frost": 6,
+      "frost_overlay": 14
     },
     "reduced": {
       "blur_sigma": 6,
       "max_live_surfaces": 2,
       "max_normal_viewport_area_ratio": 0.15
+    },
+    "auto_focal_policy": {
+      "fixed_surfaces": [
+        "navigation",
+        "search_button",
+        "options_button",
+        "mode_selector"
+      ],
+      "quality_floor": "premium",
+      "reduced_override": "standard",
+      "high_contrast_override": "minimal",
+      "normal_viewport_area_budget": 0.3
     }
   },
   "motion_ms": {
@@ -75,7 +99,8 @@
     "press": 90,
     "material": 180,
     "panel": 220,
-    "reduced_fade_max": 80
+    "reduced_fade_max": 80,
+    "background": 420
   },
   "contrast_targets": {
     "normal_text": 4.5,
@@ -97,24 +122,74 @@
   "implementation": "app/lib/ui/glass_theme.dart and app/lib/ui/glass_surface.dart",
   "roles": {
     "chrome": {
-      "base_alpha": 0.25,
-      "floor": 0.12,
-      "ceiling": 0.4
+      "base_alpha": 0.22,
+      "floor": 0.1,
+      "ceiling": 0.32
     },
     "raised": {
-      "base_alpha": 0.4,
-      "floor": 0.32,
-      "ceiling": 0.5
+      "base_alpha": 0.18,
+      "floor": 0.1,
+      "ceiling": 0.28
     },
     "overlay": {
-      "base_alpha": 0.88,
-      "floor": 0.86,
-      "ceiling": 0.94
+      "base_alpha": 0.52,
+      "floor": 0.42,
+      "ceiling": 0.62
     },
     "reading": {
       "base_alpha": 0.96,
       "floor": 0.94,
       "ceiling": 0.98
     }
+  },
+  "perimeter": {
+    "normal_border": false,
+    "fresnel_strength": 0,
+    "rim_light": 0.65,
+    "shader_overscan_logical_px": 2,
+    "shape": "rounded_superellipse",
+    "high_contrast_outline": true,
+    "premium_overscan_logical_px": 0
+  },
+  "ambient_backdrop": {
+    "source": "active_album_cover_else_first_photo",
+    "thumbnail_class": 512,
+    "decode_width": 512,
+    "blur_sigma": 18,
+    "dark_scrim_alpha": 0.56,
+    "light_scrim_alpha": 0.72,
+    "disabled_in_high_contrast": true,
+    "scroll_updates": false,
+    "coverage": "full_window"
+  },
+  "window_layout": {
+    "sidebar": "inset_rounded_lens",
+    "header": "unframed_heading_with_separate_circular_actions",
+    "header_min_height": 92,
+    "canvas_horizontal_inset": 20,
+    "day_columns": "preserve_user_preference",
+    "scroll_content": "beneath_pinned_heading_and_controls",
+    "heading_font_size": 24,
+    "count_font_size": 12,
+    "selection_actions_height": 52,
+    "photo_panel_radius": 18,
+    "panel_top_inset": 8,
+    "panel_bottom_inset": 8,
+    "photo_panel_right_inset": 8,
+    "photo_panel_tint_alpha": 0.1
+  },
+  "background_transition": {
+    "hold_previous_until_decoded": true,
+    "outgoing_opacity": 1,
+    "incoming_curve": "easeInOut",
+    "max_painted_images": 2,
+    "pending_target": "latest_only",
+    "reduce_motion": "immediate",
+    "failed_target": "retain_previous",
+    "clear_immediately": [
+      "empty",
+      "trash",
+      "gateway_change"
+    ]
   }
 }

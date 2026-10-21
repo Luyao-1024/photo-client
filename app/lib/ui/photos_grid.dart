@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../services/local_library_gateway.dart';
 import 'glass_dialog.dart';
+import 'glass_theme.dart';
 import 'local_photo_image.dart';
 import 'strings.dart';
 
@@ -355,7 +356,7 @@ class _PhotoTileState extends State<PhotoTile> {
           onSecondaryTapUp: (details) => _openMenu(details.globalPosition),
           onLongPressStart: (details) => _openMenu(details.globalPosition),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(GlassTheme.photoRadius),
             child: Stack(
               fit: StackFit.expand,
               children: [

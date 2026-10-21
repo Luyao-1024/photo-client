@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 /// Shared material and interaction tokens. Content tiles never own a filter.
@@ -14,8 +16,8 @@ class GlassTheme extends ThemeExtension<GlassTheme> {
   factory GlassTheme.fromScheme(ColorScheme scheme) {
     final dark = scheme.brightness == Brightness.dark;
     return GlassTheme(
-      tint: dark ? const Color(0xff17202e) : Colors.white,
-      edge: Colors.white.withValues(alpha: dark ? .14 : .70),
+      tint: dark ? const Color(0xff181818) : Colors.white,
+      edge: scheme.onSurface.withValues(alpha: dark ? .06 : .07),
       inset: (dark ? Colors.white : scheme.primary).withValues(
         alpha: dark ? .045 : .035,
       ),
@@ -24,9 +26,11 @@ class GlassTheme extends ThemeExtension<GlassTheme> {
     );
   }
 
+  static const photoRadius = 8.0;
   static const controlRadius = 12.0;
-  static const panelRadius = 20.0;
+  static const panelRadius = 18.0;
   static const dialogRadius = 24.0;
+  static const windowRadius = 24.0;
 
   final Color tint, edge, inset, selection, shadow;
 
@@ -61,33 +65,140 @@ class GlassTheme extends ThemeExtension<GlassTheme> {
         );
 }
 
-/// A quiet, static backdrop gives the window chrome a common material context.
-/// It creates no animation, image sampling or backdrop filters.
+/// The album photo fills the window under a neutral light or dark frost.
+/// Only the low-resolution still image is blurred, never the whole scene.
 class GlassBackdrop extends StatelessWidget {
-  const GlassBackdrop({super.key, required this.child});
+  const GlassBackdrop({super.key, required this.child, this.image});
   final Widget child;
+  final ImageProvider? image;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    return DecoratedBox(
-      decoration: BoxDecoration(color: theme.scaffoldBackgroundColor),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.topLeft,
-            radius: 1.4,
-            colors: [
-              theme.colorScheme.primary.withValues(alpha: dark ? .10 : .09),
-              theme.colorScheme.primary.withValues(alpha: 0),
-            ],
-          ),
-        ),
-        child: child,
+    final base = theme.scaffoldBackgroundColor;
+    return ColoredBox(
+      color: base,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (image != null && !MediaQuery.highContrastOf(context))
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: ClipRect(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _BackdropPhoto(
+                          image: image!,
+                          animate: !MediaQuery.disableAnimationsOf(context),
+                        ),
+                        ColoredBox(
+                          color: (dark ? Colors.black : Colors.white)
+                              .withValues(alpha: dark ? .56 : .72),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          child,
+        ],
       ),
     );
   }
+}
+
+/// Keep the outgoing photo fully opaque while the incoming photo fades over
+/// it. Fading both out/in would expose the neutral base halfway through.
+/// Rapid changes queue only the newest target; at most two images are painted.
+class _BackdropPhoto extends StatefulWidget {
+  const _BackdropPhoto({required this.image, required this.animate});
+  final ImageProvider image;
+  final bool animate;
+
+  @override
+  State<_BackdropPhoto> createState() => _BackdropPhotoState();
+}
+
+class _BackdropPhotoState extends State<_BackdropPhoto>
+    with SingleTickerProviderStateMixin {
+  late ImageProvider _current = widget.image;
+  ImageProvider? _previous, _queued;
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 420),
+    value: 1,
+  )..addStatusListener(_finished);
+  late final _fade = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeInOut,
+  );
+
+  void _finished(AnimationStatus status) {
+    if (status != AnimationStatus.completed || !mounted) return;
+    setState(() {
+      _previous = null;
+      final next = _queued;
+      _queued = null;
+      if (next != null && next != _current) _transition(next);
+    });
+  }
+
+  void _transition(ImageProvider image) {
+    _previous = _current;
+    _current = image;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void didUpdateWidget(_BackdropPhoto oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.animate) {
+      _controller.stop();
+      _previous = _queued = null;
+      _current = widget.image;
+      _controller.value = 1;
+    } else if (_controller.isAnimating) {
+      _queued = widget.image == _current ? null : widget.image;
+    } else if (widget.image != _current) {
+      _transition(widget.image);
+    }
+  }
+
+  @override
+  void dispose() {
+    _fade.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _photo(ImageProvider image) => RepaintBoundary(
+    child: ImageFiltered(
+      imageFilter: ui.ImageFilter.blur(
+        sigmaX: 18,
+        sigmaY: 18,
+        tileMode: TileMode.clamp,
+      ),
+      child: Image(
+        image: image,
+        fit: BoxFit.cover,
+        excludeFromSemantics: true,
+        errorBuilder: (_, error, stack) => const SizedBox.shrink(),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      if (_previous != null) _photo(_previous!),
+      FadeTransition(opacity: _fade, child: _photo(_current)),
+    ],
+  );
 }
 
 /// Preference groups share their parent's material instead of adding shaders.
@@ -102,7 +213,6 @@ class GlassSection extends StatelessWidget {
       color: glass.inset,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GlassTheme.panelRadius),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
       child: Padding(padding: const EdgeInsets.all(16), child: child),

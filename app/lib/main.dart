@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'app.dart';
 import 'platform/native_core_gateway.dart';
@@ -10,7 +11,7 @@ import 'selftest/launch_options.dart';
 import 'selftest/local_journey.dart';
 import 'services/core_gateway.dart';
 
-void main(List<String> arguments) {
+Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
   final LaunchOptions options;
   try {
@@ -36,6 +37,7 @@ void main(List<String> arguments) {
     unawaited(LocalJourney.run(gateway, options).then((code) => exit(code)));
     return;
   }
+  await LiquidGlassWidgets.initialize();
   runApp(PhotoClientApp(gateway: gateway));
 }
 

@@ -110,9 +110,11 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
                   SizedBox(
                     width: compact ? _compactSidebarWidth : _sidebarWidth,
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(compact ? 4 : 12, 12, 4, 12),
+                      padding: const EdgeInsets.all(8),
                       child: GlassSurface(
-                        radius: GlassTheme.dialogRadius,
+                        key: const ValueKey('library-navigation'),
+                        live: true,
+                        radius: GlassTheme.panelRadius,
                         child: _Sidebar(
                           destination: _destination,
                           library: library,
@@ -128,17 +130,37 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
                     ),
                   ),
                   Expanded(
-                    child: Navigator(
-                      key: _contentNavigator,
-                      onGenerateRoute: (_) => MaterialPageRoute<void>(
-                        builder: (_) => ValueListenableBuilder<int>(
-                          valueListenable: _navigationRevision,
-                          builder: (context, _, child) => LocalLibraryPane(
-                            onOpenSettings: _openSettings,
-                            onRequestSearch: _showSearch,
-                            trashMode: _destination == _Destination.trash,
-                            searchMode: _destination == _Destination.search,
-                            onCloseSearch: _showPhotos,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: WindowController.instance.fullscreen,
+                        builder: (context, fullscreen, child) => ClipRRect(
+                          key: const ValueKey('photo-panel-clip'),
+                          borderRadius: BorderRadius.circular(
+                            fullscreen ? 0 : GlassTheme.panelRadius,
+                          ),
+                          child: ColoredBox(
+                            color:
+                                (Theme.of(context).brightness == Brightness.dark
+                                        ? Colors.black
+                                        : Colors.white)
+                                    .withValues(alpha: .10),
+                            child: child,
+                          ),
+                        ),
+                        child: Navigator(
+                          key: _contentNavigator,
+                          onGenerateRoute: (_) => MaterialPageRoute<void>(
+                            builder: (_) => ValueListenableBuilder<int>(
+                              valueListenable: _navigationRevision,
+                              builder: (context, _, child) => LocalLibraryPane(
+                                onOpenSettings: _openSettings,
+                                onRequestSearch: _showSearch,
+                                trashMode: _destination == _Destination.trash,
+                                searchMode: _destination == _Destination.search,
+                                onCloseSearch: _showPhotos,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -221,7 +243,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         _NavRow(
           key: const ValueKey('sidebar-photos'),
           icon: Icons.photo_library_outlined,
@@ -348,15 +370,14 @@ class _SidebarState extends ConsumerState<_Sidebar> {
           compact: compact,
         ),
         Padding(
-          padding: const EdgeInsets.all(8),
-          child: Align(
-            alignment: compact ? Alignment.center : Alignment.centerRight,
-            child: IconButton(
-              key: const ValueKey('sidebar-settings'),
-              tooltip: strings.settings,
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: widget.onSettings,
-            ),
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _NavRow(
+            key: const ValueKey('sidebar-settings'),
+            icon: Icons.settings_outlined,
+            label: strings.settings,
+            selected: false,
+            onTap: widget.onSettings,
+            compact: compact,
           ),
         ),
       ],
@@ -512,14 +533,14 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
         selected: widget.selected,
         child: InkWell(
           key: ValueKey('sidebar-album-${widget.album.path}'),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
           onTap: widget.onTap,
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: Row(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(GlassTheme.photoRadius),
                   child: SizedBox(
                     width: 32,
                     height: 32,
@@ -707,17 +728,31 @@ class _NavigationSurface extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? glass.selection : Colors.transparent,
           borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
-          border: Border.all(
-            color: selected
-                ? scheme.primary.withValues(alpha: .24)
-                : Colors.transparent,
-          ),
         ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
-          clipBehavior: Clip.antiAlias,
-          child: child,
+        child: Stack(
+          children: [
+            Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
+              clipBehavior: Clip.antiAlias,
+              child: child,
+            ),
+            if (selected)
+              Positioned(
+                left: 0,
+                top: 12,
+                bottom: 12,
+                width: 3,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

@@ -12,7 +12,7 @@ import 'services/local_library_gateway.dart';
 import 'services/window_controller.dart';
 import 'ui/auto_glass_policy.dart';
 import 'ui/glass_dialog.dart';
-import 'ui/glass_theme.dart';
+import 'ui/library_backdrop.dart';
 import 'ui/library_shell.dart';
 import 'ui/local_library_controller.dart';
 import 'ui/photo_theme.dart';
@@ -191,8 +191,9 @@ class _ApplicationState extends ConsumerState<_Application>
                     preferences.reduceMotion ||
                     MediaQuery.disableAnimationsOf(context),
               ),
-              child: GlassBackdrop(
-                child: WindowFrame(child: child ?? const SizedBox.shrink()),
+              child: WindowFrame(
+                background: const LibraryBackdrop(child: SizedBox.expand()),
+                child: child ?? const SizedBox.shrink(),
               ),
             );
           },

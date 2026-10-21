@@ -3,16 +3,18 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../services/window_controller.dart';
+import 'glass_theme.dart';
 import 'strings.dart';
 
 class WindowFrame extends StatelessWidget {
-  const WindowFrame({super.key, required this.child});
+  const WindowFrame({super.key, required this.child, this.background});
   final Widget child;
+  final Widget? background;
   @override
   Widget build(BuildContext context) {
     if (defaultTargetPlatform != TargetPlatform.linux &&
         defaultTargetPlatform != TargetPlatform.windows) {
-      return child;
+      return Stack(fit: StackFit.expand, children: [?background, child]);
     }
     final window = WindowController.instance;
     final strings = AppStrings.of(context);
@@ -22,71 +24,98 @@ class WindowFrame extends StatelessWidget {
         builder: (context, fullscreen, _) => Stack(
           children: [
             Positioned.fill(
-              child: Material(
-                color: Colors.transparent,
-                child: Column(
-                  children: [
-                    if (!fullscreen)
-                      SizedBox(
-                        key: const ValueKey('window-titlebar'),
-                        height: 40,
-                        child: Row(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: window.maximized,
+                builder: (context, maximized, _) => ClipRRect(
+                  key: const ValueKey('window-clip'),
+                  borderRadius: BorderRadius.circular(
+                    fullscreen ||
+                            maximized ||
+                            defaultTargetPlatform != TargetPlatform.linux
+                        ? 0
+                        : GlassTheme.windowRadius,
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ?background,
+                      Material(
+                        color: Colors.transparent,
+                        child: Column(
                           children: [
-                            Expanded(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onPanStart: (_) => window.command('drag'),
-                                onDoubleTap: () => window.command('maximize'),
-                                child: const Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                    ),
-                                    child: Text(
-                                      'PhotoViewer',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
+                            if (!fullscreen)
+                              SizedBox(
+                                key: const ValueKey('window-titlebar'),
+                                height: 40,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onPanStart: (_) =>
+                                            window.command('drag'),
+                                        onDoubleTap: () =>
+                                            window.command('maximize'),
+                                        child: const Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                            ),
+                                            child: Text(
+                                              'PhotoViewer',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                    _WindowButton(
+                                      key: const ValueKey('window-minimize'),
+                                      icon: Icons.remove,
+                                      label: strings.pick('最小化', 'Minimize'),
+                                      onTap: () => window.command('minimize'),
+                                    ),
+                                    ValueListenableBuilder<bool>(
+                                      valueListenable: window.maximized,
+                                      builder: (context, maximized, _) =>
+                                          _WindowButton(
+                                            key: const ValueKey(
+                                              'window-maximize',
+                                            ),
+                                            icon: maximized
+                                                ? Icons.filter_none
+                                                : Icons.crop_square,
+                                            label: strings.pick(
+                                              maximized ? '还原窗口' : '最大化',
+                                              maximized
+                                                  ? 'Restore window'
+                                                  : 'Maximize',
+                                            ),
+                                            onTap: () =>
+                                                window.command('maximize'),
+                                          ),
+                                    ),
+                                    _WindowButton(
+                                      key: const ValueKey('window-close'),
+                                      icon: Icons.close,
+                                      label: strings.close,
+                                      danger: true,
+                                      onTap: window.close,
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ],
                                 ),
                               ),
-                            ),
-                            _WindowButton(
-                              key: const ValueKey('window-minimize'),
-                              icon: Icons.remove,
-                              label: strings.pick('最小化', 'Minimize'),
-                              onTap: () => window.command('minimize'),
-                            ),
-                            ValueListenableBuilder<bool>(
-                              valueListenable: window.maximized,
-                              builder: (context, maximized, _) => _WindowButton(
-                                key: const ValueKey('window-maximize'),
-                                icon: maximized
-                                    ? Icons.filter_none
-                                    : Icons.crop_square,
-                                label: strings.pick(
-                                  maximized ? '还原窗口' : '最大化',
-                                  maximized ? 'Restore window' : 'Maximize',
-                                ),
-                                onTap: () => window.command('maximize'),
-                              ),
-                            ),
-                            _WindowButton(
-                              key: const ValueKey('window-close'),
-                              icon: Icons.close,
-                              label: strings.close,
-                              danger: true,
-                              onTap: window.close,
-                            ),
-                            const SizedBox(width: 6),
+                            Expanded(child: child),
                           ],
                         ),
                       ),
-                    Expanded(child: child),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -180,12 +209,13 @@ class _WindowButton extends StatelessWidget {
         minimumSize: const Size(30, 30),
         maximumSize: const Size(30, 30),
         padding: EdgeInsets.zero,
-        backgroundColor: Theme.of(context).colorScheme.onSurface
-            .withValues(alpha: .07),
+        backgroundColor: Colors.transparent,
         hoverColor: danger
             ? Theme.of(context).colorScheme.error.withValues(alpha: .2)
             : null,
-        shape: const CircleBorder(),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
+        ),
       ),
     ),
   );

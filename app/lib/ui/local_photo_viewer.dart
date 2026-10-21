@@ -10,6 +10,7 @@ import '../services/local_library_gateway.dart';
 import '../services/window_controller.dart';
 import 'glass_dialog.dart';
 import 'glass_surface.dart';
+import 'glass_theme.dart';
 import 'local_library_controller.dart';
 import 'local_photo_editor.dart';
 import 'local_photo_image.dart';
@@ -1002,7 +1003,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     key: const ValueKey('viewer-header'),
     role: GlassRole.raised,
     live: true,
-    radius: 20,
+    radius: GlassTheme.panelRadius,
     child: SafeArea(
       bottom: false,
       child: Padding(
@@ -1185,7 +1186,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       child: GlassSurface(
         key: const ValueKey('viewer-filmstrip'),
         role: GlassRole.raised,
-        radius: 20,
+        radius: GlassTheme.panelRadius,
         child: SizedBox(
           height: _stripHeight,
           child: LayoutBuilder(
@@ -1305,7 +1306,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
               child: GlassSurface(
                 key: const ValueKey('viewer-details-panel'),
                 role: GlassRole.overlay,
-                radius: 20,
+                radius: GlassTheme.panelRadius,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

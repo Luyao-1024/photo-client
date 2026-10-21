@@ -14,6 +14,7 @@ import 'package:photo_client/ui/glass_surface.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
 import 'package:photo_client/ui/local_library_pane.dart';
 import 'package:photo_client/ui/mode_selector.dart';
+import 'package:photo_client/ui/photos_grid.dart';
 import 'package:photo_client/ui/presentation_preferences.dart';
 import 'package:photo_client/ui/runtime_controller.dart';
 
@@ -220,7 +221,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings-category-1')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(ChoiceChip, 'Dark'), findsOneWidget);
-    expect(find.byKey(const ValueKey('settings-glass-quality')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-glass-quality')),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('settings-category-2')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('add-files')), findsOneWidget);
@@ -242,13 +246,13 @@ void main() {
     await mount(tester, gateway);
     await tester.pumpAndSettle();
     final container = containerOf(tester);
-    // The floating mode selector is the single live glass surface: it is the
-    // only one that samples the backdrop. The rest are translucent panels.
+    // Fixed lenses: navigation, search, options and the mode selector.
+    // Individual photo tiles and navigation rows never own a live surface.
     final live = tester
         .widgetList<GlassSurface>(find.byType(GlassSurface))
         .where((surface) => surface.live)
         .toList();
-    expect(live.length, 1);
+    expect(live.length, 4);
     expect(
       find.descendant(
         of: find.byType(ModeSelector),
@@ -290,10 +294,11 @@ void main() {
           )
           .first,
     );
-    expect(
-      quality.items!.map((item) => item.value).toList(),
-      ['auto', 'full', 'reduced'],
-    );
+    expect(quality.items!.map((item) => item.value).toList(), [
+      'auto',
+      'full',
+      'reduced',
+    ]);
     container.read(presentationProvider.notifier).setGlassMode('full');
     await tester.pumpAndSettle();
     expect(container.read(presentationProvider).glassMode, 'full');
@@ -551,55 +556,143 @@ void main() {
     await gateway.events.close();
   });
 
-  testWidgets('header puts the destination name left and search right', (
-    tester,
-  ) async {
-    for (final width in [390.0, 800.0, 1440.0, 1920.0]) {
-      final gateway = FakeLocalGateway(imagePath: image);
-      await mount(tester, gateway, width: width);
+  testWidgets(
+    'header keeps the title left and search before the options button',
+    (tester) async {
+      for (final width in [390.0, 800.0, 1440.0, 1920.0]) {
+        final gateway = FakeLocalGateway(imagePath: image);
+        await mount(tester, gateway, width: width);
+        await tester.pumpAndSettle();
+
+        // The header title is the only Text carrying the photos label inside
+        // the content pane.
+        final title = find.descendant(
+          of: find.byType(LocalLibraryPane),
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is Text &&
+                w.data == 'Photos' &&
+                w.style?.fontWeight == FontWeight.w600,
+            description: 'photos header title',
+          ),
+        );
+        expect(title, findsOneWidget, reason: 'width $width');
+        final pane = tester.getRect(find.byType(LocalLibraryPane));
+        final titleRect = tester.getRect(title);
+
+        // The destination name hugs the left edge of the content pane.
+        expect(
+          titleRect.left - pane.left,
+          closeTo(24.0, 1.0),
+          reason: 'title is not left aligned at width $width',
+        );
+
+        // The circular search is immediately before the far-right options.
+        final search = find.byKey(const ValueKey('library-search'));
+        expect(search, findsOneWidget, reason: 'width $width');
+        final searchRect = tester.getRect(search);
+        expect(
+          pane.right - searchRect.right,
+          closeTo(80.0, 1.0),
+          reason: 'search does not leave room for options at width $width',
+        );
+        expect(
+          searchRect.left,
+          greaterThan(pane.center.dx),
+          reason: 'search is not on the right half at width $width',
+        );
+
+        expect(tester.takeException(), isNull);
+        await disposeApp(tester, gateway);
+      }
+    },
+  );
+
+  testWidgets(
+    'photos scroll under the pinned heading and its buttons stay clickable',
+    (tester) async {
+      final gateway = FakeLocalGateway(imagePath: image, count: 90);
+      await mount(tester, gateway, width: 1440);
       await tester.pumpAndSettle();
-
-      // The header title is the only Text carrying the photos label inside
-      // the content pane.
-      final title = find.descendant(
-        of: find.byType(LocalLibraryPane),
-        matching: find.byWidgetPredicate(
-          (w) =>
-              w is Text &&
-              w.data == 'Photos' &&
-              w.style?.fontWeight == FontWeight.w600,
-          description: 'photos header title',
-        ),
-      );
-      expect(title, findsOneWidget, reason: 'width $width');
-      final pane = tester.getRect(find.byType(LocalLibraryPane));
-      final titleRect = tester.getRect(title);
-
-      // The destination name hugs the left edge of the content pane.
-      expect(
-        titleRect.left - pane.left,
-        closeTo(12.0, 1.0),
-        reason: 'title is not left aligned at width $width',
-      );
-
-      // The search button sits at the far right of the same bar.
+      final header = find.byKey(const ValueKey('library-header'));
       final search = find.byKey(const ValueKey('library-search'));
-      expect(search, findsOneWidget, reason: 'width $width');
+      final headerRect = tester.getRect(header);
       final searchRect = tester.getRect(search);
+      final gridFinder = find.byKey(const ValueKey('local-photo-grid'));
       expect(
-        pane.right - searchRect.right,
-        closeTo(12.0, 1.0),
-        reason: 'search is not flush right at width $width',
+        tester
+            .widget<ClipRRect>(find.byKey(const ValueKey('photo-panel-clip')))
+            .borderRadius,
+        BorderRadius.circular(18),
       );
       expect(
-        searchRect.left,
-        greaterThan(pane.center.dx),
-        reason: 'search is not on the right half at width $width',
+        tester.getRect(find.byKey(const ValueKey('photo-panel-clip'))),
+        tester.getRect(find.byType(LocalLibraryPane)),
       );
-
+      final albumPanel = tester.getRect(
+        find.byKey(const ValueKey('library-navigation')),
+      );
+      final photoPanel = tester.getRect(
+        find.byKey(const ValueKey('photo-panel-clip')),
+      );
+      expect(photoPanel.top, albumPanel.top);
+      expect(photoPanel.bottom, albumPanel.bottom);
+      expect(find.byKey(const ValueKey('photo-display-clip')), findsNothing);
+      expect(
+        tester.getRect(gridFinder).left,
+        tester.getRect(find.byType(LocalLibraryPane)).left + 20,
+      );
+      expect(
+        tester.getRect(gridFinder).top,
+        tester.getRect(find.byType(LocalLibraryPane)).top,
+      );
+      tester.widget<CustomScrollView>(gridFinder).controller!.jumpTo(100);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('photo-p0')))
+            .overlaps(headerRect),
+        isTrue,
+      );
+      expect(tester.getRect(header), headerRect);
+      expect(tester.getRect(search), searchRect);
+      expect(search.hitTestable(), findsOneWidget);
+      await tester.tap(search);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
       expect(tester.takeException(), isNull);
       await disposeApp(tester, gateway);
-    }
+    },
+  );
+
+  testWidgets('pinned header keeps the visible photos when changing grouping', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 90);
+    await mount(tester, gateway, width: 1440);
+    await tester.pumpAndSettle();
+    final header = find.byKey(const ValueKey('library-header'));
+    final headerRect = tester.getRect(header);
+    final grid = tester.widget<CustomScrollView>(
+      find.byKey(const ValueKey('local-photo-grid')),
+    );
+    grid.controller!.jumpTo(700);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(header), headerRect);
+    final visible = find.byType(PhotoTile).evaluate().where((element) {
+      final rect = tester.getRect(find.byWidget(element.widget));
+      return rect.bottom > headerRect.bottom && rect.top < headerRect.bottom;
+    }).toList();
+    expect(visible, isNotEmpty);
+    final anchor = (visible.first.widget as PhotoTile).photo.id;
+    await tester.tap(find.byKey(const ValueKey('mode-month')));
+    await tester.pumpAndSettle();
+    final anchorRect = tester.getRect(find.byKey(ValueKey('photo-$anchor')));
+    expect(anchorRect.bottom, greaterThan(headerRect.bottom));
+    expect(anchorRect.top, lessThan(headerRect.bottom + anchorRect.height));
+    expect(tester.getRect(header), headerRect);
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester, gateway);
   });
 
   testWidgets('narrow layout remains usable with doubled text size', (

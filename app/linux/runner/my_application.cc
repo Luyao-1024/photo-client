@@ -91,6 +91,18 @@ static void my_application_activate(GApplication* application) {
   // compositor decorations (including on non-GNOME window managers).
   gtk_window_set_title(window, "PhotoViewer");
   gtk_window_set_decorated(window, FALSE);
+  // Flutter clips the full frame, including its photo backdrop. The native
+  // surface must preserve alpha or the clipped corners would remain black.
+  GdkScreen* screen = gtk_widget_get_screen(GTK_WIDGET(window));
+  GdkVisual* visual = gdk_screen_get_rgba_visual(screen);
+  if (visual) gtk_widget_set_visual(GTK_WIDGET(window), visual);
+  gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
+  gtk_widget_set_name(GTK_WIDGET(window), "photo-client-window");
+  g_autoptr(GtkCssProvider) css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(css,
+      "#photo-client-window { background-color: transparent; }", -1, nullptr);
+  gtk_style_context_add_provider(gtk_widget_get_style_context(GTK_WIDGET(window)),
+      GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   // Deterministic window geometry for responsive/acceptance runs. The flag is
   // also forwarded to Dart, which ignores it.
   gint window_width = 1280;
@@ -118,9 +130,7 @@ static void my_application_activate(GApplication* application) {
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
-  // Background defaults to black, override it here if necessary, e.g. #00000000
-  // for transparent.
-  gdk_rgba_parse(&background_color, "#000000");
+  gdk_rgba_parse(&background_color, "#00000000");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));

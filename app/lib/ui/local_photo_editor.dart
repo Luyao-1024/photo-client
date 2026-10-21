@@ -9,6 +9,7 @@ import '../services/local_library_gateway.dart';
 import '../services/window_controller.dart';
 import 'glass_dialog.dart';
 import 'glass_surface.dart';
+import 'glass_theme.dart';
 import 'local_library_controller.dart';
 import 'local_photo_image.dart';
 import 'photo_theme.dart';
@@ -316,7 +317,7 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
       GlassSurface(
         key: const ValueKey('editor-controls'),
         role: GlassRole.overlay,
-        radius: 20,
+        radius: GlassTheme.panelRadius,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
