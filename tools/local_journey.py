@@ -186,6 +186,18 @@ def _run_x11(command: list[str], display: str, timeout: int = 20) -> subprocess.
     return subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout)
 
 
+def _move_pointer(window: str, display: str, x: int, y: int) -> None:
+    """Warp the pointer without `--sync`.
+
+    `xdotool mousemove --sync` blocks until the server reports a motion; a
+    repeat tap on the same point would stall for its full timeout. XTest
+    requests are ordered, so a plain warp followed by a short settle keeps the
+    subsequent click at the requested position.
+    """
+    _run_x11(["xdotool", "mousemove", "--window", window, str(x), str(y)], display)
+    time.sleep(0.02)
+
+
 def find_window(display: str, timeout: float = 30.0) -> str:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -265,8 +277,7 @@ class X11InputHelper:
         if kind == "tap":
             x, y = self._scaled(payload, "x"), self._scaled(payload, "y")
             _focus(window, self.display)
-            _run_x11(["xdotool", "mousemove", "--sync", "--window", window, str(x), str(y)],
-                     self.display)
+            _move_pointer(window, self.display, x, y)
             # A zero-duration press (down+up back-to-back) is not recognised as
             # a tap by the gesture arena under XTest; hold like a real click.
             time.sleep(0.05)
@@ -274,18 +285,31 @@ class X11InputHelper:
             time.sleep(0.12)
             _run_x11(["xdotool", "mouseup", "1"], self.display)
             return f"click at {x},{y}"
+        if kind == "secondary-tap":
+            x, y = self._scaled(payload, "x"), self._scaled(payload, "y")
+            _focus(window, self.display)
+            _move_pointer(window, self.display, x, y)
+            time.sleep(0.05)
+            _run_x11(["xdotool", "click", "3"], self.display)
+            return f"right click at {x},{y}"
+        if kind == "move":
+            x, y = self._scaled(payload, "x"), self._scaled(payload, "y")
+            _move_pointer(window, self.display, x, y)
+            return f"move to {x},{y}"
         if kind == "drag":
             x1, y1 = self._scaled(payload, "x"), self._scaled(payload, "y")
             x2 = int(round(float(payload["to_x"]) * float(payload.get("device_pixel_ratio") or 1.0)))
             y2 = int(round(float(payload["to_y"]) * float(payload.get("device_pixel_ratio") or 1.0)))
             _focus(window, self.display)
-            _run_x11(["xdotool", "mousemove", "--sync", "--window", window, str(x1), str(y1)],
-                     self.display)
+            _move_pointer(window, self.display, x1, y1)
             _run_x11(["xdotool", "mousedown", "1"], self.display)
+            hold_ms = int(payload.get("hold_ms") or 0)
+            if hold_ms > 0:
+                time.sleep(hold_ms / 1000)
             for step in range(1, 9):
-                _run_x11(["xdotool", "mousemove", "--sync", "--window", window,
-                          str(x1 + (x2 - x1) * step // 8), str(y1 + (y2 - y1) * step // 8)],
-                         self.display)
+                _move_pointer(window, self.display,
+                              x1 + (x2 - x1) * step // 8,
+                              y1 + (y2 - y1) * step // 8)
                 time.sleep(0.02)
             _run_x11(["xdotool", "mouseup", "1"], self.display)
             return f"drag {x1},{y1} to {x2},{y2}"
@@ -293,8 +317,7 @@ class X11InputHelper:
             x, y = self._scaled(payload, "x"), self._scaled(payload, "y")
             button = "4" if int(payload.get("clicks", 1)) > 0 else "5"
             _focus(window, self.display)
-            _run_x11(["xdotool", "mousemove", "--sync", "--window", window, str(x), str(y)],
-                     self.display)
+            _move_pointer(window, self.display, x, y)
             for _ in range(abs(int(payload.get("clicks", 1)))):
                 _run_x11(["xdotool", "click", button], self.display)
                 time.sleep(0.05)
@@ -305,7 +328,7 @@ class X11InputHelper:
             return f"key {payload['key']}"
         if kind == "text":
             _focus(window, self.display)
-            _run_x11(["xdotool", "type", "--delay", "30", "--", str(payload["text"])], self.display)
+            _run_x11(["xdotool", "type", "--delay", "80", "--", str(payload["text"])], self.display)
             return f"typed {len(str(payload['text']))} characters"
         if kind == "screenshot":
             if not shutil.which("import"):
@@ -374,7 +397,7 @@ class JourneyRun:
 def run_journey(executable: Path, *, display: str, phase: str, data_root: Path,
                 evidence_dir: Path, log_name: str, timeout: int,
                 args: list[str] | None = None, helper: bool = True,
-                on_ready=None) -> JourneyRun:
+                on_ready=None, env_extra: dict[str, str] | None = None) -> JourneyRun:
     """Run one journey phase and service its real-input handshake."""
     evidence_dir.mkdir(parents=True, exist_ok=True)
     for name in (REQUEST_NAME, RESPONSE_NAME):
@@ -383,8 +406,19 @@ def run_journey(executable: Path, *, display: str, phase: str, data_root: Path,
                f"--data-root={data_root}", f"--evidence-dir={evidence_dir}",
                f"--input={'x11' if helper else 'framework'}", *(args or [])]
     env = os.environ.copy()
+    if env_extra:
+        env.update(env_extra)
     env["DISPLAY"] = display
     env["GDK_BACKEND"] = "x11"
+    # A desktop input method (fcitx/ibus) treats injected keys as composition
+    # and can swallow Escape/F-keys; the journey needs raw key delivery.
+    env.update({
+        "GTK_IM_MODULE": "gtk-im-context-simple",
+        "QT_IM_MODULE": "simple",
+        "SDL_IM_MODULE": "simple",
+        "XMODIFIERS": "@im=none",
+        "INPUT_METHOD": "simple",
+    })
     # Keep the journey off the user's session bus and any network namespace.
     env.pop("DBUS_SESSION_BUS_ADDRESS", None)
     log_path = evidence_dir / log_name

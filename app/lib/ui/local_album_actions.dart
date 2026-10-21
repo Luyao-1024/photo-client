@@ -16,6 +16,7 @@ Future<String?> createLocalAlbum(BuildContext context, WidgetRef ref) async {
     builder: (context) => AlertDialog(
       title: Text(strings.pick('新建相册', 'New album')),
       content: TextField(
+        key: const ValueKey('album-name-field'),
         controller: name,
         autofocus: true,
         decoration: InputDecoration(
@@ -29,6 +30,7 @@ Future<String?> createLocalAlbum(BuildContext context, WidgetRef ref) async {
           child: Text(strings.cancel),
         ),
         FilledButton(
+          key: const ValueKey('album-create-confirm'),
           onPressed: () => Navigator.of(context).pop(name.text.trim()),
           child: Text(strings.pick('创建', 'Create')),
         ),

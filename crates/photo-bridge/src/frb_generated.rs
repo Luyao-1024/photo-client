@@ -1052,6 +1052,8 @@ impl SseDecode for crate::api::local_library::LocalPhoto {
         let mut var_sortTimeMs = <i64>::sse_decode(deserializer);
         let mut var_state = <String>::sse_decode(deserializer);
         let mut var_trashedAtMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_durationMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_motionOffset = <Option<i64>>::sse_decode(deserializer);
         return crate::api::local_library::LocalPhoto {
             id: var_id,
             path: var_path,
@@ -1070,6 +1072,8 @@ impl SseDecode for crate::api::local_library::LocalPhoto {
             sort_time_ms: var_sortTimeMs,
             state: var_state,
             trashed_at_ms: var_trashedAtMs,
+            duration_ms: var_durationMs,
+            motion_offset: var_motionOffset,
         };
     }
 }
@@ -1359,6 +1363,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::local_library::LocalPhoto {
             self.sort_time_ms.into_into_dart().into_dart(),
             self.state.into_into_dart().into_dart(),
             self.trashed_at_ms.into_into_dart().into_dart(),
+            self.duration_ms.into_into_dart().into_dart(),
+            self.motion_offset.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1597,6 +1603,8 @@ impl SseEncode for crate::api::local_library::LocalPhoto {
         <i64>::sse_encode(self.sort_time_ms, serializer);
         <String>::sse_encode(self.state, serializer);
         <Option<i64>>::sse_encode(self.trashed_at_ms, serializer);
+        <Option<i64>>::sse_encode(self.duration_ms, serializer);
+        <Option<i64>>::sse_encode(self.motion_offset, serializer);
     }
 }
 

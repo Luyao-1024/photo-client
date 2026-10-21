@@ -36,6 +36,8 @@ pub struct LocalPhoto {
     pub sort_time_ms: i64,
     pub state: String,
     pub trashed_at_ms: Option<i64>,
+    pub duration_ms: Option<i64>,
+    pub motion_offset: Option<i64>,
 }
 pub struct LocalAlbum {
     pub path: String,
@@ -258,29 +260,39 @@ pub async fn list_photos(
             limit,
         )?;
         Ok(LocalPhotoPage {
-            items: page
-                .items
-                .into_iter()
-                .map(|p| LocalPhoto {
-                    id: p.id,
-                    path: p.path,
-                    name: p.name,
-                    parent: p.parent,
-                    size_bytes: p.size_bytes,
-                    modified_ms: p.modified_ms,
-                    content_version: p.content_version,
-                    width: p.width,
-                    height: p.height,
-                    favorite: p.favorite,
-                    media_kind: p.media_kind,
-                    mime_type: p.mime_type,
-                    orientation: p.orientation,
-                    capture_time_ms: p.capture_time_ms,
-                    sort_time_ms: p.sort_time_ms,
-                    state: p.state,
-                    trashed_at_ms: p.trashed_at_ms,
-                })
-                .collect(),
+            items: {
+                let flags = active
+                    .store
+                    .media_flags(page.items.iter().map(|p| p.id.clone()).collect())?;
+                page.items
+                    .into_iter()
+                    .map(|p| {
+                        let (duration_ms, motion_offset) =
+                            flags.get(&p.id).copied().unwrap_or((None, None));
+                        LocalPhoto {
+                            id: p.id,
+                            path: p.path,
+                            name: p.name,
+                            parent: p.parent,
+                            size_bytes: p.size_bytes,
+                            modified_ms: p.modified_ms,
+                            content_version: p.content_version,
+                            width: p.width,
+                            height: p.height,
+                            favorite: p.favorite,
+                            media_kind: p.media_kind,
+                            mime_type: p.mime_type,
+                            orientation: p.orientation,
+                            capture_time_ms: p.capture_time_ms,
+                            sort_time_ms: p.sort_time_ms,
+                            state: p.state,
+                            trashed_at_ms: p.trashed_at_ms,
+                            duration_ms,
+                            motion_offset,
+                        }
+                    })
+                    .collect()
+            },
             next_cursor: page.next_cursor,
             total: page.total,
             revision: page.revision,
@@ -403,6 +415,8 @@ pub async fn rename_media(media_id: String, name: String) -> Result<LocalPhoto, 
             sort_time_ms: photo.sort_time_ms,
             state: photo.state,
             trashed_at_ms: photo.trashed_at_ms,
+            duration_ms: None,
+            motion_offset: None,
         })
     })
     .await
@@ -428,6 +442,8 @@ fn to_local_photo(photo: photo_core::local_library::LocalPhoto) -> LocalPhoto {
         sort_time_ms: photo.sort_time_ms,
         state: photo.state,
         trashed_at_ms: photo.trashed_at_ms,
+        duration_ms: None,
+        motion_offset: None,
     }
 }
 

@@ -75,6 +75,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
             child: Text(strings.cancel),
           ),
           TextButton(
+            key: const ValueKey('remove-source-confirm'),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text(strings.pick('移除来源', 'Remove source')),
           ),
@@ -130,6 +131,9 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                   (const Locale('en'), 'English'),
                 ])
                   ChoiceChip(
+                    key: ValueKey(
+                      'settings-language-${entry.languageCode == 'zh' ? 'zh' : 'en'}',
+                    ),
                     label: Text(label),
                     selected:
                         Localizations.localeOf(context).languageCode ==
@@ -164,6 +168,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                   (ThemeMode.dark, strings.dark),
                 ])
                   ChoiceChip(
+                    key: ValueKey('settings-theme-${mode.name}'),
                     label: Text(label),
                     selected: preferences.themeMode == mode,
                     onSelected: (_) => controller.setTheme(mode),
@@ -181,6 +186,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
             ),
             DropdownButtonFormField<String>(
               key: const ValueKey('settings-glass-quality'),
+              isExpanded: true,
               initialValue: preferences.glassMode,
               decoration: InputDecoration(
                 labelText: strings.pick('材质质量', 'Material quality'),
@@ -206,6 +212,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               onChanged: preferences.glass ? controller.setTransparency : null,
             ),
             SwitchListTile(
+              key: const ValueKey('settings-reduce-motion'),
               contentPadding: EdgeInsets.zero,
               title: Text(strings.pick('减少动画', 'Reduce motion')),
               value: preferences.reduceMotion,
@@ -234,6 +241,8 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               onChanged: (value) => controller.setDayColumns(value.round()),
             ),
             DropdownButtonFormField<String>(
+              key: const ValueKey('settings-order'),
+              isExpanded: true,
               initialValue: preferences.order,
               decoration: InputDecoration(
                 labelText: strings.pick('排序', 'Sort'),
@@ -290,6 +299,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                       label: Text(strings.addFiles),
                     ),
                     OutlinedButton.icon(
+                      key: const ValueKey('settings-rescan'),
                       onPressed: busy
                           ? null
                           : () => _run(library.rescanSources),
@@ -319,6 +329,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                           ),
                   ),
                   trailing: IconButton(
+                    key: ValueKey('settings-remove-source-${source['path']}'),
                     tooltip: strings.pick(
                       '移除来源，保留原文件',
                       'Remove source and keep files',
@@ -335,6 +346,8 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
         children: [
           section(strings.pick('缩略图', 'Thumbnails'), [
             DropdownButtonFormField<int>(
+              key: const ValueKey('settings-thumbnail-workers'),
+              isExpanded: true,
               initialValue: preferences.thumbnailWorkers,
               decoration: InputDecoration(
                 labelText: strings.pick(
@@ -363,6 +376,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                     : '${(_usage! / 1024 / 1024).toStringAsFixed(1)} MB',
               ),
               trailing: TextButton(
+                key: const ValueKey('settings-clear-cache'),
                 onPressed: _busy
                     ? null
                     : () => _run(() async {
@@ -376,6 +390,8 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
           ]),
           section(strings.pick('日志', 'Logs'), [
             DropdownButtonFormField<String>(
+              key: const ValueKey('settings-log-level'),
+              isExpanded: true,
               initialValue: preferences.logLevel,
               decoration: InputDecoration(
                 labelText: strings.pick('日志级别', 'Logging level'),
@@ -390,6 +406,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
             ),
             const SizedBox(height: 12),
             OutlinedButton(
+              key: const ValueKey('settings-clear-logs'),
               onPressed: _busy
                   ? null
                   : () => _run(() async {
@@ -457,6 +474,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                   builder: (context, constraints) {
                     final compact = constraints.maxWidth < 600;
                     final content = SingleChildScrollView(
+                      key: const ValueKey('settings-content'),
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,

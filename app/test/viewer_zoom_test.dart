@@ -67,13 +67,22 @@ void main() {
       await mount(tester, gateway);
       await openViewer(tester, 'p0');
 
-      // The prototype has no zoom toolbar or percentage readout.
-      expect(find.byKey(const ValueKey('viewer-zoom-in')), findsNothing);
-      expect(find.byKey(const ValueKey('viewer-zoom-out')), findsNothing);
-      expect(find.byKey(const ValueKey('viewer-zoom-reset')), findsNothing);
-      expect(find.byKey(const ValueKey('viewer-zoom-level')), findsNothing);
+      // The chrome exposes an explicit zoom toolbar and percentage readout.
+      expect(find.byKey(const ValueKey('viewer-zoom-in')), findsOneWidget);
+      expect(find.byKey(const ValueKey('viewer-zoom-out')), findsOneWidget);
+      expect(find.byKey(const ValueKey('viewer-zoom-reset')), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
 
       // At fit scale the stage rests at 1.0.
+      expect(stageScale(tester), closeTo(1, 1e-6));
+
+      // The toolbar drives the same transform as the keyboard.
+      await tester.tap(find.byKey(const ValueKey('viewer-zoom-in')));
+      await tester.pump();
+      expect(stageScale(tester), closeTo(1.25, 1e-6));
+      expect(find.text('125%'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('viewer-zoom-reset')));
+      await tester.pump();
       expect(stageScale(tester), closeTo(1, 1e-6));
 
       // Zoom in via the =/+ key (both bindings use equal).
@@ -132,6 +141,7 @@ void main() {
     // Enter immersive via the header button: header, filmstrip, and the
     // bottom-right nav pair fold away; only the exit control remains.
     await tester.tap(find.byKey(const ValueKey('viewer-immersive')));
+    await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
     expect(find.byKey(const ValueKey('viewer-close')), findsNothing);
@@ -152,6 +162,7 @@ void main() {
 
     // Enter with the F key, exit with the dedicated button.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('viewer-immersive-exit')));

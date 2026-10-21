@@ -187,6 +187,16 @@ class _PhotoTileState extends State<PhotoTile> {
       }
       return KeyEventResult.handled;
     }
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+      if (widget.multiSelect) {
+        widget.onSelectToggle();
+      } else {
+        widget.onOpen();
+      }
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
   }
 
@@ -201,6 +211,7 @@ class _PhotoTileState extends State<PhotoTile> {
       position: RelativeRect.fromRect(origin, Offset.zero & overlay.size),
       items: [
         PopupMenuItem<String>(
+          key: const ValueKey('tile-menu-select'),
           value: 'select',
           child: Text(
             widget.selected
@@ -210,6 +221,7 @@ class _PhotoTileState extends State<PhotoTile> {
         ),
         if (widget.photo.state != 'trashed')
           PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-favorite'),
             value: 'favorite',
             child: Text(
               widget.photo.favorite
@@ -217,38 +229,56 @@ class _PhotoTileState extends State<PhotoTile> {
                   : strings.markFavorite,
             ),
           ),
-        PopupMenuItem<String>(value: 'details', child: Text(strings.details)),
+        PopupMenuItem<String>(
+          key: const ValueKey('tile-menu-details'),
+          value: 'details',
+          child: Text(strings.details),
+        ),
         if (widget.onRestore != null)
-          PopupMenuItem<String>(value: 'restore', child: Text(strings.restore)),
+          PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-restore'),
+            value: 'restore',
+            child: Text(strings.restore),
+          ),
         if (widget.onPurge != null)
           PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-purge'),
             value: 'purge',
             child: Text(strings.deletePermanently),
           ),
         if (widget.onRename != null)
-          PopupMenuItem<String>(value: 'rename', child: Text(strings.rename)),
+          PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-rename'),
+            value: 'rename',
+            child: Text(strings.rename),
+          ),
         if (widget.onCopyToAlbum != null)
           PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-copy-album'),
             value: 'copy-album',
             child: Text(strings.copyToAlbum),
           ),
         if (widget.onMoveToAlbum != null)
           PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-move-album'),
             value: 'move-album',
             child: Text(strings.moveToAlbum),
           ),
         if (widget.onExport != null)
           PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-export'),
             value: 'export',
             child: Text(strings.pick('导出副本', 'Export copy')),
           ),
         if (widget.onSetCover != null)
           PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-cover'),
             value: 'cover',
             child: Text(strings.pick('设为相册封面', 'Set as album cover')),
           ),
         if (widget.onMoveToTrash != null)
           PopupMenuItem<String>(
+            key: const ValueKey('tile-menu-trash'),
             value: 'trash',
             child: Text(strings.moveToTrash),
           ),

@@ -127,14 +127,20 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('sidebar-settings')));
     await tester.tap(find.byKey(const ValueKey('sidebar-settings')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('add-folder')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-close')), findsOneWidget);
+  }
+
+  Future<void> openSettingsCategory(WidgetTester tester, int index) async {
+    await openSettings(tester);
+    await tester.tap(find.byKey(ValueKey('settings-category-$index')));
+    await tester.pumpAndSettle();
   }
 
   Future<void> closeSettings(WidgetTester tester) async {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byKey(const ValueKey('add-folder')), findsNothing);
+    expect(find.byKey(const ValueKey('settings-close')), findsNothing);
   }
 
   testWidgets('sidebar navigation switches photos, favorites and trash', (
@@ -199,30 +205,31 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
-  testWidgets(
-    'settings dialog owns appearance and sources',
-    (tester) async {
-      final gateway = FakeLocalGateway(imagePath: image);
-      await mount(tester, gateway);
-      await tester.pumpAndSettle();
-      await openSettings(tester);
-      // Runtime plumbing stays internal: no "core" status is user-facing.
-      expect(find.textContaining('core'), findsNothing);
-      expect(find.byType(ChoiceChip), findsWidgets);
-      expect(find.widgetWithText(ChoiceChip, 'Dark'), findsOneWidget);
-      expect(find.byType(SwitchListTile), findsOneWidget);
-      expect(find.byKey(const ValueKey('add-files')), findsOneWidget);
-      // No picker was supplied: the source buttons stay honestly disabled.
-      expect(
-        tester
-            .widget<FilledButton>(find.byKey(const ValueKey('add-folder')))
-            .onPressed,
-        isNull,
-      );
-      await closeSettings(tester);
-      await disposeApp(tester, gateway);
-    },
-  );
+  testWidgets('settings dialog owns appearance and sources', (tester) async {
+    final gateway = FakeLocalGateway(imagePath: image);
+    await mount(tester, gateway);
+    await tester.pumpAndSettle();
+    await openSettings(tester);
+    // Runtime plumbing stays internal: no "core" status is user-facing.
+    expect(find.textContaining('core'), findsNothing);
+    expect(find.byType(ChoiceChip), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('settings-category-1')));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ChoiceChip, 'Dark'), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-glass')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('settings-category-2')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('add-files')), findsOneWidget);
+    // Without an injected picker the app falls back to its in-app chooser.
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('add-folder')))
+          .onPressed,
+      isNotNull,
+    );
+    await closeSettings(tester);
+    await disposeApp(tester, gateway);
+  });
 
   testWidgets('theme, language and glass persist via presentationProvider', (
     tester,
@@ -234,7 +241,7 @@ void main() {
     // The floating mode selector is the single live glass surface.
     expect(find.byType(BackdropFilter), findsOneWidget);
 
-    await openSettings(tester);
+    await openSettingsCategory(tester, 1);
     await tester.tap(find.widgetWithText(ChoiceChip, 'Dark'));
     await tester.pumpAndSettle();
     expect(container.read(presentationProvider).themeMode, ThemeMode.dark);
@@ -243,6 +250,8 @@ void main() {
       Brightness.dark,
     );
 
+    await tester.tap(find.byKey(const ValueKey('settings-category-0')));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, '简体中文'));
     await tester.pumpAndSettle();
     expect(
@@ -251,14 +260,16 @@ void main() {
     );
     expect(find.text('语言'), findsOneWidget);
 
-    await tester.ensureVisible(find.byType(SwitchListTile));
-    await tester.tap(find.byType(SwitchListTile));
+    await tester.tap(find.byKey(const ValueKey('settings-category-1')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('settings-glass')));
+    await tester.tap(find.byKey(const ValueKey('settings-glass')));
     await tester.pumpAndSettle();
     expect(container.read(presentationProvider).glass, isFalse);
     expect(find.byType(BackdropFilter), findsNothing);
 
     // High contrast forces solid surfaces even with glass enabled again.
-    await tester.tap(find.byType(SwitchListTile));
+    await tester.tap(find.byKey(const ValueKey('settings-glass')));
     await tester.pumpAndSettle();
     expect(container.read(presentationProvider).glass, isTrue);
     expect(find.byType(BackdropFilter), findsOneWidget);
@@ -273,7 +284,7 @@ void main() {
     // Appearance never restarts the core; preferences survive dialog cycles.
     expect(gateway.initializes, 1);
     await closeSettings(tester);
-    await openSettings(tester);
+    await openSettingsCategory(tester, 1);
     expect(container.read(presentationProvider).themeMode, ThemeMode.dark);
     expect(find.widgetWithText(ChoiceChip, '深色').evaluate().single, isNotNull);
     await closeSettings(tester);

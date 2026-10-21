@@ -220,7 +220,15 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
       }
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(SnackBar(content: Text(strings.appliedEdits)));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(strings.appliedEdits),
+            // A full-width toast would swallow clicks on the sidebar beneath
+            // the viewer until it expires.
+            behavior: SnackBarBehavior.floating,
+            width: math.min(360, MediaQuery.sizeOf(context).width - 32),
+          ),
+        );
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -228,6 +236,8 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
         ..clearSnackBars()
         ..showSnackBar(
           SnackBar(
+            behavior: SnackBarBehavior.floating,
+            width: math.min(360, MediaQuery.sizeOf(context).width - 32),
             content: Text(
               error.toString().contains('SourceChanged')
                   ? strings.pick(
@@ -301,6 +311,7 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
 
   Widget _sidePanel(AppStrings strings, PresentationPreferences preferences) =>
       GlassSurface(
+        key: const ValueKey('editor-controls'),
         role: GlassRole.reading,
         enabled: preferences.glass,
         radius: 0,
@@ -615,6 +626,8 @@ class LocalPhotoEditorState extends ConsumerState<LocalPhotoEditor> {
           ),
           const SizedBox(height: 20),
           DropdownButtonFormField<String>(
+            key: const ValueKey('editor-crop-ratio'),
+            isExpanded: true,
             initialValue: _ratio,
             decoration: InputDecoration(
               labelText: strings.pick('裁剪比例', 'Crop ratio'),

@@ -118,6 +118,11 @@ void main() {
           tester.widget<Text>(find.byKey(const ValueKey('viewer-name'))).data,
           'Photo 0.png',
         );
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'after opening the viewer',
+        );
 
         // Favorite from the viewer.
         await tester.tap(find.byKey(const ValueKey('viewer-favorite')));
@@ -129,6 +134,7 @@ void main() {
               .isSelected,
           isTrue,
         );
+        expect(tester.takeException(), isNull, reason: 'after favoriting');
 
         // Back to the grid.
         await tester.tap(find.byKey(const ValueKey('viewer-close')));
@@ -136,6 +142,11 @@ void main() {
         expect(find.byKey(const ValueKey('viewer')), findsNothing);
         expectVisibleAndSized(tester, 'photo-p0');
         expectVisibleAndSized(tester, 'photo-p1');
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'after closing the viewer',
+        );
 
         // Favorites destination in the sidebar shows only the favorited photo.
         await tester.tap(find.byKey(const ValueKey('sidebar-favorites')));
@@ -143,7 +154,11 @@ void main() {
         expect(container.read(localLibraryProvider).favoritesOnly, isTrue);
         expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
         expect(find.byKey(const ValueKey('photo-p1')), findsNothing);
-        expect(tester.takeException(), isNull);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'after the favorites filter',
+        );
         await disposeApp(tester, gateway);
       },
     );

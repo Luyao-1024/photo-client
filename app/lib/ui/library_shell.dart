@@ -410,8 +410,13 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
         Offset.zero & overlay.size,
       ),
       items: [
-        PopupMenuItem(value: 'rename', child: Text(strings.rename)),
         PopupMenuItem(
+          key: const ValueKey('album-menu-rename'),
+          value: 'rename',
+          child: Text(strings.rename),
+        ),
+        PopupMenuItem(
+          key: const ValueKey('album-menu-remove'),
           value: 'remove',
           child: Text(strings.pick('从图库移除相册', 'Remove album from library')),
         ),
@@ -427,6 +432,7 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
           builder: (context) => AlertDialog(
             title: Text(strings.pick('重命名相册', 'Rename album')),
             content: TextField(
+              key: const ValueKey('album-rename-field'),
               controller: text,
               autofocus: true,
               onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
@@ -437,6 +443,7 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
                 child: Text(strings.cancel),
               ),
               FilledButton(
+                key: const ValueKey('album-rename-confirm'),
                 onPressed: () => Navigator.of(context).pop(text.text.trim()),
                 child: Text(strings.rename),
               ),
@@ -468,6 +475,7 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
                 child: Text(strings.cancel),
               ),
               TextButton(
+                key: const ValueKey('album-remove-confirm'),
                 onPressed: () => Navigator.of(context).pop(true),
                 child: Text(strings.pick('移除', 'Remove')),
               ),
@@ -603,6 +611,7 @@ class _SectionHeader extends StatelessWidget {
           ),
           if (onAdd != null)
             IconButton(
+              key: const ValueKey('sidebar-album-add'),
               tooltip: AppStrings.of(context).pick('新建相册', 'New album'),
               onPressed: onAdd,
               icon: const Icon(Icons.add, size: 18),

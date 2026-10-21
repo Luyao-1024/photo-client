@@ -1001,8 +1001,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LocalPhoto dco_decode_local_photo(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 17)
-      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
+    if (arr.length != 19)
+      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
     return LocalPhoto(
       id: dco_decode_String(arr[0]),
       path: dco_decode_String(arr[1]),
@@ -1021,6 +1021,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       sortTimeMs: dco_decode_i_64(arr[14]),
       state: dco_decode_String(arr[15]),
       trashedAtMs: dco_decode_opt_box_autoadd_i_64(arr[16]),
+      durationMs: dco_decode_opt_box_autoadd_i_64(arr[17]),
+      motionOffset: dco_decode_opt_box_autoadd_i_64(arr[18]),
     );
   }
 
@@ -1321,6 +1323,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_sortTimeMs = sse_decode_i_64(deserializer);
     var var_state = sse_decode_String(deserializer);
     var var_trashedAtMs = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_durationMs = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_motionOffset = sse_decode_opt_box_autoadd_i_64(deserializer);
     return LocalPhoto(
       id: var_id,
       path: var_path,
@@ -1339,6 +1343,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       sortTimeMs: var_sortTimeMs,
       state: var_state,
       trashedAtMs: var_trashedAtMs,
+      durationMs: var_durationMs,
+      motionOffset: var_motionOffset,
     );
   }
 
@@ -1640,6 +1646,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_64(self.sortTimeMs, serializer);
     sse_encode_String(self.state, serializer);
     sse_encode_opt_box_autoadd_i_64(self.trashedAtMs, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.durationMs, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.motionOffset, serializer);
   }
 
   @protected

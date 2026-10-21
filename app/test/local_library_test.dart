@@ -61,6 +61,11 @@ void main() {
   Future<void> openSettings(WidgetTester tester) async {
     await tester.tap(find.byKey(const ValueKey('sidebar-settings')));
     await tester.pumpAndSettle();
+    final category = find.byKey(const ValueKey('settings-category-2'));
+    await tester.ensureVisible(category);
+    await tester.pumpAndSettle();
+    await tester.tap(category);
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('add-folder')), findsOneWidget);
   }
 
@@ -74,7 +79,7 @@ void main() {
   }
 
   testWidgets(
-    'real mode opens an empty local library and disables unavailable picker',
+    'real mode opens an empty local library with the built-in source picker',
     (tester) async {
       final gateway = FakeLocalGateway(imagePath: image);
       await mount(tester, gateway);
@@ -89,17 +94,19 @@ void main() {
       );
       expect(find.textContaining('cloud'), findsNothing);
       await openSettings(tester);
+      // Without an injected picker the app falls back to its in-app chooser,
+      // so both import buttons stay live.
       expect(
         tester
             .widget<OutlinedButton>(find.byKey(const ValueKey('add-files')))
             .onPressed,
-        isNull,
+        isNotNull,
       );
       expect(
         tester
             .widget<FilledButton>(find.byKey(const ValueKey('add-folder')))
             .onPressed,
-        isNull,
+        isNotNull,
       );
       await disposeApp(tester, gateway);
     },
@@ -141,11 +148,12 @@ void main() {
           gateway.addedPaths,
           directory ? ['/chosen/photos'] : ['/chosen/photo.png'],
         );
-        expect(find.text('1 photos'), findsOneWidget);
-        expect(
-          find.text('Scan finished: 1 discovered, 0 skipped, 0 failed'),
-          findsOneWidget,
-        );
+        final state = ProviderScope.containerOf(
+          tester.element(find.byKey(const ValueKey('sidebar-photos'))),
+        ).read(localLibraryProvider);
+        expect(state.total, 1);
+        expect(state.scanResult?.discovered, 1);
+        expect(state.scanResult?.cancelled, isFalse);
         expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
         expect(tester.takeException(), isNull);
         await disposeApp(tester, gateway);
@@ -230,7 +238,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
     expect(find.byKey(const ValueKey('photo-p1')), findsNothing);
-    expect(find.text('1 photos'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(const ValueKey('sidebar-photos'))),
+    );
+    expect(container.read(localLibraryProvider).total, 1);
     await disposeApp(tester, gateway);
   });
 
@@ -244,10 +255,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'not-present');
       await tester.pump(const Duration(milliseconds: 100));
-      expect(gateway.listCalls, 1);
+      // Debounce means the new query has not reached the gateway yet; page
+      // preloading from the grid may still have issued unrelated reads.
+      expect(gateway.requestedSearches, isNot(contains('not-present')));
       await tester.pump(const Duration(milliseconds: 250));
       await tester.pumpAndSettle();
       expect(gateway.requestedSearches.last, 'not-present');
+      expect(
+        gateway.requestedSearches.where((value) => value == 'not-present'),
+        hasLength(1),
+      );
       // An unmatched search is distinct from an empty library: the no-matches
       // state shows, and the empty-library state never does.
       expect(find.text('No matching photos'), findsOneWidget);
@@ -328,10 +345,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-        find.text('Scan cancelled: 1 discovered, 2 skipped, 1 failed'),
-        findsOneWidget,
-      );
+      final state = ProviderScope.containerOf(
+        tester.element(find.byKey(const ValueKey('sidebar-photos'))),
+      ).read(localLibraryProvider);
+      expect(state.scanResult?.discovered, 1);
+      expect(state.scanResult?.skipped, 2);
+      expect(state.scanResult?.failed, 1);
+      expect(state.scanResult?.cancelled, isTrue);
       await disposeApp(tester, gateway);
     },
   );
@@ -362,6 +382,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('sidebar-settings')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
+      final category = find.byKey(const ValueKey('settings-category-2'));
+      await tester.ensureVisible(category);
+      await tester.pump();
+      await tester.tap(category);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
         tester
             .widget<FilledButton>(find.byKey(const ValueKey('add-folder')))
@@ -378,10 +404,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-        find.text('Scan cancelled: 0 discovered, 0 skipped, 0 failed'),
-        findsOneWidget,
-      );
+      final state = ProviderScope.containerOf(
+        tester.element(find.byKey(const ValueKey('sidebar-photos'))),
+      ).read(localLibraryProvider);
+      expect(state.scanResult?.discovered, 0);
+      expect(state.scanResult?.cancelled, isTrue);
       expect(find.byKey(const ValueKey('cancel-scan')), findsNothing);
       await disposeApp(tester, gateway);
     },

@@ -234,6 +234,8 @@ class LocalPhoto {
   final PlatformInt64 sortTimeMs;
   final String state;
   final PlatformInt64? trashedAtMs;
+  final PlatformInt64? durationMs;
+  final PlatformInt64? motionOffset;
 
   const LocalPhoto({
     required this.id,
@@ -253,6 +255,8 @@ class LocalPhoto {
     required this.sortTimeMs,
     required this.state,
     this.trashedAtMs,
+    this.durationMs,
+    this.motionOffset,
   });
 
   @override
@@ -273,7 +277,9 @@ class LocalPhoto {
       captureTimeMs.hashCode ^
       sortTimeMs.hashCode ^
       state.hashCode ^
-      trashedAtMs.hashCode;
+      trashedAtMs.hashCode ^
+      durationMs.hashCode ^
+      motionOffset.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -296,7 +302,9 @@ class LocalPhoto {
           captureTimeMs == other.captureTimeMs &&
           sortTimeMs == other.sortTimeMs &&
           state == other.state &&
-          trashedAtMs == other.trashedAtMs;
+          trashedAtMs == other.trashedAtMs &&
+          durationMs == other.durationMs &&
+          motionOffset == other.motionOffset;
 }
 
 class LocalPhotoPage {

@@ -77,7 +77,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(gateway.trashCalls, 1);
     expect(gateway.photos.every((p) => p.state == 'trashed'), isTrue);
-
+    // Let the undo snackbar expire so it no longer covers the sidebar footer.
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pumpAndSettle();
     // Trash destination lists them and can restore every selected item.
     await tester.tap(find.byKey(const ValueKey('sidebar-trash')));
     await tester.pumpAndSettle();
@@ -144,7 +146,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(gateway.requestedScopes.last, SearchScope.date);
-    expect(gateway.requestedSearches.last, '2024-01');
+    expect(gateway.requestedSearches.last, '2024/01');
     await disposeApp(tester, gateway);
   });
 
@@ -169,6 +171,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('photo-p0')));
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-confirm-trash')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('viewer-confirm-trash')));
     await tester.pumpAndSettle();
     expect(gateway.trashCalls, 1);
     expect(find.byKey(const ValueKey('viewer')), findsOneWidget);

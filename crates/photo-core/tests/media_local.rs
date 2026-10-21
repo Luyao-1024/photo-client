@@ -165,7 +165,7 @@ fn scan_unicode_and_spaces_preserves_paths_and_isolates_bad_or_unsupported_files
     }
     fs::write(folder.join("坏图.jpg"), b"not JPEG").unwrap();
     fs::write(
-        folder.join("ignored.gif"),
+        folder.join("ignored.bmp"),
         image_bytes(ImageFormat::Png, 2, 2),
     )
     .unwrap();

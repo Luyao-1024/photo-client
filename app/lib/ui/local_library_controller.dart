@@ -466,6 +466,11 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
     });
   }
 
+  void clearSearch() {
+    _searchTimer?.cancel();
+    if (state.search.isNotEmpty) _changeQuery(search: '');
+  }
+
   void setSearchScope(SearchScope value) {
     if (state.searchScope == value) return;
     _changeQuery(searchScope: value);

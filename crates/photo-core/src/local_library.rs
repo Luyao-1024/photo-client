@@ -414,14 +414,15 @@ impl LocalLibrary {
                         WHERE m2.library_id=m.library_id AND m2.parent_uri=m.parent_uri
                           AND m2.state='active'
                         ORDER BY m2.sort_time_ms DESC, m2.media_id DESC LIMIT 1
-                     ))
+                     )),
+                     COALESCE((SELECT position FROM album_preferences ap WHERE ap.library_id=m.library_id AND ap.folder=m.parent_uri),2147483647)
                      FROM media m
                      WHERE m.library_id=?1 AND m.state='active' AND m.parent_uri<>''
                      GROUP BY m.parent_uri
-                     ORDER BY COALESCE((SELECT position FROM album_preferences ap WHERE ap.library_id=m.library_id AND ap.folder=m.parent_uri),2147483647), MAX(m.sort_time_ms) DESC, m.parent_uri ASC",
+                     ORDER BY 4, MAX(m.sort_time_ms) DESC, m.parent_uri ASC",
                 )
                 .map_err(error)?;
-            let mut rows = statement
+            let rows = statement
                 .query_map([&library], |r| {
                     let path: String = r.get(0)?;
                     let name = Path::new(&path)
@@ -429,20 +430,43 @@ impl LocalLibrary {
                         .map(|v| v.to_string_lossy().into_owned())
                         .filter(|v| !v.is_empty())
                         .unwrap_or_else(|| path.clone());
-                    Ok(AlbumInfo {
+                    Ok((r.get::<_, i64>(3)?, AlbumInfo {
                         path,
                         name,
                         count: sql_u64(r, 1)?,
                         cover_media_id: r.get(2)?,
-                    })
+                    }))
                 })
                 .map_err(error)?
                 .collect::<rusqlite::Result<Vec<_>>>()
                 .map_err(error)?;
-            let mut empty=c.prepare("SELECT folder FROM album_preferences WHERE library_id=?1 ORDER BY position").map_err(error)?;
-            let folders=empty.query_map([&library],|r|r.get::<_,String>(0)).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
-            for folder in folders{if !rows.iter().any(|a|a.path==folder)&&Path::new(&folder).is_dir(){rows.push(AlbumInfo{ name:Path::new(&folder).file_name().unwrap_or_default().to_string_lossy().into_owned(),path:folder,count:0,cover_media_id:None});}}
-            Ok(rows)
+            let mut albums = Vec::with_capacity(rows.len());
+            let mut positions = Vec::with_capacity(rows.len());
+            for (position, album) in rows {
+                positions.push(position);
+                albums.push(album);
+            }
+            let mut empty=c.prepare("SELECT folder, COALESCE(position, 2147483647) FROM album_preferences WHERE library_id=?1 ORDER BY 2").map_err(error)?;
+            let folders=empty.query_map([&library],|r|Ok((r.get::<_,String>(0)?, r.get::<_,i64>(1)?))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
+            for (folder, position) in folders {
+                if albums.iter().any(|a| a.path == folder) || !Path::new(&folder).is_dir() {
+                    continue;
+                }
+                // Empty albums still honor their persisted drag position instead
+                // of always falling to the bottom of the sidebar.
+                let at = positions
+                    .iter()
+                    .position(|current| *current > position)
+                    .unwrap_or(positions.len());
+                positions.insert(at, position);
+                albums.insert(at, AlbumInfo{
+                    name: Path::new(&folder).file_name().unwrap_or_default().to_string_lossy().into_owned(),
+                    path: folder,
+                    count: 0,
+                    cover_media_id: None,
+                });
+            }
+            Ok(albums)
         })
     }
 

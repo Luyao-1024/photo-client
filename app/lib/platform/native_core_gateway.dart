@@ -153,6 +153,8 @@ final class NativeCoreGateway
             sortTimeMs: photo.sortTimeMs.toInt(),
             state: photo.state,
             trashedAtMs: photo.trashedAtMs?.toInt(),
+            durationMs: photo.durationMs?.toInt(),
+            motionOffset: photo.motionOffset?.toInt(),
           ),
       ],
       nextCursor: page.nextCursor,

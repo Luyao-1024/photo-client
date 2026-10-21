@@ -329,6 +329,38 @@ fn albums_are_derived_from_folders_and_exclude_trashed_media() {
 }
 
 #[test]
+fn reordered_empty_album_keeps_its_sidebar_position() {
+    let first = TempDir::new().unwrap();
+    let second = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let library = LocalLibrary::open(root.path()).unwrap();
+    for folder in [first.path(), second.path()] {
+        let source = library.add_source(folder).unwrap();
+        library
+            .upsert_batch(source, vec![write_photo(folder, "one.png", 4, 4)])
+            .unwrap();
+    }
+    let ordered: Vec<String> = library
+        .list_albums()
+        .unwrap()
+        .into_iter()
+        .map(|album| album.path)
+        .collect();
+    assert_eq!(ordered.len(), 2);
+    let parent = TempDir::new().unwrap();
+    let empty = library
+        .create_album(parent.path().to_path_buf(), "Empty".into())
+        .unwrap();
+    let mut reordered = vec![empty.clone()];
+    reordered.extend(ordered);
+    library.reorder_albums(reordered).unwrap();
+    let albums = library.list_albums().unwrap();
+    assert_eq!(albums.len(), 3);
+    assert_eq!(albums[0].path, empty);
+    assert_eq!(albums[0].count, 0);
+}
+
+#[test]
 fn batch_upsert_keeps_trashed_media_trashed() {
     let photos = TempDir::new().unwrap();
     let root = TempDir::new().unwrap();

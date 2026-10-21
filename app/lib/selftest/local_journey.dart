@@ -14,9 +14,13 @@ import '../services/core_gateway.dart';
 import '../services/local_library_gateway.dart';
 import '../ui/library_shell.dart';
 import '../ui/local_library_controller.dart';
+import '../ui/local_video_stage.dart';
+import '../ui/presentation_preferences.dart';
 import '../ui/runtime_controller.dart';
 import 'journey_input.dart';
 import 'launch_options.dart';
+
+part 'ux_journey.dart';
 
 const String _recordPrefix = 'PHOTO_CLIENT_LOCAL ';
 const String _readyPrefix = 'PHOTO_CLIENT_LOCAL_READY ';
@@ -42,6 +46,7 @@ final class LocalJourney {
   JourneyInput? _input;
   LocalLibraryGateway? _library;
   File? _traceFile;
+  UxSourcePicker? _uxPicker;
 
   LibraryViewState get _state => _container!.read(localLibraryProvider);
   RuntimeViewState get _runtime => _container!.read(runtimeProvider);
@@ -82,6 +87,8 @@ final class LocalJourney {
           await _missingSourceJourney();
         case 'hold':
           await _holdJourney();
+        case 'ux':
+          await _uxJourney();
         default:
           throw JourneyFailure(
             'Unsupported journey phase: ${options.journeyPhase}',
@@ -122,9 +129,21 @@ final class LocalJourney {
   // ---------------------------------------------------------------- lifecycle
 
   Future<void> _launchUi() async {
-    final picker = options.sources.isEmpty
-        ? const FileSelectorSourcePicker()
-        : ScriptedSourcePicker(options.sources);
+    final LocalSourcePicker picker;
+    if (options.journeyPhase == 'ux') {
+      final evidence = options.evidenceDir;
+      if (evidence == null) {
+        throw JourneyFailure('the ux phase needs --evidence-dir');
+      }
+      picker = _uxPicker = UxSourcePicker(
+        evidenceRoot: evidence,
+        sourceDirectory: options.sources.isEmpty ? '' : options.sources.first,
+      );
+    } else {
+      picker = options.sources.isEmpty
+          ? const FileSelectorSourcePicker()
+          : ScriptedSourcePicker(options.sources);
+    }
     runApp(
       RepaintBoundary(
         key: _shotKey,
@@ -187,6 +206,11 @@ final class LocalJourney {
       // Evidence files stay behind for inspection; shutdown must still run.
     }
     _trace('shutdown-input', 'DONE');
+    try {
+      await _container?.read(presentationProvider.notifier).flush();
+    } catch (_) {
+      // Preference writes are recorded by the journey; shutdown still runs.
+    }
     try {
       await _container?.read(runtimeProvider.notifier).shutdown();
     } catch (_) {
@@ -656,6 +680,7 @@ final class LocalJourney {
       keyValue,
       reason: 'widget $keyValue is not mounted',
     );
+    await _waitForStableRect(element, keyValue);
     final position = _centerOf(element, keyValue);
     _trace('tap', 'SEND', '$keyValue at ${position.dx},${position.dy}');
     await _input!.tap(position, _devicePixelRatio);
@@ -691,6 +716,39 @@ final class LocalJourney {
       );
       if (stalled) _trace('settle', 'STALL', 'no frame within 10s');
     }
+  }
+
+  /// Dialog and panel entrances translate their subtree, and a closing route
+  /// keeps its barrier over the window for a few frames. Wait until the rect
+  /// stops moving and the control is the topmost hit at its centre, so neither
+  /// a moving target nor a dismissed barrier swallows the click.
+  Future<void> _waitForStableRect(Element element, String label) async {
+    Rect? previous;
+    await _waitFor(
+      () {
+        final rect = _uxRectOf(element);
+        final render = element.findRenderObject();
+        if (rect == null || render is! RenderBox || !render.attached) {
+          return false;
+        }
+        final result = HitTestResult();
+        WidgetsBinding.instance.hitTestInView(
+          result,
+          rect.center,
+          View.of(element).viewId,
+        );
+        if (!result.path.any((entry) => identical(entry.target, render))) {
+          previous = null;
+          return false;
+        }
+        final stable =
+            previous != null && (rect.center - previous!.center).distance < .5;
+        previous = rect;
+        return stable;
+      },
+      reason: 'widget $label never came to rest',
+      timeout: const Duration(seconds: 3),
+    );
   }
 
   Offset _centerOf(Element element, String label) {
@@ -938,6 +996,25 @@ final class LocalJourney {
     if (widget is Text) return widget.data;
     if (widget is SelectableText) return widget.data;
     return null;
+  }
+
+  /// Reads the first text rendered inside a keyed control, e.g. a TextButton.
+  String? _textWithin(Key key) {
+    final root = _elementByKey(key);
+    if (root == null) return null;
+    String? text;
+    void visit(Element element) {
+      if (text != null) return;
+      final widget = element.widget;
+      if (widget is Text && widget.data != null) {
+        text = widget.data;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    visit(root);
+    return text;
   }
 
   List<String> _panelTexts() {

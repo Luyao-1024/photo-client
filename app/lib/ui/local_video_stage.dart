@@ -25,6 +25,9 @@ class LocalVideoStageState extends State<LocalVideoStage> {
   VideoController? _video;
   String? _error;
   StreamSubscription<String>? _errors;
+  String? get error => _error;
+  bool get playing => _player?.state.playing ?? false;
+  Duration get position => _player?.state.position ?? Duration.zero;
   @override
   void initState() {
     super.initState();

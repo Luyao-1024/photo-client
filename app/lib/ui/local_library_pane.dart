@@ -100,6 +100,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   void initState() {
     super.initState();
     _scroll.addListener(_nearEnd);
+    HardwareKeyboard.instance.addHandler(_onGlobalKey);
   }
 
   void _nearEnd() {
@@ -136,10 +137,26 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onGlobalKey);
     _scroll.dispose();
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  // The focused text field consumes Escape via the default text-editing
+  // shortcut before focus handlers see it, so close the search destination at
+  // the hardware boundary while its route is still the visible one.
+  bool _onGlobalKey(KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        widget.searchMode &&
+        mounted &&
+        (ModalRoute.of(context)?.isCurrent ?? true)) {
+      _closeSearch();
+      return true;
+    }
+    return false;
   }
 
   @override
@@ -175,6 +192,8 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   void _closeSearch() {
     if (!mounted) return;
+    // Leaving a search must not leave an invisible filter behind.
+    ref.read(localLibraryProvider.notifier).clearSearch();
     if (widget.searchMode) {
       widget.onCloseSearch?.call();
       return;
@@ -284,13 +303,18 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   void _notify(String message, {Future<void> Function()? undo}) {
     if (!mounted) return;
+    // A full-width toast sits over the sidebar's Trash row; keep it centred so
+    // side navigation stays clickable while Undo is offered.
+    final width = MediaQuery.sizeOf(context).width;
+    final side = width < 392 ? 16.0 : (width - 360) / 2;
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
           content: Text(message),
           behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 84),
+          persist: false,
+          margin: EdgeInsets.fromLTRB(side, 8, side, 84),
           duration: Duration(seconds: undo == null ? 3 : 6),
           action: undo == null
               ? null
@@ -1472,7 +1496,7 @@ class _Header extends StatelessWidget {
                             scope: scope,
                             focusNode: searchFocus,
                             onChanged: onSearchChanged,
-                            onClose: searchMode ? null : onCloseSearch,
+                            onClose: onCloseSearch,
                             glass: glass,
                             strings: strings,
                           ),
@@ -1619,6 +1643,7 @@ class _Header extends StatelessWidget {
     return Row(
       children: [
         IconButton(
+          key: const ValueKey('batch-export'),
           tooltip: strings.pick('导出副本', 'Export copies'),
           onPressed: selectedPhotos.isEmpty ? null : onBatchExport,
           icon: const Icon(Icons.file_upload_outlined),
@@ -1798,6 +1823,7 @@ class _AlbumPickerDialog extends StatelessWidget {
           child: Text(strings.newAlbum),
         ),
         TextButton(
+          key: const ValueKey('album-picker-cancel'),
           onPressed: () => Navigator.of(context).pop(),
           child: Text(strings.cancel),
         ),

@@ -42,7 +42,13 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   static const double _stripExtent = 72;
   static const double _stripThumb = 60;
   static const double _stripHeight = 84;
+  static const double _stripPadding = 16;
   static const double _headerInset = 70;
+
+  /// Edge items need half a viewport of leading/trailing space so the first
+  /// and last thumbnails can also reach the centre of the strip.
+  static double _stripInsetFor(double viewport) =>
+      math.max(_stripPadding, (viewport - _stripExtent) / 2);
 
   late LocalPhoto _photo = widget.photo;
   final _transform = TransformationController();
@@ -161,6 +167,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     setState(() => _navigating = true);
     final photo = await ref.read(localLibraryProvider.notifier).photoAt(target);
     if (!mounted) return;
+    if (photo != null) {
+      // Move the strip before the highlight changes so the first painted
+      // frame after navigation already has the current thumbnail centred.
+      _centerStripOn(target);
+    }
     setState(() {
       _navigating = false;
       if (photo != null) {
@@ -213,13 +224,20 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
 
   void _toast(String text, {Future<void> Function()? undo}) {
     if (!mounted) return;
+    // Keep the toast clear of the zoom/rotate row on the left and the nav pair
+    // on the right instead of spanning the whole stage.
+    final width = MediaQuery.sizeOf(context).width;
+    final side = width < 392 ? 16.0 : (width - 360) / 2;
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
           content: Text(text),
           behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.fromLTRB(16, 8, 16, _stripHeight + 28),
+          // SnackBars with an action default to persistent in this SDK; an
+          // undo toast must still expire so it cannot cover the chrome.
+          persist: false,
+          margin: EdgeInsets.fromLTRB(side, 8, side, _stripHeight + 28),
           duration: Duration(seconds: undo == null ? 3 : 6),
           action: undo == null
               ? null
@@ -425,16 +443,15 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     Navigator.of(context).maybePop();
   }
 
-  void _centerStripOn(int index) {
+  void _centerStripOn(int index, {bool animate = false}) {
     if (!_strip.hasClients || !_strip.position.hasContentDimensions) return;
     final position = _strip.position;
+    final inset = _stripInsetFor(position.viewportDimension);
     final target =
-        ((index + .5) * _stripExtent - position.viewportDimension / 2).clamp(
-          position.minScrollExtent,
-          position.maxScrollExtent,
-        );
+        (inset + (index + .5) * _stripExtent - position.viewportDimension / 2)
+            .clamp(position.minScrollExtent, position.maxScrollExtent);
     if ((target - position.pixels).abs() < 1) return;
-    if (MediaQuery.disableAnimationsOf(context)) {
+    if (!animate || MediaQuery.disableAnimationsOf(context)) {
       _strip.jumpTo(target);
     } else {
       unawaited(
@@ -485,6 +502,12 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
           Colors.white.withValues(alpha: .10),
         ),
       );
+
+  ButtonStyle get _compactChromeStyle => _chromeStyle.copyWith(
+    minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
+    padding: const WidgetStatePropertyAll(EdgeInsets.all(4)),
+    iconSize: const WidgetStatePropertyAll(20),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -616,6 +639,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                               snapshot.data?['motion_offset'] == null
                               ? const SizedBox.shrink()
                               : TextButton.icon(
+                                  key: const ValueKey('viewer-motion-toggle'),
                                   style: TextButton.styleFrom(
                                     foregroundColor: Colors.white,
                                     backgroundColor: Colors.black.withValues(
@@ -818,10 +842,13 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     if (photo.mediaKind == 'video') {
       return KeyedSubtree(
         key: ValueKey(photo.id),
-        child: LocalVideoStage(
-          key: _videoKey,
-          path: photo.path,
-          bottomInset: _chromeHidden ? 0 : _stripHeight + 20,
+        child: KeyedSubtree(
+          key: const ValueKey('viewer-video'),
+          child: LocalVideoStage(
+            key: _videoKey,
+            path: photo.path,
+            bottomInset: _chromeHidden ? 0 : _stripHeight + 20,
+          ),
         ),
       );
     }
@@ -831,10 +858,13 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
             .read(localLibraryProvider.notifier)
             .localCommand({'op': 'motionVideo', 'id': photo.id}),
         builder: (context, snapshot) => snapshot.data is String
-            ? LocalVideoStage(
-                key: _videoKey,
-                path: snapshot.data as String,
-                bottomInset: _chromeHidden ? 0 : _stripHeight + 20,
+            ? KeyedSubtree(
+                key: const ValueKey('viewer-motion-video'),
+                child: LocalVideoStage(
+                  key: _videoKey,
+                  path: snapshot.data as String,
+                  bottomInset: _chromeHidden ? 0 : _stripHeight + 20,
+                ),
               )
             : const Center(child: CircularProgressIndicator()),
       );
@@ -854,6 +884,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
             );
           }
           return InteractiveViewer(
+            key: const ValueKey('viewer-heic'),
             transformationController: _transform,
             minScale: _minScale,
             maxScale: _maxScale,
@@ -978,117 +1009,148 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       bottom: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          children: [
-            IconButton(
-              key: const ValueKey('viewer-close'),
-              style: _chromeStyle,
-              tooltip: strings.back,
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            const SizedBox(width: 10),
-            // Passive day-precision date label — never a hover/glass action.
-            Flexible(
-              child: Text(
-                _dateLabel(
-                  context,
-                  strings,
-                  photo.captureTimeMs ?? photo.modifiedMs,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Six 48px controls overflow the chrome on a narrow rail; tighten
+            // them instead of dropping actions the window can still show.
+            final compact = constraints.maxWidth < 320;
+            final actionStyle = compact ? _compactChromeStyle : _chromeStyle;
+            // Only the name may flex: a loose flex date would keep its share
+            // of the free space and leave the actions stranded mid-header.
+            final chromeWidth = compact ? 40.0 : 48.0;
+            final metaMax = math.max(
+              0.0,
+              constraints.maxWidth - chromeWidth * 6 - 10 - 40,
+            );
+            return Row(
+              children: [
+                IconButton(
+                  key: const ValueKey('viewer-close'),
+                  style: actionStyle,
+                  tooltip: strings.back,
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            // The position counter sits last in the start cluster so growth
-            // pushes rightward instead of shifting the date.
-            if (index != null && library.total > 0)
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 10),
-                  child: Text(
-                    strings.positionLabel(index + 1, library.total),
-                    maxLines: 1,
-                    overflow: TextOverflow.clip,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: .62),
-                      fontSize: 13,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                const SizedBox(width: 10),
+                if (metaMax >= 40)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: math.min(300, metaMax),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Passive day-precision date label — never a hover/glass
+                        // action.
+                        Flexible(
+                          child: Text(
+                            _dateLabel(
+                              context,
+                              strings,
+                              photo.captureTimeMs ?? photo.modifiedMs,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        // The position counter sits last in the start cluster
+                        // so growth pushes rightward instead of shifting the
+                        // date.
+                        if (index != null && library.total > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 10),
+                            child: Text(
+                              strings.positionLabel(index + 1, library.total),
+                              key: const ValueKey('viewer-position'),
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: .62),
+                                fontSize: 13,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Text(
+                        photo.name,
+                        key: const ValueKey('viewer-name'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Text(
-                    photo.name,
-                    key: const ValueKey('viewer-name'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
+                IconButton(
+                  key: const ValueKey('viewer-favorite'),
+                  style: actionStyle,
+                  tooltip: photo.favorite
+                      ? strings.unmarkFavorite
+                      : strings.markFavorite,
+                  isSelected: photo.favorite,
+                  selectedIcon: const Icon(
+                    Icons.favorite,
+                    color: Color(0xffff5c72),
                   ),
+                  icon: const Icon(Icons.favorite_border),
+                  onPressed: library.favoritePending.contains(photo.id)
+                      ? null
+                      : () => controller.setFavorite(photo),
                 ),
-              ),
-            ),
-            IconButton(
-              key: const ValueKey('viewer-favorite'),
-              style: _chromeStyle,
-              tooltip: photo.favorite
-                  ? strings.unmarkFavorite
-                  : strings.markFavorite,
-              isSelected: photo.favorite,
-              selectedIcon: const Icon(
-                Icons.favorite,
-                color: Color(0xffff5c72),
-              ),
-              icon: const Icon(Icons.favorite_border),
-              onPressed: library.favoritePending.contains(photo.id)
-                  ? null
-                  : () => controller.setFavorite(photo),
-            ),
-            IconButton(
-              key: const ValueKey('viewer-edit'),
-              style: _chromeStyle,
-              tooltip: strings.edit,
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: _editAllowed ? () => unawaited(_openEditor()) : null,
-            ),
-            IconButton(
-              key: const ValueKey('viewer-trash'),
-              style: _chromeStyle,
-              tooltip: strings.moveToTrash,
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => unawaited(_deleteCurrent()),
-            ),
-            IconButton(
-              key: const ValueKey('viewer-details'),
-              style: _chromeStyle,
-              tooltip: strings.details,
-              isSelected: _detailsOpen,
-              selectedIcon: const Icon(Icons.info),
-              icon: const Icon(Icons.info_outline),
-              onPressed: () => setState(() => _detailsOpen = !_detailsOpen),
-            ),
-            IconButton(
-              key: const ValueKey('viewer-immersive'),
-              style: _chromeStyle,
-              tooltip: strings.immersive,
-              icon: const Icon(Icons.fullscreen),
-              onPressed: _toggleImmersive,
-            ),
-          ],
+                IconButton(
+                  key: const ValueKey('viewer-edit'),
+                  style: actionStyle,
+                  tooltip: strings.edit,
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: _editAllowed
+                      ? () => unawaited(_openEditor())
+                      : null,
+                ),
+                IconButton(
+                  key: const ValueKey('viewer-trash'),
+                  style: actionStyle,
+                  tooltip: strings.moveToTrash,
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => unawaited(_deleteCurrent()),
+                ),
+                IconButton(
+                  key: const ValueKey('viewer-details'),
+                  style: actionStyle,
+                  tooltip: strings.details,
+                  isSelected: _detailsOpen,
+                  selectedIcon: const Icon(Icons.info),
+                  icon: const Icon(Icons.info_outline),
+                  onPressed: () => setState(() => _detailsOpen = !_detailsOpen),
+                ),
+                IconButton(
+                  key: const ValueKey('viewer-immersive'),
+                  style: actionStyle,
+                  tooltip: strings.immersive,
+                  icon: const Icon(Icons.fullscreen),
+                  onPressed: _toggleImmersive,
+                ),
+              ],
+            );
+          },
         ),
       ),
     ),
@@ -1129,76 +1191,85 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
         radius: 18,
         child: SizedBox(
           height: _stripHeight,
-          child: ListView.builder(
-            controller: _strip,
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemExtent: _stripExtent,
-            itemCount: library.total,
-            itemBuilder: (context, i) {
-              final photo = library.photoAt(i);
-              if (photo == null) {
-                final page = i ~/ LocalLibraryController.pageSize;
-                if (_scheduledPages.add(page)) {
-                  scheduleMicrotask(() {
-                    if (mounted) {
-                      unawaited(
-                        ref
-                            .read(localLibraryProvider.notifier)
-                            .ensurePage(page),
-                      );
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final inset = _stripInsetFor(constraints.maxWidth);
+              return ListView.builder(
+                controller: _strip,
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                padding: EdgeInsets.symmetric(horizontal: inset),
+                itemExtent: _stripExtent,
+                itemCount: library.total,
+                itemBuilder: (context, i) {
+                  final photo = library.photoAt(i);
+                  if (photo == null) {
+                    final page = i ~/ LocalLibraryController.pageSize;
+                    if (_scheduledPages.add(page)) {
+                      scheduleMicrotask(() {
+                        if (mounted) {
+                          unawaited(
+                            ref
+                                .read(localLibraryProvider.notifier)
+                                .ensurePage(page),
+                          );
+                        }
+                      });
                     }
-                  });
-                }
-                return const Center(
-                  child: SizedBox(
-                    width: _stripThumb,
-                    height: _stripThumb,
-                    child: Icon(Icons.photo_outlined, color: Colors.white24),
-                  ),
-                );
-              }
-              // A loaded page can be evicted later; allow another request.
-              _scheduledPages.remove(i ~/ LocalLibraryController.pageSize);
-              final active = i == index;
-              // Active reads larger through scale/outline only — never
-              // through margin or padding changes that shift allocation.
-              return Center(
-                child: Tooltip(
-                  message: photo.name,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => unawaited(_jumpTo(i)),
-                      child: AnimatedScale(
-                        scale: active ? 1.14 : 1,
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : const Duration(milliseconds: 150),
-                        child: Container(
-                          width: _stripThumb,
-                          height: _stripThumb,
-                          clipBehavior: Clip.antiAlias,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: active
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.white.withValues(alpha: .22),
-                              width: active ? 2 : 1,
+                    return const Center(
+                      child: SizedBox(
+                        width: _stripThumb,
+                        height: _stripThumb,
+                        child: Icon(
+                          Icons.photo_outlined,
+                          color: Colors.white24,
+                        ),
+                      ),
+                    );
+                  }
+                  // A loaded page can be evicted later; allow another request.
+                  _scheduledPages.remove(i ~/ LocalLibraryController.pageSize);
+                  final active = i == index;
+                  // Active reads larger through scale/outline only — never
+                  // through margin or padding changes that shift allocation.
+                  return Center(
+                    child: Tooltip(
+                      message: photo.name,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          key: ValueKey('viewer-strip-${photo.id}'),
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () => unawaited(_jumpTo(i)),
+                          child: AnimatedScale(
+                            scale: active ? 1.14 : 1,
+                            duration: MediaQuery.disableAnimationsOf(context)
+                                ? Duration.zero
+                                : const Duration(milliseconds: 150),
+                            child: Container(
+                              width: _stripThumb,
+                              height: _stripThumb,
+                              clipBehavior: Clip.antiAlias,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: active
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.white.withValues(alpha: .22),
+                                  width: active ? 2 : 1,
+                                ),
+                              ),
+                              child: _FilmstripThumb(
+                                photo: photo,
+                                gateway: gateway,
+                              ),
                             ),
-                          ),
-                          child: _FilmstripThumb(
-                            photo: photo,
-                            gateway: gateway,
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
           ),
@@ -1294,6 +1365,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                                   children: [
                                     if (data['motion_offset'] != null)
                                       TextButton.icon(
+                                        key: const ValueKey(
+                                          'viewer-details-motion-toggle',
+                                        ),
                                         icon: const Icon(
                                           Icons.play_circle_outline,
                                         ),

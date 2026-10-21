@@ -16,7 +16,14 @@ import 'package:flutter/services.dart';
 abstract interface class JourneyInput {
   String get mode;
   Future<void> tap(Offset position, double devicePixelRatio);
-  Future<void> drag(Offset from, Offset to, double devicePixelRatio);
+  Future<void> secondaryTap(Offset position, double devicePixelRatio);
+  Future<void> drag(
+    Offset from,
+    Offset to,
+    double devicePixelRatio, {
+    Duration hold = Duration.zero,
+  });
+  Future<void> moveTo(Offset position, double devicePixelRatio);
   Future<void> scroll(Offset position, int clicks, double devicePixelRatio);
   Future<void> key(String keyName);
   Future<void> type(String text);
@@ -114,15 +121,37 @@ final class X11HandshakeInput implements JourneyInput {
   });
 
   @override
-  Future<void> drag(Offset from, Offset to, double devicePixelRatio) =>
+  Future<void> secondaryTap(Offset position, double devicePixelRatio) =>
       _exchange({
-        'kind': 'drag',
-        'x': from.dx,
-        'y': from.dy,
-        'to_x': to.dx,
-        'to_y': to.dy,
+        'kind': 'secondary-tap',
+        'x': position.dx,
+        'y': position.dy,
         'device_pixel_ratio': devicePixelRatio,
       });
+
+  @override
+  Future<void> drag(
+    Offset from,
+    Offset to,
+    double devicePixelRatio, {
+    Duration hold = Duration.zero,
+  }) => _exchange({
+    'kind': 'drag',
+    'x': from.dx,
+    'y': from.dy,
+    'to_x': to.dx,
+    'to_y': to.dy,
+    'hold_ms': hold.inMilliseconds,
+    'device_pixel_ratio': devicePixelRatio,
+  });
+
+  @override
+  Future<void> moveTo(Offset position, double devicePixelRatio) => _exchange({
+    'kind': 'move',
+    'x': position.dx,
+    'y': position.dy,
+    'device_pixel_ratio': devicePixelRatio,
+  });
 
   @override
   Future<void> scroll(Offset position, int clicks, double devicePixelRatio) =>
@@ -184,9 +213,33 @@ final class FrameworkInput implements JourneyInput {
   }
 
   @override
-  Future<void> drag(Offset from, Offset to, double devicePixelRatio) async {
+  Future<void> secondaryTap(Offset position, double devicePixelRatio) async {
+    final binding = GestureBinding.instance;
+    binding.handlePointerEvent(
+      PointerDownEvent(
+        position: position,
+        buttons: kSecondaryMouseButton,
+        kind: PointerDeviceKind.mouse,
+      ),
+    );
+    binding.handlePointerEvent(
+      PointerUpEvent(position: position, kind: PointerDeviceKind.mouse),
+    );
+    await _settle();
+  }
+
+  @override
+  Future<void> drag(
+    Offset from,
+    Offset to,
+    double devicePixelRatio, {
+    Duration hold = Duration.zero,
+  }) async {
     final binding = GestureBinding.instance;
     binding.handlePointerEvent(PointerDownEvent(position: from));
+    if (hold > Duration.zero) {
+      await Future<void>.delayed(hold);
+    }
     const steps = 8;
     for (var index = 1; index <= steps; index += 1) {
       binding.handlePointerEvent(
@@ -198,6 +251,14 @@ final class FrameworkInput implements JourneyInput {
       await Future<void>.delayed(const Duration(milliseconds: 16));
     }
     binding.handlePointerEvent(PointerUpEvent(position: to));
+    await _settle();
+  }
+
+  @override
+  Future<void> moveTo(Offset position, double devicePixelRatio) async {
+    GestureBinding.instance.handlePointerEvent(
+      PointerHoverEvent(position: position, kind: PointerDeviceKind.mouse),
+    );
     await _settle();
   }
 
