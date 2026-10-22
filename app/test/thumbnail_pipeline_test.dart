@@ -8,6 +8,8 @@ import 'package:photo_client/services/local_library_gateway.dart';
 import 'package:photo_client/ui/thumbnail_progress.dart';
 import 'package:photo_client/ui/photos_grid.dart';
 import 'package:photo_client/ui/local_media_tile.dart';
+import 'package:photo_client/ui/local_library_controller.dart';
+import 'package:photo_client/ui/runtime_controller.dart';
 
 import 'fakes/local_gateway.dart';
 
@@ -16,9 +18,11 @@ class _Native extends FakeLocalGateway implements ThumbnailPipelineGateway {
   String? embeddedPath = 'embedded.jpg';
   final commands = <Map<String, Object?>>[];
   final pending = <String, Completer<String>>{};
+  Map<String, dynamic>? stats;
   @override
   Future<Object?> thumbnailCommand(Map<String, Object?> command) async {
     commands.add(command);
+    if (command['op'] == 'thumbnailStats') return stats;
     if (command['op'] == 'thumbnailRequest') {
       final token = command['token']! as String;
       return pending.putIfAbsent(token, Completer<String>.new).future;
@@ -29,6 +33,17 @@ class _Native extends FakeLocalGateway implements ThumbnailPipelineGateway {
 
   List<Map<String, Object?>> ops(String name) =>
       commands.where((c) => c['op'] == name).toList();
+}
+
+class _ReadyRuntime extends RuntimeController {
+  @override
+  RuntimeViewState build() =>
+      const RuntimeViewState(phase: ConnectionPhase.ready);
+}
+
+class _StaticLibrary extends LocalLibraryController {
+  @override
+  LibraryViewState build() => const LibraryViewState(loading: false);
 }
 
 void main() {
@@ -317,5 +332,100 @@ void main() {
       find.byKey(const ValueKey('thumbnail-generation-progress')),
       findsNothing,
     );
+  });
+
+  testWidgets('cache rebuild announces reconciliation through completion', (
+    tester,
+  ) async {
+    final progress = StreamController<Map<String, dynamic>>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          thumbnailProgressProvider.overrideWith((ref) => progress.stream),
+        ],
+        child: const MaterialApp(home: Scaffold(body: ThumbnailProgress())),
+      ),
+    );
+    for (final (ready, reconciling, text) in [
+      (0, true, 'Indexing 0/3'),
+      (1, false, 'Indexing 1/3'),
+    ]) {
+      progress.add({
+        'total': 3,
+        'ready': ready,
+        'failed': 0,
+        'reconciling': reconciling,
+        'rebuilding_cache': true,
+      });
+      await tester.pumpAndSettle();
+      expect(find.text(text), findsOneWidget);
+    }
+    progress.add({
+      'total': 3,
+      'ready': 3,
+      'failed': 0,
+      'rebuilding_cache': true,
+    });
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('thumbnail-generation-progress')),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(progress.close());
+    await tester.pump();
+  });
+
+  testWidgets('clearing cache restarts idle progress polling until rebuilt', (
+    tester,
+  ) async {
+    final gateway = _Native();
+    Map<String, dynamic> stats(int ready, {bool reconciling = false}) => {
+      'total': 3,
+      'ready': ready,
+      'failed': 0,
+      'queued': 0,
+      'running': 0,
+      'size_class': 512,
+      'reconciling': reconciling,
+    };
+    gateway.stats = stats(3);
+    final pool = ThumbnailPool.forGateway(gateway);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreGatewayProvider.overrideWithValue(gateway),
+          runtimeProvider.overrideWith(_ReadyRuntime.new),
+          localLibraryProvider.overrideWith(_StaticLibrary.new),
+        ],
+        child: const MaterialApp(home: Scaffold(body: ThumbnailProgress())),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Indexing'), findsNothing);
+
+    gateway.stats = stats(0, reconciling: true);
+    pool.clear(rebuild: true);
+    await tester.pumpAndSettle();
+    expect(find.text('Indexing 0/3'), findsOneWidget);
+    expect(pool.rebuildingCache, isTrue);
+
+    gateway.stats = stats(1);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text('Indexing 1/3'), findsOneWidget);
+
+    gateway.stats = stats(3);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.textContaining('Indexing'), findsNothing);
+    expect(pool.rebuildingCache, isFalse);
+    final calls = gateway.ops('thumbnailStats').length;
+    await tester.pump(const Duration(seconds: 2));
+    expect(gateway.ops('thumbnailStats'), hasLength(calls));
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(gateway.changes.close());
+    unawaited(gateway.events.close());
+    await tester.pump();
   });
 }

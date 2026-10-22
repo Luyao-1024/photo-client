@@ -72,6 +72,17 @@ impl LocalLibrary {
         size: u32,
         anchor: Option<String>,
     ) -> Result<Option<LocalPhoto>, String> {
+        Ok(self
+            .thumbnail_candidates(size, anchor, 1)?
+            .into_iter()
+            .next())
+    }
+    pub(crate) fn thumbnail_candidates(
+        &self,
+        size: u32,
+        anchor: Option<String>,
+        limit: usize,
+    ) -> Result<Vec<LocalPhoto>, String> {
         let library = self.library_id.clone();
         let revision = format!("r{}", crate::media::THUMBNAIL_CACHE_REVISION);
         self.execute(move|c|{
@@ -79,8 +90,9 @@ impl LocalLibrary {
             let sql="SELECT m.media_id,m.source_uri,m.display_name,m.parent_uri,m.size_bytes,m.modified_ns,m.content_version,m.width,m.height,m.favorite,m.sort_time_ms,m.media_kind,m.mime_type,m.orientation,m.capture_time_ms,m.state,m.trashed_at_ms
                 FROM media m WHERE m.library_id=?1 AND m.state='active'
                 AND NOT EXISTS(SELECT 1 FROM thumbnails t WHERE t.library_id=m.library_id AND t.media_id=m.media_id AND t.content_version=m.content_version AND t.size_class=?2 AND t.cache_key=?3 AND t.state IN ('ready','failed'))
-                ORDER BY CASE WHEN ?4 IS NULL OR m.sort_time_ms<?4 OR (m.sort_time_ms=?4 AND m.media_id<=?5) THEN 0 ELSE 1 END,m.sort_time_ms DESC,m.media_id DESC LIMIT 1";
-            c.query_row(sql,params![library,size,revision,anchor_time,anchor],decode_photo).optional().map_err(error)
+                ORDER BY CASE WHEN ?4 IS NULL OR m.sort_time_ms<?4 OR (m.sort_time_ms=?4 AND m.media_id<=?5) THEN 0 ELSE 1 END,m.sort_time_ms DESC,m.media_id DESC LIMIT ?6";
+            let mut statement=c.prepare(sql).map_err(error)?;
+            statement.query_map(params![library,size,revision,anchor_time,anchor,limit as i64],decode_photo).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)
         })
     }
 }

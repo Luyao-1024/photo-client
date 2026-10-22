@@ -435,10 +435,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               isExpanded: true,
               initialValue: preferences.thumbnailWorkers,
               decoration: InputDecoration(
-                labelText: strings.pick(
-                  '生成速度（下次启动生效）',
-                  'Generation speed (next launch)',
-                ),
+                labelText: strings.pick('生成速度', 'Generation speed'),
               ),
               items: [
                 for (final value in <int>{

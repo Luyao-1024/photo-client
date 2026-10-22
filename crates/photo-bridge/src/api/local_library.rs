@@ -804,7 +804,16 @@ pub async fn library_tools(command: String) -> Result<String, String> {
             }
             "photos"=>serde_json::json!(ids()?.into_iter().map(|id|active.store.photo(id)).collect::<Result<Vec<_>,_>>()?),
             "preferences"=>serde_json::from_str(&active.store.preferences()?).map_err(|_|"InvalidPreference")?,
-            "setPreference"=>{active.store.set_preference(string("key")?,request["value"].to_string())?;serde_json::Value::Null}
+            "setPreference"=>{
+                let key=string("key")?;
+                active.store.set_preference(key.clone(),request["value"].to_string())?;
+                if key=="thumbnailWorkers" {
+                    if let Some(workers)=request["value"].as_u64() {
+                        active.thumbnails.set_workers(workers.clamp(1,32) as usize);
+                    }
+                }
+                serde_json::Value::Null
+            }
             "sources"=>serde_json::json!(active.store.sources()?),
             "removeSource"=>{active.store.remove_source(string("id")?)?;changed();serde_json::Value::Null}
             "createAlbum"=>{let folder=active.store.create_album(PathBuf::from(string("parent")?),string("name")?)?;let _=super::local_watcher::install(&active);changed();serde_json::json!(folder)}

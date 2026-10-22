@@ -57,6 +57,7 @@ class ThumbnailPool {
   final LocalLibraryGateway gateway;
   final epoch = ValueNotifier<int>(0);
   final activity = ValueNotifier<int>(0);
+  bool rebuildingCache = false;
   int? get desiredSize => _sentViewport?.$2;
   final _entries = <String, _Entry>{};
   final _embedded = <String, Future<String?>>{};
@@ -253,7 +254,8 @@ class ThumbnailPool {
     activity.value++;
   }
 
-  void clear() {
+  void clear({bool rebuild = false}) {
+    rebuildingCache = rebuild;
     ThumbnailImage.clear();
     for (final entry in _entries.values) {
       if (!entry.finished) {

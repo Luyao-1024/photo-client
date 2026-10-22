@@ -20,8 +20,10 @@ fn requests() -> &'static watch::Sender<u64> {
 
 /// A local library write happened. Bursts keep restarting the quiet period.
 pub(super) fn note_local_change() {
-    let sender = requests();
-    sender.send_replace(sender.borrow().wrapping_add(1));
+    // Mutate under a single write lock. Passing sender.borrow() directly to
+    // send_replace would retain its read guard while acquiring the write lock,
+    // preventing the scan guard from dropping and resuming thumbnail work.
+    requests().send_modify(|generation| *generation = generation.wrapping_add(1));
 }
 
 struct Running {
@@ -119,6 +121,23 @@ async fn next_quiet_generation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_change_notification_returns_and_advances_the_generation() {
+        let receiver = requests().subscribe();
+        let before = *receiver.borrow();
+        let (done, received) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            note_local_change();
+            done.send(()).unwrap();
+        });
+        received
+            .recv_timeout(Duration::from_secs(1))
+            .expect("local change notification must not deadlock the scan thread");
+        worker.join().unwrap();
+        assert_eq!(*receiver.borrow(), before.wrapping_add(1));
+        assert!(receiver.has_changed().unwrap());
+    }
 
     #[tokio::test]
     async fn an_idle_library_never_requests_a_run() {

@@ -44,7 +44,10 @@ final thumbnailProgressProvider =
               result['size_class'] as int? ?? 512,
               result['ready'] as int? ?? 0,
             );
-            controller.add(Map<String, dynamic>.from(result));
+            controller.add({
+              ...Map<String, dynamic>.from(result),
+              'rebuilding_cache': pool?.rebuildingCache ?? false,
+            });
             final done =
                 (result['ready'] as int? ?? 0) +
                     (result['failed'] as int? ?? 0) >=
@@ -55,6 +58,7 @@ final thumbnailProgressProvider =
                 result['running'] == 0 &&
                 (pool?.desiredSize == null ||
                     result['size_class'] == pool!.desiredSize)) {
+              if (pool != null) pool.rebuildingCache = false;
               timer?.cancel();
               timer = null;
             }
@@ -98,11 +102,14 @@ class ThumbnailProgress extends ConsumerWidget {
     final total = data['total'] as int? ?? 0;
     final ready = data['ready'] as int? ?? 0;
     final failed = data['failed'] as int? ?? 0;
-    // The startup reconciliation only verifies cached files. It is background
-    // bookkeeping and must not look like visible indexing work.
+    // Startup cache validation is quiet; an explicit cache reset starts a
+    // visible indexing pass, including its initial reconciliation.
     final reconciling = data['reconciling'] == true;
-    final complete = ready + failed >= total;
-    if (total == 0 || reconciling || (!alwaysShow && complete)) {
+    final rebuilding = data['rebuilding_cache'] == true;
+    final complete = !reconciling && ready + failed >= total;
+    if (total == 0 ||
+        (reconciling && !rebuilding) ||
+        (!alwaysShow && complete)) {
       return const SizedBox.shrink();
     }
     final strings = AppStrings.of(context);

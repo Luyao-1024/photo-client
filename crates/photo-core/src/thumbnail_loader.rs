@@ -1,4 +1,4 @@
-//! Library-scoped priority scheduling, disk fast path and single-worker idle prewarm.
+//! Library-scoped priority scheduling, disk fast path and bounded background prewarm.
 //! No database, file I/O or decoding runs under the scheduler mutex.
 use crate::{
     local_library::{LocalLibrary, LocalPhoto},
@@ -77,6 +77,7 @@ struct State {
     bad_cloud: HashSet<(String, u64)>,
     cancelled: HashSet<String>,
     closed: bool,
+    workers: usize,
     prewarm: bool,
     paused: bool,
     background_busy: bool,
@@ -133,6 +134,7 @@ impl ThumbnailLoader {
             store,
             state: Mutex::new(State {
                 size: 512,
+                workers: workers.clamp(1, 32),
                 reconcile: Some(0),
                 maintenance: true,
                 ..State::default()
@@ -146,7 +148,7 @@ impl ThumbnailLoader {
             threads.push(
                 thread::Builder::new()
                     .name(format!("photo-thumb-{index}"))
-                    .spawn(move || worker_loop(worker))
+                    .spawn(move || worker_loop(worker, index))
                     .expect("thumbnail worker"),
             );
         }
@@ -154,6 +156,30 @@ impl ThumbnailLoader {
             inner,
             threads: Mutex::new(threads),
         }
+    }
+    /// Apply concurrency preferences to the current session. Excess workers
+    /// finish their current job and sleep; increasing the limit wakes them.
+    pub fn set_workers(&self, workers: usize) {
+        let workers = workers.clamp(1, 32);
+        let mut threads = self.threads.lock().unwrap();
+        {
+            let mut s = self.inner.state.lock().unwrap();
+            if s.closed {
+                return;
+            }
+            s.workers = workers;
+            s.next_background = None;
+        }
+        for index in threads.len()..workers {
+            let worker = self.inner.clone();
+            threads.push(
+                thread::Builder::new()
+                    .name(format!("photo-thumb-{index}"))
+                    .spawn(move || worker_loop(worker, index))
+                    .expect("thumbnail worker"),
+            );
+        }
+        self.inner.wake.notify_all();
     }
     pub fn resume_prewarm(&self) {
         let mut s = self.inner.state.lock().unwrap();
@@ -261,7 +287,7 @@ impl ThumbnailLoader {
                 job.tier = 0;
                 let seq = job.seq;
                 s.queue.push(Reverse((0, seq, key)));
-                self.inner.wake.notify_one();
+                self.inner.wake.notify_all();
             }
         }
     }
@@ -347,6 +373,9 @@ impl ThumbnailLoader {
         s.failures.clear();
         s.bad_cloud.clear();
         s.cache_epoch += 1;
+        // A reset must rebuild even if startup never enabled idle prewarm.
+        // Preserve a scan's temporary pause; its guard resumes us on completion.
+        s.prewarm = true;
         s.budget_limited = false;
         s.completion_reported = false;
         s.reconcile = Some(0);
@@ -461,7 +490,9 @@ impl ThumbnailLoader {
             );
             s.queue.push(Reverse((tier, seq, key)));
         }
-        self.inner.wake.notify_one();
+        // Some existing threads may be parked above a reduced worker limit.
+        // Wake the active workers as well, rather than only a parked thread.
+        self.inner.wake.notify_all();
         Ok(rx)
     }
     /// Read-only lookahead: never enqueue or decode an original for prefetch.
@@ -588,26 +619,37 @@ fn remember(inner: &Inner, key: Key, path: String) {
     }
 }
 fn take_job(s: &mut State) -> Option<Key> {
+    let mut deferred = Vec::new();
+    let mut selected = None;
     while let Some(Reverse((tier, seq, key))) = s.queue.pop() {
         if let Some(job) = s.jobs.get_mut(&key)
             && !job.started
             && job.tier == tier
             && job.seq == seq
         {
+            if job.background && s.paused && job.waiters.is_empty() {
+                deferred.push(Reverse((tier, seq, key)));
+                continue;
+            }
             job.started = true;
-            return Some(key);
+            selected = Some(key);
+            break;
         }
     }
-    None
+    s.queue.extend(deferred);
+    selected
 }
-fn worker_loop(inner: Arc<Inner>) {
+fn worker_loop(inner: Arc<Inner>, index: usize) {
     loop {
         let mut s = inner.state.lock().unwrap();
-        let work = take_job(&mut s);
-
         if s.closed {
             return;
         }
+        if index >= s.workers {
+            drop(inner.wake.wait(s).unwrap());
+            continue;
+        }
+        let work = take_job(&mut s);
         if let Some(key) = work {
             drop(s);
             run_job(&inner, key);
@@ -617,6 +659,7 @@ fn worker_loop(inner: Arc<Inner>) {
             && !s.paused
             && !s.background_busy
             && !s.completion_reported
+            && s.jobs.len() < s.workers
             && s.next_background.is_none_or(|t| Instant::now() >= t)
         {
             s.background_busy = true;
@@ -627,7 +670,7 @@ fn worker_loop(inner: Arc<Inner>) {
             s.next_background = Some(
                 Instant::now()
                     + if worked {
-                        Duration::from_millis(100)
+                        Duration::ZERO
                     } else {
                         Duration::from_millis(500)
                     },
@@ -636,7 +679,12 @@ fn worker_loop(inner: Arc<Inner>) {
             drop(s);
             continue;
         }
-        let wait = if s.prewarm && !s.paused && !s.completion_reported && !s.background_busy {
+        let wait = if s.prewarm
+            && !s.paused
+            && !s.completion_reported
+            && !s.background_busy
+            && s.jobs.len() < s.workers
+        {
             s.next_background
                 .map(|t| t.saturating_duration_since(Instant::now()))
                 .unwrap_or(Duration::from_millis(100))
@@ -763,8 +811,10 @@ fn run_job(inner: &Inner, key: Key) {
             s.failures
                 .insert(key.clone(), result.as_ref().unwrap_err().clone());
         }
+        s.next_background = None;
         s.jobs.remove(&key).map(|j| j.waiters).unwrap_or_default()
     };
+    inner.wake.notify_all();
     for (_, tx) in waiters {
         let _ = tx.send(result.clone());
     }
@@ -802,7 +852,7 @@ fn run_job(inner: &Inner, key: Key) {
     }
 }
 fn prewarm_step(inner: &Inner) -> bool {
-    let (size, reconcile, anchor) = {
+    {
         let mut s = inner.state.lock().unwrap();
         if s.maintenance {
             s.maintenance = false;
@@ -810,11 +860,20 @@ fn prewarm_step(inner: &Inner) -> bool {
             maintain_cache(inner, 2 * 1024 * 1024 * 1024);
             return true;
         }
+    }
+    // Reconciliation and queue admission must not restore stale rows after a
+    // cache reset. Decoding happens later on the shared worker queue.
+    let _publication = inner.publication.read().unwrap();
+    let (size, reconcile, anchor, limit) = {
+        let mut s = inner.state.lock().unwrap();
+        if s.closed || s.paused {
+            return false;
+        }
         if s.budget_limited && s.reconcile.is_none() {
             s.completion_reported = true;
             return false;
         }
-        (s.size, s.reconcile, s.anchor.clone())
+        (s.size, s.reconcile, s.anchor.clone(), s.workers * 2)
     };
     if let Some(offset) = reconcile {
         if let Ok(page) = inner.store.thumbnail_reconcile_window(offset) {
@@ -841,12 +900,12 @@ fn prewarm_step(inner: &Inner) -> bool {
         return false;
     }
     inner.state.lock().unwrap().metrics.background_queries += 1;
-    let photo = match inner.store.next_thumbnail_candidate(size, anchor) {
-        Ok(Some(photo)) => photo,
-        Ok(None) => {
+    let photos = match inner.store.thumbnail_candidates(size, anchor, limit) {
+        Ok(photos) if !photos.is_empty() => photos,
+        Ok(_) => {
             let report = {
                 let mut s = inner.state.lock().unwrap();
-                if s.completion_reported {
+                if s.completion_reported || !s.jobs.is_empty() {
                     false
                 } else {
                     s.completion_reported = true;
@@ -869,21 +928,15 @@ fn prewarm_step(inner: &Inner) -> bool {
         }
         Err(_) => return false,
     };
-    let key = Key::new(&photo, size);
-    let path = cache_path(&inner.store, &key);
-    if valid_cache(&path, size) {
-        let _ = inner.store.record_thumbnail_states(vec![(
-            photo,
-            size,
-            path.to_string_lossy().into_owned(),
-            "ready".into(),
-        )]);
-        return true;
-    }
-    {
+    let mut worked = false;
+    for photo in photos {
+        let key = Key::new(&photo, size);
         let mut s = inner.state.lock().unwrap();
-        if s.closed || s.paused || s.jobs.contains_key(&key) || !s.queue.is_empty() {
-            return false;
+        if s.closed || s.paused || s.size != size || s.jobs.len() >= s.workers {
+            break;
+        }
+        if s.jobs.contains_key(&key) {
+            continue;
         }
         s.sequence += 1;
         let seq = s.sequence;
@@ -893,15 +946,19 @@ fn prewarm_step(inner: &Inner) -> bool {
                 photo,
                 tier: 2,
                 seq,
-                started: true,
+                started: false,
                 background: true,
                 queued: Instant::now(),
                 waiters: HashMap::new(),
             },
         );
+        s.queue.push(Reverse((2, seq, key)));
+        worked = true;
     }
-    run_job(inner, key);
-    true
+    if worked {
+        inner.wake.notify_all();
+    }
+    worked
 }
 
 /// Disk capacity maintenance is idle work. Symlinks are never followed and
@@ -1182,6 +1239,132 @@ mod tests {
         loader.wake_after_library_change();
         wait_until(|| loader.progress().unwrap().metrics.background_queries > queries);
         loader.close();
+    }
+    #[test]
+    fn clearing_cache_rebuilds_without_viewport_or_foreground_requests() {
+        let (_r, _s, store, photos) = fixture();
+        let loader = ThumbnailLoader::new(store.clone(), 2);
+        // No startup resume, viewport change or visible-image request is needed.
+        loader.clear_disk().unwrap();
+        wait_until(|| loader.inner.state.lock().unwrap().completion_reported);
+        assert_eq!(store.thumbnail_counts(512).unwrap(), (3, 3, 0));
+        let generated = loader.progress().unwrap().metrics.generated;
+
+        loader.clear_disk().unwrap();
+        wait_until(|| loader.inner.state.lock().unwrap().completion_reported);
+        assert_eq!(store.thumbnail_counts(512).unwrap(), (3, 3, 0));
+        assert_eq!(loader.progress().unwrap().metrics.generated, generated + 3);
+        for photo in photos {
+            assert!(valid_cache(
+                &cache_path(&store, &Key::new(&photo, 512)),
+                512
+            ));
+        }
+        loader.close();
+    }
+
+    #[test]
+    fn background_jobs_follow_worker_limit_changes_in_the_current_session() {
+        let (_r, _s, store, _photos) = fixture();
+        let loader = paused(store.clone());
+        {
+            let mut s = loader.inner.state.lock().unwrap();
+            s.workers = 3;
+            s.prewarm = true;
+        }
+        assert!(prewarm_step(&loader.inner));
+        assert_eq!(loader.inner.state.lock().unwrap().jobs.len(), 3);
+        // Block decoding after queue admission so worker occupancy is
+        // deterministic, independent of image size or machine speed.
+        let publication = loader.inner.publication.write().unwrap();
+        loader.set_workers(1);
+        wait_until(|| {
+            loader
+                .inner
+                .state
+                .lock()
+                .unwrap()
+                .jobs
+                .values()
+                .filter(|j| j.started)
+                .count()
+                == 1
+        });
+        loader.set_workers(3);
+        wait_until(|| {
+            loader
+                .inner
+                .state
+                .lock()
+                .unwrap()
+                .jobs
+                .values()
+                .filter(|j| j.started)
+                .count()
+                == 3
+        });
+        drop(publication);
+        wait_until(|| loader.inner.state.lock().unwrap().completion_reported);
+        assert_eq!(store.thumbnail_counts(256).unwrap(), (3, 3, 0));
+
+        // Lower the limit without recreating the loader or its existing threads.
+        loader.pause_prewarm();
+        loader.set_workers(1);
+        loader.clear_disk().unwrap();
+        assert!(
+            loader.inner.state.lock().unwrap().paused,
+            "clearing cache must preserve a scan pause"
+        );
+        let publication = loader.inner.publication.write().unwrap();
+        // Requests wake all threads, including those above the new limit;
+        // only the configured single worker may take these jobs.
+        let photos = store
+            .query_window(PhotoFilter::default(), 0, 3)
+            .unwrap()
+            .items;
+        let receivers: Vec<_> = photos
+            .iter()
+            .enumerate()
+            .map(|(index, photo)| request(&loader, photo, &format!("smaller-limit-{index}"), 0))
+            .collect();
+        wait_until(|| {
+            loader
+                .inner
+                .state
+                .lock()
+                .unwrap()
+                .jobs
+                .values()
+                .filter(|j| j.started)
+                .count()
+                == 1
+        });
+        assert_eq!(loader.inner.state.lock().unwrap().workers, 1);
+        drop(publication);
+        for receiver in receivers {
+            assert!(receiver.blocking_recv().unwrap().is_ok());
+        }
+        assert_eq!(store.thumbnail_counts(256).unwrap(), (3, 3, 0));
+        loader.close();
+    }
+
+    #[test]
+    fn paused_background_queue_keeps_foreground_requests_runnable() {
+        let (_r, _s, store, photos) = fixture();
+        let loader = paused(store);
+        loader.inner.state.lock().unwrap().workers = 3;
+        assert!(prewarm_step(&loader.inner));
+        loader.pause_prewarm();
+        assert!(take_job(&mut loader.inner.state.lock().unwrap()).is_none());
+        let visible = request(&loader, &photos[1], "visible-during-scan", 0);
+        assert_eq!(finish_next(&loader).id, photos[1].id);
+        assert!(visible.blocking_recv().unwrap().is_ok());
+        assert!(take_job(&mut loader.inner.state.lock().unwrap()).is_none());
+        assert_eq!(loader.inner.state.lock().unwrap().jobs.len(), 2);
+        loader.resume_prewarm();
+        finish_next(&loader);
+        finish_next(&loader);
+        assert_eq!(loader.progress().unwrap().ready, 3);
     }
     #[test]
     fn clearing_thumbnail_cache_preserves_previews_and_animation_files() {

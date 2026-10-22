@@ -184,7 +184,7 @@ final class NativeCoreGateway
     );
     if (command['op'] == 'clearCache') {
       _thumbnailCacheEpoch = null;
-      ThumbnailPool.forGateway(this).clear();
+      ThumbnailPool.forGateway(this).clear(rebuild: true);
     }
     return result;
   }
