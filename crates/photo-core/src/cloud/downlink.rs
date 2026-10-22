@@ -205,10 +205,12 @@ impl CloudEngine {
             });
         }
         if !updates.is_empty() {
-            store(
-                self.library
-                    .cloud_apply_binding_updates(account_id.clone(), updates),
-            )?;
+            for batch in updates.chunks(100) {
+                store(
+                    self.library
+                        .cloud_apply_binding_updates(account_id.clone(), batch.to_vec()),
+                )?;
+            }
         }
         let orphans = store(
             self.library
@@ -216,17 +218,28 @@ impl CloudEngine {
         )?;
         report.skipped += skipped + orphans;
 
-        for photo in &graph.photos {
-            if bindings.contains_key(&photo.photo_id)
-                && store(self.library.cloud_apply_remote_metadata(
+        let metadata: Vec<_> = graph
+            .photos
+            .iter()
+            .filter(|p| bindings.contains_key(&p.photo_id))
+            .collect();
+        for batch in metadata.chunks(100) {
+            report.favorites_applied += store(
+                self.library.cloud_apply_remote_metadata_batch(
                     account_id.clone(),
-                    photo.photo_id.clone(),
-                    photo.is_favorite,
-                    photo.asset.events.metadata_event.clone(),
-                ))?
-            {
-                report.favorites_applied += 1;
-            }
+                    batch
+                        .iter()
+                        .map(|p| {
+                            (
+                                p.photo_id.clone(),
+                                p.is_favorite,
+                                p.asset.events.metadata_event.clone(),
+                            )
+                        })
+                        .collect(),
+                ),
+            )?;
+            self.admitted(false);
         }
 
         for photo in downloads {
@@ -234,7 +247,10 @@ impl CloudEngine {
                 return Err("LibraryClosed".into());
             }
             match self.download_photo(session, &source_id, &photo).await? {
-                DownloadOutcome::Downloaded => report.downloaded += 1,
+                DownloadOutcome::Downloaded => {
+                    report.downloaded += 1;
+                    self.admitted(false);
+                }
                 DownloadOutcome::Unsupported | DownloadOutcome::Gone => {
                     report.skipped += 1;
                 }
@@ -248,6 +264,7 @@ impl CloudEngine {
             snapshot_token,
             token,
         ))?;
+        self.admitted(true);
         report.state = "idle".into();
         Ok(())
     }

@@ -1,3 +1,5 @@
+import 'thumbnail_progress.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -22,6 +24,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
   int _category = 0;
   List<dynamic> _sources = [];
   int? _usage;
+  int _maxWorkers = 4;
   bool _busy = false, _failed = false;
   @override
   void initState() {
@@ -34,6 +37,16 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
       final controller = ref.read(localLibraryProvider.notifier);
       final sources = await controller.localCommand({'op': 'sources'}) as List?;
       final usage = await controller.localCommand({'op': 'cacheUsage'}) as int?;
+      try {
+        final config = await controller.localCommand({
+          'op': 'thumbnailConfiguration',
+        });
+        if (config is Map) {
+          _maxWorkers = (config['fastest_workers'] as int? ?? 4).clamp(1, 32);
+        }
+      } catch (_) {
+        /* Older/test gateways keep the existing worker choices. */
+      }
       if (mounted) {
         setState(() {
           _sources = sources ?? [];
@@ -267,7 +280,9 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
             SwitchListTile(
               key: const ValueKey('settings-auto-play-motion'),
               contentPadding: EdgeInsets.zero,
-              title: Text(strings.pick('立即播放动态照片', 'Play motion photos automatically')),
+              title: Text(
+                strings.pick('立即播放动态照片', 'Play motion photos automatically'),
+              ),
               subtitle: Text(
                 strings.pick(
                   '打开动态照片时直接播放动态片段',
@@ -278,7 +293,8 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               onChanged: controller.setAutoPlayMotionPhoto,
             ),
           ]),
-          section(strings.pick('照片来源', 'Sources'), [            Consumer(
+          section(strings.pick('照片来源', 'Sources'), [
+            Consumer(
               builder: (context, ref, _) {
                 final picker = ref.watch(sourcePickerProvider);
                 final state = ref.watch(localLibraryProvider);
@@ -362,6 +378,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           section(strings.pick('缩略图', 'Thumbnails'), [
+            const ThumbnailProgress(alwaysShow: true),
             DropdownButtonFormField<int>(
               key: const ValueKey('settings-thumbnail-workers'),
               isExpanded: true,
@@ -373,12 +390,28 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
                 ),
               ),
               items: [
-                for (final (value, label) in [
-                  (1, strings.pick('标准', 'Standard')),
-                  (2, strings.pick('快速', 'Fast')),
-                  (4, strings.pick('最快', 'Fastest')),
-                ])
-                  DropdownMenuItem(value: value, child: Text(label)),
+                for (final value in <int>{
+                  1,
+                  2,
+                  4,
+                  _maxWorkers,
+                  preferences.thumbnailWorkers,
+                }.toList()..sort())
+                  DropdownMenuItem(
+                    value: value,
+                    child: Text(
+                      value == 1
+                          ? strings.pick('慢速', 'Slow')
+                          : value == 2
+                          ? strings.pick('标准', 'Standard')
+                          : value == 4 && _maxWorkers > 4
+                          ? strings.pick('快速', 'Fast')
+                          : strings.pick(
+                              '最快（$value 个工作线程）',
+                              'Fastest ($value workers)',
+                            ),
+                    ),
+                  ),
               ],
               onChanged: (value) {
                 if (value != null) controller.setThumbnailWorkers(value);

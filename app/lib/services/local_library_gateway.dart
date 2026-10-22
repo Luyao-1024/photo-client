@@ -52,6 +52,22 @@ int thumbnailSizeClassFor(double devicePixels) {
   return kThumbnailSizeClasses.last;
 }
 
+/// A square cover crops the longer axis. Account for the source aspect ratio
+/// so a portrait's short edge still covers the tile's physical pixels.
+int thumbnailSizeClassForCover(double devicePixels, LocalPhoto photo) {
+  final width = photo.width, height = photo.height;
+  if (width == null || height == null || width <= 0 || height <= 0) {
+    return thumbnailSizeClassFor(devicePixels);
+  }
+  return thumbnailSizeClassFor(
+    devicePixels * (width > height ? width / height : height / width),
+  );
+}
+
+/// Bucket decode targets so a one-pixel resize reuses decoded thumbnails.
+int thumbnailDecodeWidth(double pixels) =>
+    (((pixels.ceil() + 63) ~/ 64) * 64).clamp(64, 1024);
+
 class LocalAlbum {
   const LocalAlbum({
     required this.path,

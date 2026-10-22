@@ -219,6 +219,8 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pump();
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 420));
+      await tester.pumpAndSettle();
       expect(
         tester.widget<Text>(find.byKey(const ValueKey('viewer-name'))).data,
         'Photo 3.png',
@@ -236,12 +238,18 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       }
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 420));
+      await tester.pumpAndSettle();
       _expectViewerConsistent(tester, find, total: 6);
 
       // Mixed Right/Left burst, again without intermediate pumps.
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 420));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 420));
       await tester.pumpAndSettle();
       _expectViewerConsistent(tester, find, total: 6);
 
@@ -250,7 +258,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(InteractiveViewer),
-          matching: find.byType(Image),
+          matching: find.byKey(const ValueKey('progressive-original-image')),
         ),
         findsOneWidget,
       );
@@ -266,7 +274,7 @@ String stageImageMediaId(WidgetTester tester) {
   final image = tester.widget<Image>(
     find.descendant(
       of: find.byType(InteractiveViewer),
-      matching: find.byType(Image),
+      matching: find.byKey(const ValueKey('progressive-original-image')),
     ),
   );
   final provider = image.image is ResizeImage

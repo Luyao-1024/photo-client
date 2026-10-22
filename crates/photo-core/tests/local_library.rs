@@ -182,7 +182,14 @@ fn stale_thumbnail_revisions_are_pruned_and_previews_survive() {
     )
     .unwrap();
     fs::write(version_directory.join("preview.jpg"), b"preview").unwrap();
+    let future = version_directory.join(format!(
+        "r{}",
+        photo_core::media::THUMBNAIL_CACHE_REVISION + 1
+    ));
+    fs::create_dir_all(&future).unwrap();
+    fs::write(future.join("thumbnail-256.jpg"), b"future encoder").unwrap();
     library.prune_thumbnail_cache().unwrap();
+    assert!(future.join("thumbnail-256.jpg").is_file());
     assert!(!version_directory.join("thumbnail-512.jpg").exists());
     assert!(!version_directory.join("r1").exists());
     assert!(version_directory.join("preview.jpg").exists());

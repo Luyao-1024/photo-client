@@ -1,4 +1,5 @@
 //! Account-free local library RPC. Blocking SQLite/filesystem work stays off Tokio.
+use photo_core::thumbnail_loader::ThumbnailLoader;
 use photo_core::{
     edit::{CropRect, EditAdjustments},
     local_library::{AlbumInfo, LocalLibrary, MediaInput, PhotoFilter},
@@ -12,7 +13,6 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tokio::sync::Semaphore;
 
 pub struct LocalLibraryInfo {
     pub library_id: String,
@@ -88,7 +88,8 @@ pub(super) struct Service {
     pub(super) watcher_running: AtomicBool,
     initial_scan: AtomicBool,
     pub(super) watcher: Mutex<Option<notify::RecommendedWatcher>>,
-    thumbnails: Semaphore,
+    thumbnails: ThumbnailLoader,
+    embedded: tokio::sync::Semaphore,
 }
 
 impl Service {
@@ -122,6 +123,9 @@ pub(super) fn service() -> Result<Arc<Service>, String> {
     Ok(service)
 }
 pub(super) fn changed() {
+    if let Ok(active) = service() {
+        active.thumbnails.wake_after_library_change();
+    }
     let _ = super::bootstrap::runtime().notify("library_changed");
 }
 fn root_path(override_path: Option<String>) -> Result<PathBuf, String> {
@@ -209,8 +213,10 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
                 .ok()
                 .and_then(|p| p["thumbnailWorkers"].as_u64())
                 .unwrap_or(2)
-                .clamp(1, 4) as usize;
+                .clamp(1, 32) as usize;
             *slot = Some(Arc::new(Service {
+                thumbnails: ThumbnailLoader::new(store.clone(), workers),
+                embedded: tokio::sync::Semaphore::new(4),
                 store,
                 cancel: AtomicBool::new(false),
                 scan_state: AtomicU8::new(SCAN_IDLE),
@@ -219,7 +225,6 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
                 watcher_running: AtomicBool::new(false),
                 watcher: Mutex::new(None),
                 initial_scan: AtomicBool::new(true),
-                thumbnails: Semaphore::new(workers),
             }));
         }
         let active = slot.as_ref().ok_or("LibraryNotOpen")?;
@@ -234,7 +239,8 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
         {
             let _ = super::local_watcher::install(active);
         }
-        if active.initial_scan.swap(false, Ordering::AcqRel)
+        let initial_scan = active.initial_scan.swap(false, Ordering::AcqRel);
+        if initial_scan
             && active
                 .store
                 .sources()?
@@ -253,6 +259,15 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
                 let _ = super::local_watcher::refresh(&worker);
                 changed();
             });
+        }
+        if initial_scan
+            && active
+                .store
+                .sources()?
+                .iter()
+                .all(|s| !s.enabled || s.kind == "managed")
+        {
+            active.thumbnails.resume_prewarm();
         }
         let info = active.store.info()?;
         Ok(LocalLibraryInfo {
@@ -521,12 +536,14 @@ pub(super) struct ScanGuard {
 }
 impl ScanGuard {
     pub(super) fn user(service: Arc<Service>) -> Self {
+        service.thumbnails.pause_prewarm();
         Self {
             service,
             kind: SCAN_USER,
         }
     }
     pub(super) fn background(service: Arc<Service>) -> Self {
+        service.thumbnails.pause_prewarm();
         Self {
             service,
             kind: SCAN_BACKGROUND,
@@ -536,6 +553,7 @@ impl ScanGuard {
 impl Drop for ScanGuard {
     fn drop(&mut self) {
         self.service.release_scan();
+        self.service.thumbnails.resume_prewarm();
         let status = if self.kind == SCAN_USER {
             "local_scan_finished"
         } else {
@@ -664,68 +682,19 @@ pub async fn cancel_scan() -> Result<(), String> {
 pub const THUMBNAIL_SIZE_CLASSES: [u32; 3] = [256, 512, 1024];
 
 pub async fn thumbnail(media_id: String, size_class: u32) -> Result<String, String> {
-    if !THUMBNAIL_SIZE_CLASSES.contains(&size_class) {
-        return Err("InvalidThumbnailSizeClass".into());
-    }
     let active = service()?;
-    let _permit = active
-        .thumbnails
-        .acquire()
-        .await
-        .map_err(|_| "LibraryClosed")?;
-    if active.closed.load(Ordering::Acquire) {
-        return Err("LibraryClosed".into());
-    }
-    let worker = active.clone();
-    tokio::task::spawn_blocking(move || {
-        let photo = worker.store.photo(media_id)?;
-        let cloud_thumbnail = worker
-            .store
-            .cloud_thumbnail_for_media(photo.id.clone())
-            .ok()
-            .flatten()
-            .map(|(path, _)| path);
-        let generated = (|| -> Result<String, String> {
-            let directory = worker
-                .store
-                .root
-                .join("cache")
-                .join(&photo.id)
-                .join(photo.content_version.to_string())
-                .join(format!("r{}", media::THUMBNAIL_CACHE_REVISION));
-            std::fs::create_dir_all(&directory).map_err(|_| "CacheUnavailable")?;
-            let destination = directory.join(format!("thumbnail-{size_class}.jpg"));
-            if !destination.is_file() {
-                media::prepare_preview(
-                    std::path::Path::new(&photo.path),
-                    photo.size_bytes,
-                    photo.modified_ns,
-                    size_class,
-                    &destination,
-                )?;
-            }
-            let current = worker.store.photo(photo.id.clone())?;
-            if current.content_version != photo.content_version {
-                return Err("SourceChanged".into());
-            }
-            destination
-                .to_str()
-                .map(str::to_owned)
-                .ok_or("UnsupportedPathEncoding".into())
-        })();
-        match generated {
-            Ok(path) => Ok(path),
-            // Formats the native image pipeline cannot decode (or a cloud
-            // original that is no longer readable) still get the synced
-            // thumbnail the server provided.
-            Err(error) => match cloud_thumbnail {
-                Some(path) if std::path::Path::new(&path).is_file() => Ok(path),
-                _ => Err(error),
-            },
-        }
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let token = format!("rpc-{}", NEXT.fetch_add(1, Ordering::Relaxed));
+    let receiver = tokio::task::spawn_blocking(move || {
+        active
+            .thumbnails
+            .request(media_id, None, size_class, token, 0)
     })
     .await
-    .map_err(join_error)?
+    .map_err(join_error)??;
+    receiver
+        .await
+        .map_err(|_| "ThumbnailCancelled".to_string())?
 }
 
 pub async fn set_favorite(media_id: String, favorite: bool) -> Result<(), String> {
@@ -746,6 +715,7 @@ pub async fn close_library() -> Result<(), String> {
             active.store.mark_closed();
             active.closed.store(true, Ordering::Release);
             active.cancel.store(true, Ordering::Release);
+            active.embedded.close();
             active.thumbnails.close();
             drop(active);
         }
@@ -759,6 +729,42 @@ pub async fn close_library() -> Result<(), String> {
 /// Each command delegates to the same scoped local writer as typed library RPCs.
 pub async fn library_tools(command: String) -> Result<String, String> {
     let active = service()?;
+    let request: serde_json::Value =
+        serde_json::from_str(&command).map_err(|_| "InvalidCommand")?;
+    if request["op"] == "thumbnailEmbedded" {
+        let id = request["id"].as_str().ok_or("InvalidCommand")?.to_owned();
+        let version = request["version"].as_u64().ok_or("InvalidCommand")?;
+        let permit = active
+            .embedded
+            .acquire()
+            .await
+            .map_err(|_| "LibraryClosed")?;
+        let worker = active.clone();
+        let result = tokio::task::spawn_blocking(move || worker.thumbnails.embedded(id, version))
+            .await
+            .map_err(join_error)??;
+        drop(permit);
+        return Ok(serde_json::json!(result).to_string());
+    }
+    if request["op"] == "thumbnailRequest" {
+        let id = request["id"].as_str().ok_or("InvalidCommand")?.to_owned();
+        let version = request["version"].as_u64();
+        let size = request["size"].as_u64().ok_or("InvalidCommand")? as u32;
+        let token = request["token"]
+            .as_str()
+            .ok_or("InvalidCommand")?
+            .to_owned();
+        let tier = request["tier"].as_u64().unwrap_or(0).min(1) as u8;
+        let receiver = tokio::task::spawn_blocking(move || {
+            active.thumbnails.request(id, version, size, token, tier)
+        })
+        .await
+        .map_err(join_error)??;
+        let result = receiver
+            .await
+            .map_err(|_| "ThumbnailCancelled".to_string())??;
+        return Ok(serde_json::json!(result).to_string());
+    }
     tokio::task::spawn_blocking(move || {
         let request:serde_json::Value=serde_json::from_str(&command).map_err(|_|"InvalidCommand")?;
         let op=request["op"].as_str().ok_or("InvalidCommand")?;
@@ -771,10 +777,8 @@ pub async fn library_tools(command: String) -> Result<String, String> {
                 if op=="rank"{serde_json::json!(active.store.photo_rank(filter,string("id")?)?)}else{
                     let start=if op=="selection"{0}else{request["start"].as_u64().ok_or("InvalidQuery")? as usize};
                     let count=if op=="selection"{2000}else{request["count"].as_u64().ok_or("InvalidQuery")? as usize};
-                    let page=active.store.query_window(filter.clone(),start,count)?;
-                    let groups=if request["groups"].as_bool().unwrap_or(false){active.store.browse_groups(filter)?}else{Vec::new()};
+                    let (page,groups,flags)=active.store.browse_window(filter,start,count,request["groups"].as_bool().unwrap_or(false))?;
                     {
-                    let flags=active.store.media_flags(page.items.iter().map(|p|p.id.clone()).collect())?;
                     let mut items=serde_json::to_value(&page.items).map_err(|_|"LocalMappingFailed")?;
                     for item in items.as_array_mut().ok_or("LocalMappingFailed")?{if let Some((duration,motion))=item["id"].as_str().and_then(|id|flags.get(id)){item["duration_ms"]=serde_json::json!(duration);item["motion_offset"]=serde_json::json!(motion);}}
                     serde_json::json!({"items":items,"total":page.total,"revision":page.revision,"groups":groups})
@@ -792,7 +796,13 @@ pub async fn library_tools(command: String) -> Result<String, String> {
             "reorderAlbums"=>{active.store.reorder_albums(ids()?)?;changed();serde_json::Value::Null}
             "albumCover"=>{active.store.set_album_cover(string("folder")?,string("id")?)?;changed();serde_json::Value::Null}
             "export"=>serde_json::json!(active.store.export_media(ids()?,PathBuf::from(string("directory")?))?),
-            "metadata"=>serde_json::to_value(active.store.media_details(string("id")?)?).map_err(|_|"MetadataFailed")?,
+            "metadata"=>{
+                let id=string("id")?;let expected=request["version"].as_u64();
+                if expected.is_some_and(|v|active.store.photo(id.clone()).map(|p|p.content_version!=v).unwrap_or(true)){return Err("SourceChanged".into());}
+                let details=active.store.media_details(id.clone())?;
+                if expected.is_some_and(|v|active.store.photo(id.clone()).map(|p|p.content_version!=v).unwrap_or(true)){return Err("SourceChanged".into());}
+                serde_json::to_value(details).map_err(|_|"MetadataFailed")?
+            }
             "preview"=>{
                 let photo=active.store.photo(string("id")?)?;
                 let directory=active.store.root.join("cache").join(&photo.id).join(photo.content_version.to_string());
@@ -815,12 +825,35 @@ pub async fn library_tools(command: String) -> Result<String, String> {
                 let frames=media::animated::frames_or_extract(std::path::Path::new(&photo.path),&dir,2560)?;
                 serde_json::to_value(frames).map_err(|_|"LocalMappingFailed")?
             }
+            "thumbnailCachedPaths"=>{
+                let entries=request["items"].as_array().filter(|v|v.len()<=64).ok_or("InvalidCommand")?;
+                let mut paths=Vec::new();
+                for entry in entries {
+                    let Some(id)=entry["id"].as_str()else{continue;};let Some(version)=entry["version"].as_u64()else{continue;};let Some(size)=entry["size"].as_u64()else{continue;};
+                    if let Ok(Some(path))=active.thumbnails.cached_path(id.into(),version,size as u32){paths.push(serde_json::json!({"id":id,"version":version,"size":size,"path":path}));}
+                }
+                serde_json::json!(paths)
+            }
+            "thumbnailPrefetchSource"=>{
+                let photo=active.store.photo(string("id")?)?;
+                if photo.media_kind=="image"&&request["version"].as_u64()==Some(photo.content_version){
+                    let _=media::prefetch_pages(std::path::Path::new(&photo.path),photo.size_bytes,photo.modified_ns);
+                }
+                serde_json::Value::Null
+            }
+            "thumbnailConfiguration"=>serde_json::json!({"fastest_workers":photo_core::thumbnail_loader::fastest_worker_count(),"disk_cache_bytes":2147483648_u64}),
+            "thumbnailCancel"=>{active.thumbnails.cancel(&string("token")?);serde_json::Value::Null}
+            "thumbnailPromote"=>{active.thumbnails.promote(&string("id")?,request["version"].as_u64().ok_or("InvalidCommand")?,request["size"].as_u64().ok_or("InvalidCommand")? as u32);serde_json::Value::Null}
+            "thumbnailInvalidate"=>{active.thumbnails.invalidate_with_path(&string("id")?,request["version"].as_u64().ok_or("InvalidCommand")?,request["size"].as_u64().ok_or("InvalidCommand")? as u32,request["path"].as_str().map(str::to_owned))?;serde_json::Value::Null}
+            "thumbnailEmbedded"=>serde_json::json!(active.thumbnails.embedded(string("id")?,request["version"].as_u64().ok_or("InvalidCommand")?)?),
+            "thumbnailViewport"=>{active.thumbnails.viewport(request["id"].as_str().map(str::to_owned),request["size"].as_u64().unwrap_or(512) as u32);serde_json::Value::Null}
+            "thumbnailStats"=>serde_json::to_value(active.thumbnails.progress()?).map_err(|_|"LocalMappingFailed")?,
             "clearLogs"=>{active.store.clear_logs()?;serde_json::Value::Null}
-            "cacheUsage"=>serde_json::json!(active.store.cache_usage()?),
-            "clearCache"=>{active.store.clear_cache()?;changed();serde_json::Value::Null}
+            "cacheUsage"=>serde_json::json!(active.thumbnails.cache_usage()),
+            "clearCache"=>{active.thumbnails.clear_disk()?;changed();serde_json::Value::Null}
             _=>return Err("UnknownLocalCommand".into())
         };
-        if !matches!(op,"window"|"rank"|"metadata"|"preview"|"preferences"|"sources"|"cacheUsage"){active.store.log_event(op,true,started.elapsed().as_millis());}
+        if !op.starts_with("thumbnail") && !matches!(op,"window"|"rank"|"metadata"|"preview"|"preferences"|"sources"|"cacheUsage"){active.store.log_event(op,true,started.elapsed().as_millis());}
         Ok(result.to_string())
     }).await.map_err(join_error)?
 }

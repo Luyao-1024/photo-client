@@ -7,7 +7,25 @@ pub struct BrowseIndex {
     revision: u64,
     filter: PhotoFilter,
     ids: Vec<String>,
+    groups: Option<Vec<(i64, u64)>>,
 }
+/// Favorite edits change DTOs/counters, not date/name ordering. Advance only
+/// an index captured at the pre-edit revision; never bless a stale structural
+/// snapshot. Favorite-filtered queries must rebuild membership normally.
+pub(super) fn retain_order_after_favorite(
+    cache: &Mutex<Option<BrowseIndex>>,
+    before: u64,
+    after: u64,
+) {
+    if let Ok(mut cache) = cache.lock() {
+        if let Some(index) = cache.as_mut() {
+            if index.revision == before && !index.filter.favorites_only {
+                index.revision = after;
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceInfo {
     pub id: String,
@@ -131,77 +149,47 @@ impl LocalLibrary {
         }
         let library = self.library_id.clone();
         let cache = self.browse_index.clone();
-        self.execute(move |c| {
-            let revision: u64 = c
-                .query_row(
-                    "SELECT revision FROM libraries WHERE library_id=?1",
-                    [&library],
-                    |r| sql_u64(r, 0),
-                )
-                .map_err(error)?;
-            let mut cache = cache.lock().map_err(|_| "LibraryUnavailable")?;
-            if cache
-                .as_ref()
-                .is_none_or(|idx| idx.revision != revision || idx.filter != filter)
-            {
-                let (clause, values) = filter_sql(&library, &filter)?;
-                let sql = format!(
-                    "SELECT media_id FROM media WHERE {clause} ORDER BY {}{}",
-                    if filter.search.is_empty() {
-                        ""
-                    } else {
-                        "media_kind ASC,"
-                    },
-                    order_sql(&filter.order)?
-                );
-                let mut stmt = c.prepare(&sql).map_err(error)?;
-                let ids = stmt
-                    .query_map(rusqlite::params_from_iter(values), |r| r.get(0))
-                    .map_err(error)?
-                    .collect::<rusqlite::Result<Vec<String>>>()
-                    .map_err(error)?;
-                *cache = Some(BrowseIndex {
-                    revision,
-                    filter,
-                    ids,
-                });
-            }
-            let index = cache.as_ref().ok_or("LibraryUnavailable")?;
-            let ids = &index.ids
-                [start.min(index.ids.len())..start.saturating_add(count).min(index.ids.len())];
-            let mut stmt = c.prepare_cached(PHOTO_COLUMNS).map_err(error)?;
-            let mut items = Vec::with_capacity(ids.len());
-            for id in ids {
-                items.push(
-                    stmt.query_row(params![library, id], decode_photo)
-                        .map_err(error)?,
-                );
-            }
-            Ok(LocalPage {
-                items,
-                total: index.ids.len() as u64,
-                revision,
-                next_cursor: None,
-            })
-        })
+        self.execute(move |c| query_window_db(c, &library, &cache, filter, start, count))
     }
     pub fn browse_groups(&self, filter: PhotoFilter) -> Result<Vec<(i64, u64)>, String> {
         let library = self.library_id.clone();
+        let cache = self.browse_index.clone();
+        self.execute(move |c| groups_db(c, &library, &cache, &filter))
+    }
+    /// Page, groups and media flags share one actor/read snapshot. Background
+    /// admission cannot splice a newer section layout into an older DTO page.
+    pub fn browse_window(
+        &self,
+        filter: PhotoFilter,
+        start: usize,
+        count: usize,
+        groups: bool,
+    ) -> Result<(LocalPage, Vec<(i64, u64)>, MediaFlagsById), String> {
+        if count == 0 || count > 2000 {
+            return Err("InvalidQuery".into());
+        }
+        let library = self.library_id.clone();
+        let cache = self.browse_index.clone();
         self.execute(move|c|{
-            let (clause,values)=filter_sql(&library,&filter)?;
-            let grouping=if filter.order.starts_with("name_"){ "'all'" }else{"date(sort_time_ms/1000,'unixepoch','localtime')"};
-            let direction=if filter.order=="date_asc"{"ASC"}else{"DESC"};
-            let sql=if filter.search.is_empty(){format!("SELECT MIN(sort_time_ms),COUNT(*) FROM media WHERE {clause} GROUP BY {grouping} ORDER BY MIN(sort_time_ms) {direction}")}else{format!("SELECT CASE media_kind WHEN 'video' THEN -1 ELSE -2 END,COUNT(*) FROM media WHERE {clause} GROUP BY media_kind ORDER BY media_kind ASC")};
-            let mut stmt=c.prepare(&sql).map_err(error)?;
-            stmt.query_map(rusqlite::params_from_iter(values),|r|Ok((r.get(0)?,sql_u64(r,1)?))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)
+            let tx=c.transaction().map_err(error)?;
+            let page=query_window_db(&tx,&library,&cache,filter.clone(),start,count)?;
+            let groups=if groups{groups_db(&tx,&library,&cache,&filter)?}else{Vec::new()};
+            let mut statement=tx.prepare_cached("SELECT duration_ms,motion_offset FROM media_details WHERE library_id=?1 AND media_id=?2").map_err(error)?;
+            let mut flags=std::collections::HashMap::new();
+            for photo in &page.items {if let Some(value)=statement.query_row(params![library,photo.id],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(error)?{flags.insert(photo.id.clone(),value);}}
+            drop(statement);tx.commit().map_err(error)?;Ok((page,groups,flags))
         })
     }
     pub fn photo_rank(&self, filter: PhotoFilter, id: String) -> Result<Option<usize>, String> {
-        self.query_window(filter, 0, 1)?;
-        let index = self.browse_index.lock().map_err(|_| "LibraryUnavailable")?;
-        Ok(index
-            .as_ref()
-            .and_then(|i| i.ids.iter().position(|p| p == &id)))
+        let library = self.library_id.clone();
+        let cache = self.browse_index.clone();
+        self.execute(move |c| {
+            query_window_db(c, &library, &cache, filter, 0, 1)?;
+            let cache = cache.lock().map_err(|_| "LibraryUnavailable")?;
+            Ok(cache
+                .as_ref()
+                .and_then(|i| i.ids.iter().position(|p| p == &id)))
+        })
     }
     pub fn media_details(&self, id: String) -> Result<crate::media::details::MediaDetails, String> {
         let photo = self.photo(id.clone())?;
@@ -402,45 +390,7 @@ impl LocalLibrary {
     /// entries an older encoder wrote. Previews and extracted motion videos
     /// live beside them and are kept.
     pub fn prune_thumbnail_cache(&self) -> Result<(), String> {
-        let cache = self.root.join("cache");
-        if !cache.is_dir() {
-            return Ok(());
-        }
-        let current = format!("r{}", crate::media::THUMBNAIL_CACHE_REVISION);
-        for media_entry in fs::read_dir(&cache).map_err(error)? {
-            let media_entry = media_entry.map_err(error)?;
-            if !media_entry.path().is_dir() {
-                continue;
-            }
-            for version_entry in fs::read_dir(media_entry.path()).map_err(error)? {
-                let version_entry = version_entry.map_err(error)?;
-                if !version_entry.path().is_dir() {
-                    continue;
-                }
-                for entry in fs::read_dir(version_entry.path()).map_err(error)? {
-                    let entry = entry.map_err(error)?;
-                    let path = entry.path();
-                    let name = entry.file_name();
-                    let name = name.to_string_lossy();
-                    let stale = if path.is_dir() {
-                        name.strip_prefix('r')
-                            .and_then(|revision| revision.parse::<u32>().ok())
-                            .is_some()
-                    } else {
-                        name.starts_with("thumbnail-")
-                    };
-                    if !stale || name == current {
-                        continue;
-                    }
-                    if path.is_dir() {
-                        let _ = fs::remove_dir_all(&path);
-                    } else {
-                        let _ = fs::remove_file(&path);
-                    }
-                }
-            }
-        }
-        Ok(())
+        prune_thumbnail_cache_root(&self.root)
     }
 }
 pub(super) fn recount(c: &Connection, library: &str) -> Result<(), String> {
@@ -616,4 +566,332 @@ impl LocalLibrary {
         result?;
         Ok(folder)
     }
+}
+
+pub(super) fn prune_thumbnail_cache_root(root: &Path) -> Result<(), String> {
+    let cache = root.join("cache");
+    if !fs::symlink_metadata(&cache).is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink()) {
+        return Ok(());
+    }
+    let current = format!("r{}", crate::media::THUMBNAIL_CACHE_REVISION);
+    for media_entry in fs::read_dir(&cache).map_err(error)? {
+        let media_entry = media_entry.map_err(error)?;
+        if !media_entry.file_type().map_err(error)?.is_dir() {
+            continue;
+        }
+        for version_entry in fs::read_dir(media_entry.path()).map_err(error)? {
+            let version_entry = version_entry.map_err(error)?;
+            if !version_entry.file_type().map_err(error)?.is_dir() {
+                continue;
+            }
+            for entry in fs::read_dir(version_entry.path()).map_err(error)? {
+                let entry = entry.map_err(error)?;
+                let path = entry.path();
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                let kind = entry.file_type().map_err(error)?;
+                if kind.is_symlink() {
+                    continue;
+                }
+                let stale = if kind.is_dir() {
+                    name.strip_prefix('r')
+                        .and_then(|revision| revision.parse::<u32>().ok())
+                        .is_some_and(|revision| revision < crate::media::THUMBNAIL_CACHE_REVISION)
+                } else {
+                    name.starts_with("thumbnail-")
+                };
+                if !stale || name == current {
+                    continue;
+                }
+                if path.is_dir() {
+                    let _ = fs::remove_dir_all(&path);
+                } else {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod browse_performance_tests {
+    use super::*;
+    fn input(folder: &Path, name: &str) -> MediaInput {
+        let path = folder.join(name);
+        fs::write(&path, b"catalog fixture").unwrap();
+        MediaInput {
+            path: path.to_string_lossy().into(),
+            name: name.into(),
+            parent: folder.to_string_lossy().into(),
+            size_bytes: 15,
+            modified_ns: 10000,
+            mime_type: "image/jpeg".into(),
+            width: None,
+            height: None,
+            orientation: 1,
+            capture_time_ms: None,
+        }
+    }
+    #[test]
+    fn favorite_changes_reuse_unfiltered_ranks_but_refresh_filtered_membership() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let library = LocalLibrary::open(root.path()).unwrap();
+        let source = library.add_source(folder.path()).unwrap();
+        library
+            .upsert_batch(
+                source,
+                vec![input(folder.path(), "a.jpg"), input(folder.path(), "b.jpg")],
+            )
+            .unwrap();
+        let page = library
+            .query_window(PhotoFilter::default(), 0, 100)
+            .unwrap();
+        let id = page.items[0].id.clone();
+        let before = library
+            .browse_index
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .ids
+            .as_ptr();
+        library.set_favorite(id.clone(), true).unwrap();
+        let page = library
+            .query_window(PhotoFilter::default(), 0, 100)
+            .unwrap();
+        assert_eq!(
+            library
+                .browse_index
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .ids
+                .as_ptr(),
+            before
+        );
+        assert!(page.items[0].favorite);
+        let filter = PhotoFilter {
+            favorites_only: true,
+            ..PhotoFilter::default()
+        };
+        assert_eq!(
+            library.query_window(filter.clone(), 0, 100).unwrap().total,
+            1
+        );
+        library
+            .set_favorite(page.items[1].id.clone(), true)
+            .unwrap();
+        assert_eq!(library.query_window(filter, 0, 100).unwrap().total, 2);
+    }
+    #[test]
+    fn browse_snapshot_keeps_groups_flags_and_foreground_index_together() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let library = LocalLibrary::open(root.path()).unwrap();
+        let source = library.add_source(folder.path()).unwrap();
+        library
+            .upsert_batch(
+                source,
+                vec![input(folder.path(), "a.jpg"), input(folder.path(), "b.jpg")],
+            )
+            .unwrap();
+        let all = library
+            .query_window(PhotoFilter::default(), 0, 100)
+            .unwrap();
+        library.set_favorite(all.items[0].id.clone(), true).unwrap();
+        library
+            .record_details(vec![(
+                all.items[0].path.clone(),
+                crate::media::details::MediaDetails {
+                    motion_offset: Some(12),
+                    ..Default::default()
+                },
+            )])
+            .unwrap();
+        let filter = PhotoFilter {
+            favorites_only: true,
+            ..Default::default()
+        };
+        let (page, groups, flags) = library.browse_window(filter.clone(), 0, 100, true).unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(
+            groups.iter().map(|(_, count)| count).sum::<u64>(),
+            page.total
+        );
+        assert_eq!(flags.get(&page.items[0].id), Some(&(None, Some(12))));
+        assert_eq!(
+            library
+                .photo_rank(filter, page.items[0].id.clone())
+                .unwrap(),
+            Some(0)
+        );
+        let before = library
+            .browse_index
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .ids
+            .as_ptr();
+        assert_eq!(library.thumbnail_reconcile_window(0).unwrap().len(), 2);
+        let cache = library.browse_index.lock().unwrap();
+        let index = cache.as_ref().unwrap();
+        assert_eq!(index.ids.as_ptr(), before);
+        assert!(index.filter.favorites_only);
+        assert_eq!(index.groups.as_ref().unwrap(), &groups);
+    }
+    #[test]
+    fn a_favorite_edit_cannot_bless_an_index_stale_from_an_insert() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let library = LocalLibrary::open(root.path()).unwrap();
+        let source = library.add_source(folder.path()).unwrap();
+        library
+            .upsert_batch(source.clone(), vec![input(folder.path(), "a.jpg")])
+            .unwrap();
+        let page = library
+            .query_window(PhotoFilter::default(), 0, 100)
+            .unwrap();
+        library
+            .upsert_batch(source, vec![input(folder.path(), "b.jpg")])
+            .unwrap();
+        library
+            .set_favorite(page.items[0].id.clone(), true)
+            .unwrap();
+        assert_eq!(
+            library
+                .query_window(PhotoFilter::default(), 0, 100)
+                .unwrap()
+                .total,
+            2
+        );
+    }
+}
+
+fn query_window_db(
+    c: &Connection,
+    library: &str,
+    cache: &Mutex<Option<BrowseIndex>>,
+    filter: PhotoFilter,
+    start: usize,
+    count: usize,
+) -> Result<LocalPage, String> {
+    let revision: u64 = c
+        .query_row(
+            "SELECT revision FROM libraries WHERE library_id=?1",
+            [&library],
+            |r| sql_u64(r, 0),
+        )
+        .map_err(error)?;
+    let mut cache = cache.lock().map_err(|_| "LibraryUnavailable")?;
+    if cache
+        .as_ref()
+        .is_none_or(|idx| idx.revision != revision || idx.filter != filter)
+    {
+        let (clause, values) = filter_sql(&library, &filter)?;
+        let sql = format!(
+            "SELECT media_id FROM media WHERE {clause} ORDER BY {}{}",
+            if filter.search.is_empty() {
+                ""
+            } else {
+                "media_kind ASC,"
+            },
+            order_sql(&filter.order)?
+        );
+        let mut stmt = c.prepare(&sql).map_err(error)?;
+        let ids = stmt
+            .query_map(rusqlite::params_from_iter(values), |r| r.get(0))
+            .map_err(error)?
+            .collect::<rusqlite::Result<Vec<String>>>()
+            .map_err(error)?;
+        *cache = Some(BrowseIndex {
+            revision,
+            filter,
+            ids,
+            groups: None,
+        });
+    }
+    let index = cache.as_ref().ok_or("LibraryUnavailable")?;
+    let ids =
+        &index.ids[start.min(index.ids.len())..start.saturating_add(count).min(index.ids.len())];
+    let mut stmt = c.prepare_cached(PHOTO_COLUMNS).map_err(error)?;
+    let mut items = Vec::with_capacity(ids.len());
+    for id in ids {
+        items.push(
+            stmt.query_row(params![library, id], decode_photo)
+                .map_err(error)?,
+        );
+    }
+    Ok(LocalPage {
+        items,
+        total: index.ids.len() as u64,
+        revision,
+        next_cursor: None,
+    })
+}
+
+fn groups_db(
+    c: &Connection,
+    library: &str,
+    cache: &Mutex<Option<BrowseIndex>>,
+    filter: &PhotoFilter,
+) -> Result<Vec<(i64, u64)>, String> {
+    let revision = c
+        .query_row(
+            "SELECT revision FROM libraries WHERE library_id=?1",
+            [library],
+            |r| sql_u64(r, 0),
+        )
+        .map_err(error)?;
+    if let Some(groups) = cache
+        .lock()
+        .map_err(|_| "LibraryUnavailable")?
+        .as_ref()
+        .filter(|index| index.revision == revision && index.filter == *filter)
+        .and_then(|index| index.groups.clone())
+    {
+        return Ok(groups);
+    }
+
+    let (clause, values) = filter_sql(&library, &filter)?;
+    let grouping = if filter.order.starts_with("name_") {
+        "'all'"
+    } else {
+        "date(sort_time_ms/1000,'unixepoch','localtime')"
+    };
+    let direction = if filter.order == "date_asc" {
+        "ASC"
+    } else {
+        "DESC"
+    };
+    let sql = if filter.search.is_empty() {
+        format!(
+            "SELECT MIN(sort_time_ms),COUNT(*) FROM media WHERE {clause} GROUP BY {grouping} ORDER BY MIN(sort_time_ms) {direction}"
+        )
+    } else {
+        format!(
+            "SELECT CASE media_kind WHEN 'video' THEN -1 ELSE -2 END,COUNT(*) FROM media WHERE {clause} GROUP BY media_kind ORDER BY media_kind ASC"
+        )
+    };
+    let mut stmt = c.prepare(&sql).map_err(error)?;
+    let groups = stmt
+        .query_map(rusqlite::params_from_iter(values), |r| {
+            Ok((r.get(0)?, sql_u64(r, 1)?))
+        })
+        .map_err(error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(error)?;
+
+    if let Some(index) = cache
+        .lock()
+        .map_err(|_| "LibraryUnavailable")?
+        .as_mut()
+        .filter(|index| index.revision == revision && index.filter == *filter)
+    {
+        index.groups = Some(groups.clone());
+    }
+    Ok(groups)
 }

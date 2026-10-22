@@ -17,8 +17,8 @@ const EXTENSIONS: &str = include_str!("storage/local-v3.sql");
 const CLOUD_SCHEMA: &str = include_str!("storage/local-v4.sql");
 const METADATA_SCHEMA: &str = include_str!("storage/local-v5.sql");
 const SCHEMA_VERSION: i64 = 5;
-mod metadata;
 mod cloud_store;
+mod metadata;
 pub(crate) use cloud_store::{
     CloudAccount, CloudBinding, CloudBindingMedia, CloudBindingUpdate, CloudQueueCounts,
     CloudUpload, CloudUploadIntent, RemoteMediaInput, StoredCloudRecord,
@@ -26,6 +26,7 @@ pub(crate) use cloud_store::{
 mod migrations;
 mod save;
 mod system_trash;
+mod thumbnail_state;
 mod tools;
 pub use tools::{BrowseIndex, SourceInfo};
 type Job = Box<dyn FnOnce(&mut Connection) + Send>;
@@ -207,7 +208,9 @@ impl LocalLibrary {
                         format!(
                             "{:x}",
                             Sha256::digest(
-                                [SCHEMA, EXTENSIONS, CLOUD_SCHEMA, METADATA_SCHEMA].concat().as_bytes()
+                                [SCHEMA, EXTENSIONS, CLOUD_SCHEMA, METADATA_SCHEMA]
+                                    .concat()
+                                    .as_bytes()
                             )
                         ),
                         now_ms()
@@ -291,7 +294,10 @@ impl LocalLibrary {
         .inspect(|store| {
             // Thumbnails written by an older encoder are rebuilt on demand, so
             // the stale entries are dropped instead of piling up.
-            let _ = store.prune_thumbnail_cache();
+            let root = store.root.clone();
+            std::thread::spawn(move || {
+                let _ = tools::prune_thumbnail_cache_root(&root);
+            });
         })
     }
 
@@ -414,13 +420,17 @@ impl LocalLibrary {
 
     pub fn set_favorite(&self, media_id: String, favorite: bool) -> Result<bool, String> {
         let library = self.library_id.clone();
+        let cache = self.browse_index.clone();
         self.execute(move|c|{
+            let before=c.query_row("SELECT revision FROM libraries WHERE library_id=?1",[&library],|r|sql_u64(r,0)).map_err(error)?;
             let tx=c.transaction().map_err(error)?;
             let exists:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM media WHERE library_id=?1 AND media_id=?2 AND state='active')",params![library,media_id],|r|r.get(0)).map_err(error)?;
             if !exists{return Err("PhotoNotFound".into());}
             let changed=tx.execute("UPDATE media SET favorite=?3 WHERE library_id=?1 AND media_id=?2 AND favorite<>?3",params![library,media_id,favorite]).map_err(error)?>0;
             if changed{tools::recount(&tx,&library)?;metadata::note_local_edit(&tx,&library,&media_id)?;}
-            tx.commit().map_err(error)?;Ok(changed)
+            tx.commit().map_err(error)?;
+            if changed {let after=c.query_row("SELECT revision FROM libraries WHERE library_id=?1",[&library],|r|sql_u64(r,0)).map_err(error)?;tools::retain_order_after_favorite(&cache,before,after);}
+            Ok(changed)
         })
     }
 

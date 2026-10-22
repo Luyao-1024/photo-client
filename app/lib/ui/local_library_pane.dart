@@ -1,3 +1,7 @@
+import 'thumbnail_image.dart';
+import '../services/thumbnail_pipeline.dart';
+import 'thumbnail_progress.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -57,7 +61,11 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       ((_searchOpen || widget.searchMode)
           ? _librarySearchHeight(context, widget.trashMode)
           : 0);
+  int _prewarmSizeClass = 512;
   final _scroll = ScrollController();
+  ThumbnailPool? _decodedPool;
+  Timer? _decodedPrefetchTimer;
+  int _decodedPrefetchGeneration = 0;
   final _search = TextEditingController();
   final _scheduledPages = <int>{};
   late final FocusNode _searchFocus = FocusNode(onKeyEvent: _onSearchKey);
@@ -109,11 +117,24 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     _withinRow = y - (group.top + group.header + row * group.stride);
     _anchorStride = group.stride;
     ref.read(localLibraryProvider.notifier).noteViewport(_visibleRank);
+    final gateway = ref.read(coreGatewayProvider);
+    if (gateway is LocalLibraryGateway) {
+      ThumbnailPool.forGateway(gateway as LocalLibraryGateway).viewport(
+        ref.read(localLibraryProvider).photoAt(_visibleRank)?.id,
+        _prewarmSizeClass,
+      );
+    }
   }
 
   @override
   void initState() {
     super.initState();
+    final gateway = ref.read(coreGatewayProvider);
+    if (gateway is LocalLibraryGateway && gateway is ThumbnailPipelineGateway) {
+      _decodedPool = ThumbnailPool.forGateway(gateway as LocalLibraryGateway);
+      _decodedPool!.cacheReady.addListener(_queueDecodedPrefetch);
+      _decodedPool!.epoch.addListener(_queueDecodedPrefetch);
+    }
     _scroll.addListener(_nearEnd);
     HardwareKeyboard.instance.addHandler(_onGlobalKey);
   }
@@ -121,8 +142,127 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   void _nearEnd() {
     _captureAnchor();
     _trackBackdrop();
+    _queueDecodedPrefetch();
     if (_scroll.hasClients && _scroll.positions.last.extentAfter < 600) {
       unawaited(ref.read(localLibraryProvider.notifier).loadNext());
+    }
+  }
+
+  void _queueDecodedPrefetch() {
+    if (_decodedPool == null) return;
+    _decodedPrefetchGeneration++;
+    if (!mounted ||
+        _geometry.isEmpty ||
+        !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      _decodedPrefetchTimer?.cancel();
+      _decodedPrefetchTimer = null;
+      return;
+    }
+    _decodedPrefetchTimer ??= Timer(const Duration(milliseconds: 200), () {
+      _decodedPrefetchTimer = null;
+      unawaited(_prefetchDecoded(_decodedPrefetchGeneration));
+    });
+  }
+
+  Future<void> _prefetchDecoded(int generation) async {
+    final gateway = ref.read(coreGatewayProvider);
+    if (gateway is! ThumbnailPipelineGateway ||
+        _decodedPool == null ||
+        _geometry.isEmpty) {
+      return;
+    }
+    final library = ref.read(localLibraryProvider);
+    if (library.loading || library.trashed) return;
+    final group = _geometry.lastWhere(
+      (g) => g.start <= _visibleRank,
+      orElse: () => _geometry.first,
+    );
+    final side = group.stride - 8;
+    final pixels = side * MediaQuery.devicePixelRatioOf(context);
+    final target = thumbnailDecodeWidth(pixels);
+    final rows =
+        ((_scroll.hasClients ? _scroll.position.viewportDimension : 600) /
+                group.stride)
+            .ceil();
+    final visible = rows * group.columns;
+    final count = (visible * 2).clamp(1, 64);
+    final candidates = <String, ({LocalPhoto photo, int size})>{};
+    for (
+      var rank = _visibleRank + visible;
+      rank < _visibleRank + visible + count && rank < library.total;
+      rank++
+    ) {
+      final photo = library.photoAt(rank);
+      if (photo == null) continue;
+      final size = thumbnailSizeClassForCover(pixels, photo);
+      final path = _decodedPool!.cachedPath(photo, size);
+      if (path != null &&
+          ThumbnailImage.isRetained(
+            ThumbnailImage.file(path, photo, width: target),
+          )) {
+        continue;
+      }
+      candidates['${photo.id}:${photo.contentVersion}:$size'] = (
+        photo: photo,
+        size: size,
+      );
+    }
+    if (candidates.isEmpty) return;
+    try {
+      final paths = await (gateway as ThumbnailPipelineGateway)
+          .thumbnailCommand({
+            'op': 'thumbnailCachedPaths',
+            'items': [
+              for (final value in candidates.values)
+                {
+                  'id': value.photo.id,
+                  'version': value.photo.contentVersion,
+                  'size': value.size,
+                },
+            ],
+          });
+      if (paths is! List) return;
+      for (final value in paths) {
+        if (!mounted ||
+            generation != _decodedPrefetchGeneration ||
+            !(ModalRoute.of(context)?.isCurrent ?? true)) {
+          return;
+        }
+        if (value is! Map || value['path'] is! String) continue;
+        final candidate =
+            candidates['${value['id']}:${value['version']}:${value['size']}'];
+        if (candidate == null) continue;
+        final path = value['path'] as String;
+        var failed = false;
+        await precacheImage(
+          ThumbnailImage.file(
+            path,
+            candidate.photo,
+            width: target,
+            use: ThumbnailUse.background,
+          ),
+          context,
+          onError: (_, _) => failed = true,
+        );
+        if (!mounted || generation != _decodedPrefetchGeneration) return;
+        if (!failed) {
+          _decodedPool!.rememberCached(candidate.photo, candidate.size, path);
+        } else {
+          await (gateway as ThumbnailPipelineGateway).thumbnailCommand({
+            'op': 'thumbnailInvalidate',
+            'id': candidate.photo.id,
+            'path': path,
+            'version': candidate.photo.contentVersion,
+            'size': candidate.size,
+          });
+          _decodedPool!.activity.value++;
+        }
+        // At most one decoded lookahead image is in flight, with a frame-sized
+        // yield. No original is decoded or generated by this prefetch path.
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+    } catch (_) {
+      /* Lookahead never interrupts foreground browsing. */
     }
   }
 
@@ -191,6 +331,10 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onGlobalKey);
+    _decodedPrefetchGeneration++;
+    _decodedPrefetchTimer?.cancel();
+    _decodedPool?.cacheReady.removeListener(_queueDecodedPrefetch);
+    _decodedPool?.epoch.removeListener(_queueDecodedPrefetch);
     _scroll.dispose();
     _search.dispose();
     _searchFocus.dispose();
@@ -1085,6 +1229,27 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           emptyTrashEnabled: state.extent > 0 || state.hasNext,
           strings: strings,
         ),
+        if (hasContent &&
+            !widget.searchMode &&
+            !widget.trashMode &&
+            _mode == GroupMode.day)
+          Positioned(
+            bottom: 80,
+            left: 20,
+            right: 20,
+            child: IgnorePointer(
+              child: Center(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor
+                        .withValues(alpha: .85),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const ThumbnailProgress(),
+                ),
+              ),
+            ),
+          ),
         if (hasContent && !widget.searchMode)
           Align(
             alignment: Alignment.bottomCenter,
@@ -1197,6 +1362,14 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                         .ceil()
                         .clamp(1, 100);
               final side = (available - 8 * (columns - 1)) / columns;
+              // Keep the old Month/Day medium prewarm, while dense Year tiles
+              // use Small. Foreground requests still choose by physical crop.
+              _prewarmSizeClass = _mode == GroupMode.year ? 256 : 512;
+              if (!widget.trashMode) {
+                ThumbnailPool.forGateway(
+                  gateway,
+                ).viewport(state.photoAt(_visibleRank)?.id, _prewarmSizeClass);
+              }
               final previewCounts = {
                 for (final section in sections)
                   section: widget.searchMode && !widget.searchDetail
@@ -1258,6 +1431,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 fallbackRank += count;
               }
               _geometry = layout;
+              _queueDecodedPrefetch();
               double? target = _pendingOffset;
               if (target == null && _pendingRank != null) {
                 for (final group in layout) {
@@ -2301,7 +2475,12 @@ class _AlbumTargetTile extends ConsumerStatefulWidget {
 }
 
 class _AlbumTargetTileState extends ConsumerState<_AlbumTargetTile> {
-  Future<String>? _cover;
+  MediaThumbnailHandle? _cover;
+  @override
+  void dispose() {
+    _cover?.release();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -2309,7 +2488,7 @@ class _AlbumTargetTileState extends ConsumerState<_AlbumTargetTile> {
     final gateway = ref.read(coreGatewayProvider);
     final id = widget.album.coverMediaId;
     if (gateway is LocalLibraryGateway && id != null) {
-      _cover = (gateway as LocalLibraryGateway).thumbnail(id, sizeClass: 256);
+      _cover = MediaThumbnailHandle(gateway as LocalLibraryGateway, id, 256);
     }
   }
 
@@ -2328,7 +2507,8 @@ class _AlbumTargetTileState extends ConsumerState<_AlbumTargetTile> {
           children: [
             Expanded(
               child: FutureBuilder<String>(
-                future: _cover,
+                future: _cover?.future,
+                initialData: _cover?.path,
                 builder: (context, snapshot) {
                   final fallback = Center(
                     child: Icon(

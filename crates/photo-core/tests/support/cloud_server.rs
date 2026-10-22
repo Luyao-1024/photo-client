@@ -197,6 +197,14 @@ impl Fixture {
             )
             .unwrap();
         }
+        let thumbnails = photo_core::thumbnail_loader::ThumbnailLoader::new(library.clone(), 1);
+        thumbnails
+            .request(media_id.clone(), None, 512, "fixture".into(), 0)
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap();
+        thumbnails.close();
         assert_eq!(
             engine.queue_upload(vec![media_id.clone()]).unwrap().queued,
             1

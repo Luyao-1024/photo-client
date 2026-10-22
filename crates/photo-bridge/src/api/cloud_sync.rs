@@ -155,7 +155,7 @@ pub async fn cloud_sync_now() -> Result<CloudSyncReportView, String> {
     let _guard = lock().await;
     let active = service()?;
     let _flag = SyncFlag::enter();
-    let engine = CloudEngine::new(active.store.clone());
+    let engine = CloudEngine::new(active.store.clone()).with_change_observer(changed);
     let report = engine.sync_now().await?;
     changed();
     Ok(report_view(report))

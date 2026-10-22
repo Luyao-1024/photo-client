@@ -28,3 +28,6 @@ jpeg-decoder = "0.3"
 png = "0.18"
 
 [dev-dependencies]
+
+[build-dependencies]
+cc = "1"

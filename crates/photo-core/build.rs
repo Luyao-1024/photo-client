@@ -21,6 +21,13 @@ fn main() {
         return;
     }
 
+    println!("cargo:rerun-if-changed=src/media/jpeg_scale_shim.c");
+    cc::Build::new()
+        .file("src/media/jpeg_scale_shim.c")
+        .warnings(true)
+        .compile("photo_jpeg_scale");
+    println!("cargo:rustc-link-lib=jpeg");
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     let alias = out_dir.join("libheif.so");
     if compiler_finds("libheif.so") {

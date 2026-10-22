@@ -1,3 +1,6 @@
+import '../services/media_metadata_cache.dart';
+import '../services/thumbnail_pipeline.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
@@ -20,6 +23,7 @@ final class NativeCoreGateway
         CoreGateway,
         LocalLibraryGateway,
         LocalLibraryTools,
+        ThumbnailPipelineGateway,
         CloudSyncGateway {
   NativeCoreGateway({
     this.expectedDigestOverride,
@@ -35,6 +39,7 @@ final class NativeCoreGateway
   final String? dataRoot;
   static Future<void>? _bindingInitialization;
   CoreSnapshot? _snapshot;
+  int? _thumbnailCacheEpoch;
 
   static Future<void> _initializeBinding() async {
     if (!Platform.isLinux) {
@@ -103,6 +108,8 @@ final class NativeCoreGateway
   Future<void> shutdown() async {
     if (_snapshot == null) return;
     // Native shutdown also closes the open local library and its workers.
+    ThumbnailPool.forGateway(this).clear();
+    MediaMetadataCache.clear(this);
     await native.shutdown();
     _snapshot = null;
   }
@@ -172,9 +179,14 @@ final class NativeCoreGateway
   @override
   Future<Object?> localCommand(Map<String, Object?> command) async {
     await native_library.openLibrary(dataRoot: dataRoot);
-    return jsonDecode(
+    final result = jsonDecode(
       await native_library.libraryTools(command: jsonEncode(command)),
     );
+    if (command['op'] == 'clearCache') {
+      _thumbnailCacheEpoch = null;
+      ThumbnailPool.forGateway(this).clear();
+    }
+    return result;
   }
 
   @override
@@ -299,6 +311,21 @@ final class NativeCoreGateway
 
   @override
   Future<void> cancelScan() => native_library.cancelScan();
+
+  @override
+  Future<Object?> thumbnailCommand(Map<String, Object?> command) async {
+    final result = jsonDecode(
+      await native_library.libraryTools(command: jsonEncode(command)),
+    );
+    if (command['op'] == 'thumbnailStats' && result is Map) {
+      final epoch = result['cache_epoch'] as int?;
+      if (_thumbnailCacheEpoch != null && epoch != _thumbnailCacheEpoch) {
+        ThumbnailPool.forGateway(this).clear();
+      }
+      _thumbnailCacheEpoch = epoch;
+    }
+    return result;
+  }
 
   @override
   Future<String> thumbnail(String mediaId, {int sizeClass = 512}) =>

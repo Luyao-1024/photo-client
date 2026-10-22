@@ -78,6 +78,17 @@ extension UxJourney on LocalJourney {
     _uxRecord('elapsed_ms', DateTime.now().difference(started).inMilliseconds);
   }
 
+  Future<void> _uxMediaJourney() async {
+    facts['ux'] = <String, Object?>{};
+    await _waitFor(
+      () => _state.info != null && !_state.loading,
+      reason: 'the media-only library did not open',
+    );
+    await _settle();
+    await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+    await _uxStepMediaKinds();
+  }
+
   // ------------------------------------------------------------------- steps
 
   Future<void> _uxStepEmptyState() async {
@@ -1561,7 +1572,7 @@ extension UxJourney on LocalJourney {
     final mediaRoot = _uxMediaRoot;
     final baseTotal = _state.total;
     await _step('ux-media-kinds-scan', () async {
-      await _tapKey('sidebar-settings');
+      await _tapKey(baseTotal == 0 ? 'open-settings' : 'sidebar-settings');
       await _waitForElement(
         'settings-close',
         reason: 'settings did not open for the media source',
@@ -1646,6 +1657,7 @@ extension UxJourney on LocalJourney {
             state.position > Duration.zero;
       }, reason: 'video playback never advanced past the first frame');
       final position = _uxVideoState('viewer-video')!.position;
+      final firstFrame = _uxVideoState('viewer-video')!.firstFrameReady;
       await _key('space');
       await _uxWaitVideoPlaying(
         'viewer-video',
@@ -1664,6 +1676,7 @@ extension UxJourney on LocalJourney {
         'duration_ms': clip.durationMs,
         'duration_label': durationLabel,
         'position_ms': position.inMilliseconds,
+        'first_frame_ready': firstFrame,
         'playing': true,
         'paused': true,
         'resumed': true,
@@ -1736,7 +1749,10 @@ extension UxJourney on LocalJourney {
       await _uxWaitGone('settings-close', 'the settings did not close');
       final motion = await _uxWaitMediaPhoto('motion.jpg');
       await _tapKey('photo-${motion.id}');
-      await _waitForElement('viewer', reason: 'the motion photo did not reopen');
+      await _waitForElement(
+        'viewer',
+        reason: 'the motion photo did not reopen',
+      );
       await _waitForElement(
         'viewer-motion-video',
         reason: 'the motion clip did not start on its own',
@@ -1822,6 +1838,23 @@ extension UxJourney on LocalJourney {
       if (decoded.isEmpty) {
         throw JourneyFailure('the animated GIF was not decoded into frames');
       }
+      AnimatedImageStageState? animation() {
+        final element = _elementOfWidget<AnimatedImageStage>();
+        return element is StatefulElement
+            ? element.state as AnimatedImageStageState
+            : null;
+      }
+
+      await _uxWaitUntil(
+        () => animation()?.firstFrameReady == true,
+        reason: 'GIF first frame never became paintable',
+      );
+      final firstIndex = animation()!.frameIndex;
+      await _uxWaitUntil(
+        () => animation()?.frameIndex != firstIndex,
+        reason: 'GIF playback never advanced',
+      );
+      _uxRecord('gif_playback', true);
       _uxRecord('gif_frames', decoded.length);
       await _tapKey('viewer-close');
       await _uxWaitGone('viewer', 'the GIF viewer did not close');

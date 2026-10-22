@@ -106,7 +106,10 @@ class PresentationController extends Notifier<PresentationPreferences> {
         reduceMotion: data['reduceMotion'] as bool? ?? false,
         autoPlayMotionPhoto: data['autoPlayMotionPhoto'] as bool? ?? false,
         dayColumns: ((data['dayColumns'] as int?) ?? 5).clamp(3, 8),
-        thumbnailWorkers: ((data['thumbnailWorkers'] as int?) ?? 2).clamp(1, 4),
+        thumbnailWorkers: ((data['thumbnailWorkers'] as int?) ?? 2).clamp(
+          1,
+          32,
+        ),
         logLevel: data['logLevel'] as String? ?? 'info',
         order: data['order'] as String? ?? 'date_desc',
       );

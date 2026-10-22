@@ -5,3 +5,5 @@ pub mod cloud;
 pub mod edit;
 pub mod local_library;
 pub mod media;
+
+pub mod thumbnail_loader;

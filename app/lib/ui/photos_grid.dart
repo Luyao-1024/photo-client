@@ -1,10 +1,12 @@
+import 'thumbnail_image.dart';
+import '../services/thumbnail_pipeline.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/local_library_gateway.dart';
 import 'glass_dialog.dart';
 import 'glass_theme.dart';
-import 'local_photo_image.dart';
 import 'strings.dart';
 
 /// Year/Month/Day grouping of the Photos grid. See
@@ -144,35 +146,53 @@ class _PhotoTileState extends State<PhotoTile> {
   late final FocusNode _focusNode = FocusNode(onKeyEvent: _onKeyEvent);
 
   /// One in-flight request per bounded cache class, reused across rebuilds.
-  final Map<int, Future<String>> _requests = {};
+  final Map<int, ThumbnailHandle> _requests = {};
   String? _identity;
+  final _automaticRepairs = <int>{};
   bool _hovered = false;
   bool _focused = false;
 
   @override
   void dispose() {
+    for (final request in _requests.values) {
+      request.release();
+    }
     _focusNode.dispose();
     super.dispose();
   }
 
   String get _photoIdentity =>
-      '${widget.photo.id}:${widget.photo.contentVersion}';
+      '${identityHashCode(widget.gateway)}:${widget.photo.id}:${widget.photo.contentVersion}:${ThumbnailPool.forGateway(widget.gateway).epoch.value}';
 
-  Future<String> _thumbnail(int sizeClass) {
+  ThumbnailHandle _thumbnail(int sizeClass) {
     final identity = _photoIdentity;
     if (_identity != identity) {
       _identity = identity;
+      for (final request in _requests.values) {
+        request.release();
+      }
       _requests.clear();
+      _automaticRepairs.clear();
     }
     return _requests.putIfAbsent(
       sizeClass,
-      () => widget.gateway.thumbnail(widget.photo.id, sizeClass: sizeClass),
+      () =>
+          ThumbnailPool.forGateway(widget.gateway)
+              .acquire(widget.photo, sizeClass),
     );
   }
 
-  void _retry(int sizeClass) {
-    if (!mounted) return;
-    setState(() => _requests.remove(sizeClass));
+  Future<void> _retry(int sizeClass) async {
+    final request = _requests.remove(sizeClass);
+    if (request != null) {
+      try {
+        await request.invalidate();
+      } catch (_) {
+        /* Native errors remain retryable. */
+      }
+      request.release();
+    }
+    if (mounted) setState(() {});
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
@@ -330,7 +350,12 @@ class _PhotoTileState extends State<PhotoTile> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: ThumbnailPool.forGateway(widget.gateway).epoch,
+    builder: (context, _) => _build(context),
+  );
+
+  Widget _build(BuildContext context) {
     final strings = AppStrings.of(context);
     final scheme = Theme.of(context).colorScheme;
     final veil = widget.selected
@@ -507,31 +532,59 @@ class _PhotoTileState extends State<PhotoTile> {
       builder: (context, constraints) {
         final pixels =
             constraints.maxWidth * MediaQuery.devicePixelRatioOf(context);
-        final sizeClass = thumbnailSizeClassFor(pixels);
-        final target = pixels.ceil().clamp(64, 1024);
+        final sizeClass = thumbnailSizeClassForCover(pixels, widget.photo);
+        final target = thumbnailDecodeWidth(pixels);
         return FutureBuilder<String>(
-          future: _thumbnail(sizeClass),
+          key: ValueKey('thumbnail-$_photoIdentity-$sizeClass'),
+          future: _thumbnail(sizeClass).future,
+          initialData: _thumbnail(sizeClass).path,
           builder: (context, result) {
             if (result.hasError) return _failure(strings, sizeClass);
             if (!result.hasData) {
-              return const Center(child: Icon(Icons.photo_outlined));
+              return FutureBuilder<String?>(
+                future: _thumbnail(sizeClass).placeholder,
+                builder: (context, preview) => preview.data == null
+                    ? const Center(child: Icon(Icons.photo_outlined))
+                    : Image(
+                        image: ThumbnailImage.file(
+                          preview.data!,
+                          widget.photo,
+                          use: ThumbnailUse.embedded,
+                        ),
+                        fit: BoxFit.cover,
+                        excludeFromSemantics: true,
+                        errorBuilder: (_, _, _) =>
+                            const Center(child: Icon(Icons.photo_outlined)),
+                      ),
+              );
             }
             return Image(
-              image: ResizeImage.resizeIfNeeded(
-                target,
-                null,
-                LocalPhotoImage(result.data!, widget.photo),
+              image: ThumbnailImage.file(
+                result.data!,
+                widget.photo,
+                width: target,
               ),
               fit: BoxFit.cover,
               excludeFromSemantics: true,
               errorBuilder: (context, error, stack) =>
-                  _failure(strings, sizeClass),
+                  _decodeFailure(strings, sizeClass),
             );
           },
         );
       },
     ),
   );
+
+  Widget _decodeFailure(AppStrings strings, int sizeClass) {
+    if (_automaticRepairs.add(sizeClass)) {
+      final identity = _photoIdentity;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identity == _photoIdentity) _retry(sizeClass);
+      });
+      return const Center(child: Icon(Icons.photo_outlined));
+    }
+    return _failure(strings, sizeClass);
+  }
 
   Widget _failure(AppStrings strings, int sizeClass) => Center(
     child: IconButton(

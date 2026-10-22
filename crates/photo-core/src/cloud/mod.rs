@@ -55,6 +55,11 @@ pub struct CloudQueueResult {
 #[derive(Clone)]
 pub struct CloudEngine {
     library: LocalLibrary,
+    observer: Option<std::sync::Arc<ChangeObserver>>,
+}
+struct ChangeObserver {
+    callback: Box<dyn Fn() + Send + Sync>,
+    last: std::sync::Mutex<std::time::Instant>,
 }
 
 fn now_ms() -> i64 {
@@ -111,7 +116,37 @@ pub(super) fn token_path(root: &Path, account_id: &str) -> Result<PathBuf, Strin
 
 impl CloudEngine {
     pub fn new(library: LocalLibrary) -> Self {
-        Self { library }
+        Self {
+            library,
+            observer: None,
+        }
+    }
+
+    pub fn with_change_observer(mut self, callback: impl Fn() + Send + Sync + 'static) -> Self {
+        self.observer = Some(std::sync::Arc::new(ChangeObserver {
+            callback: Box::new(callback),
+            last: std::sync::Mutex::new(
+                std::time::Instant::now() - std::time::Duration::from_secs(1),
+            ),
+        }));
+        self
+    }
+    fn admitted(&self, force: bool) {
+        let Some(observer) = &self.observer else {
+            return;
+        };
+        let notify = {
+            let mut last = observer.last.lock().unwrap();
+            if force || last.elapsed() >= std::time::Duration::from_millis(300) {
+                *last = std::time::Instant::now();
+                true
+            } else {
+                false
+            }
+        };
+        if notify {
+            (observer.callback)();
+        }
     }
 
     pub fn status(&self) -> Result<CloudStatus, String> {

@@ -11,6 +11,7 @@ import 'package:photo_client/ui/glass_theme.dart';
 import 'package:photo_client/ui/library_backdrop.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
 import 'package:photo_client/ui/local_photo_image.dart';
+import 'package:photo_client/ui/thumbnail_image.dart';
 import 'package:photo_client/ui/photo_theme.dart';
 import 'package:photo_client/ui/runtime_controller.dart';
 import 'package:photo_client/ui/presentation_preferences.dart';
@@ -83,8 +84,10 @@ void main() {
     );
   }
 
+  ImageProvider? unwrap(ImageProvider? provider) =>
+      provider is ThumbnailImage ? provider.provider : provider;
   ImageProvider? displayed(WidgetTester tester) =>
-      tester.widget<GlassBackdrop>(find.byType(GlassBackdrop)).image;
+      unwrap(tester.widget<GlassBackdrop>(find.byType(GlassBackdrop)).image);
   String? displayedId(WidgetTester tester) {
     final image = displayed(tester) as ResizeImage?;
     return image?.imageProvider is LocalPhotoImage

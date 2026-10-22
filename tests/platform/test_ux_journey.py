@@ -281,3 +281,20 @@ class RunGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ScopedMediaTests(unittest.TestCase):
+    def test_scoped_cli_does_not_select_the_full_matrix(self):
+        from unittest.mock import patch
+        with patch.object(ux_journey, "run", return_value=0) as run:
+            result = ux_journey.main(["run", "--evidence-dir", "/tmp/media-evidence", "--mode", "release", "--skip-build", "--scope", "media"])
+        self.assertEqual(result, 0)
+        run.assert_called_once_with(Path("/tmp/media-evidence"), mode="release", skip_build=True, scope="media")
+
+    def test_scoped_media_requires_paintable_video_and_gif_playback_evidence(self):
+        from unittest.mock import patch
+        record = {"facts": {"ux": {"video_playback": {"playing": True}, "gif_animated": True}}}
+        with patch.object(ux_journey, "_verify_media_kind_effects"):
+            checks, _ = ux_journey.verify_media_effects(record, {}, {})
+        self.assertEqual(set(checks), {"UX-11"})
+        self.assertEqual(checks["UX-11"]["status"], "FAIL")
+        self.assertIn("first frame", checks["UX-11"]["reason"])

@@ -60,8 +60,7 @@ pub(super) fn probe(path: &Path) -> Result<Value, String> {
     .arg(path);
     serde_json::from_slice(&output(cmd)?).map_err(|_| "VideoMetadataFailed".into())
 }
-pub(super) fn video_header(path: &Path) -> Result<super::headers::Header, String> {
-    let value = probe(path)?;
+pub(super) fn video_header(value: &Value) -> Result<super::headers::Header, String> {
     let stream = value["streams"].get(0).ok_or("VideoMetadataFailed")?;
     let w = stream["width"].as_u64().ok_or("VideoMetadataFailed")? as u32;
     let h = stream["height"].as_u64().ok_or("VideoMetadataFailed")? as u32;

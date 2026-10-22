@@ -653,3 +653,62 @@ fn png_exif_after_pixel_chunks_is_found_without_decoding_them_during_scan() {
     let image = image::open(destination).unwrap();
     assert_eq!((image.width(), image.height()), (20, 40));
 }
+
+#[test]
+fn embedded_thumbnail_is_bounded_oriented_and_optional() {
+    let temp = TempDir::new().unwrap();
+    let thumb = image_bytes(ImageFormat::Jpeg, 96, 64);
+    let mut tiff = b"II\x2a\0\x08\0\0\0".to_vec();
+    tiff.extend_from_slice(&1_u16.to_le_bytes());
+    tiff.extend(ifd_entry(0x0112, 3, 1, [6, 0, 0, 0]));
+    tiff.extend_from_slice(&26_u32.to_le_bytes());
+    tiff.extend_from_slice(&2_u16.to_le_bytes());
+    tiff.extend(ifd_entry(0x0201, 4, 1, 56_u32.to_le_bytes()));
+    tiff.extend(ifd_entry(0x0202, 4, 1, (thumb.len() as u32).to_le_bytes()));
+    tiff.extend_from_slice(&0_u32.to_le_bytes());
+    tiff.extend(&thumb);
+    let mut payload = b"Exif\0\0".to_vec();
+    payload.extend(tiff);
+    let outer = image_bytes(ImageFormat::Jpeg, 192, 128);
+    let mut jpeg = vec![0xff, 0xd8, 0xff, 0xe1];
+    jpeg.extend_from_slice(&((payload.len() + 2) as u16).to_be_bytes());
+    jpeg.extend(payload);
+    jpeg.extend(&outer[2..]);
+    let source = temp.path().join("embedded.jpg");
+    fs::write(&source, &jpeg).unwrap();
+    let row = one(&source);
+    let destination = temp.path().join("cache/embedded.jpg");
+    assert!(
+        photo_core::media::prepare_embedded_thumbnail(
+            &source,
+            row.size_bytes,
+            row.modified_ns,
+            &destination
+        )
+        .unwrap()
+    );
+    assert_eq!(image::image_dimensions(&destination).unwrap(), (64, 96));
+    assert_eq!(fs::read(&source).unwrap(), jpeg);
+    let plain = temp.path().join("plain.jpg");
+    fs::write(&plain, outer).unwrap();
+    let plain_row = one(&plain);
+    assert!(
+        !photo_core::media::prepare_embedded_thumbnail(
+            &plain,
+            plain_row.size_bytes,
+            plain_row.modified_ns,
+            &temp.path().join("none.jpg")
+        )
+        .unwrap()
+    );
+    assert!(!temp.path().join("none.jpg").exists());
+    assert!(
+        photo_core::media::prepare_embedded_thumbnail(
+            &source,
+            row.size_bytes + 1,
+            row.modified_ns,
+            &destination
+        )
+        .is_err()
+    );
+}

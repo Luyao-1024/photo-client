@@ -472,3 +472,87 @@ async fn persisted_cloud_scope_mismatch_stops_before_replaying_metadata() {
             .is_favorite
     );
 }
+
+#[tokio::test]
+#[ignore = "requires a built real SyncServer; isolated cache-only upload check"]
+async fn upload_without_a_thumbnail_defers_then_resumes_from_local_cache() {
+    let fixture = Fixture::uploaded().await;
+    let folder = std::path::Path::new(&fixture.file).parent().unwrap();
+    let file = folder.join("uncached.jpg");
+    image::RgbImage::from_pixel(64, 48, image::Rgb([30, 80, 140]))
+        .save(&file)
+        .unwrap();
+    let media = photo_core::media::inspect_file(&file).unwrap();
+    let source = fixture.library.add_source(folder).unwrap();
+    fixture
+        .library
+        .upsert_batch(
+            source,
+            vec![photo_core::local_library::MediaInput {
+                path: file.to_string_lossy().into(),
+                name: media.display_name,
+                parent: media.parent_path.to_string_lossy().into(),
+                size_bytes: media.size_bytes,
+                modified_ns: media.modified_ns,
+                mime_type: media.mime_type,
+                width: media.width,
+                height: media.height,
+                orientation: media.orientation,
+                capture_time_ms: media.capture_time_ms,
+            }],
+        )
+        .unwrap();
+    let photo = fixture
+        .library
+        .query_window(
+            PhotoFilter {
+                search: "uncached".into(),
+                ..PhotoFilter::default()
+            },
+            0,
+            1,
+        )
+        .unwrap()
+        .items
+        .remove(0);
+    assert_eq!(
+        fixture
+            .engine
+            .queue_upload(vec![photo.id.clone()])
+            .unwrap()
+            .queued,
+        1
+    );
+    let report = fixture.engine.sync_now().await.unwrap();
+    successful(&report);
+    assert_eq!(report.uploaded, 0);
+    assert_eq!(fixture.engine.status().unwrap().pending_uploads, 1);
+    let state: (String, u32, Option<String>) = fixture
+        .db
+        .query_row(
+            "SELECT state,attempt,error_code FROM cloud_uploads WHERE media_id=?1",
+            [&photo.id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(state, ("pending".into(), 0, None));
+    assert!(!fixture.library.root.join("cache").join(&photo.id).exists());
+    let loader = photo_core::thumbnail_loader::ThumbnailLoader::new(fixture.library.clone(), 1);
+    loader
+        .request(
+            photo.id.clone(),
+            Some(photo.content_version),
+            512,
+            "after-defer".into(),
+            0,
+        )
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+    loader.close();
+    let report = fixture.engine.sync_now().await.unwrap();
+    successful(&report);
+    assert_eq!(report.uploaded, 1);
+    assert_eq!(fixture.engine.status().unwrap().pending_uploads, 0);
+}

@@ -1,3 +1,5 @@
+import '../services/thumbnail_pipeline.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -401,7 +403,13 @@ class _AlbumSidebarRow extends ConsumerStatefulWidget {
 }
 
 class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
-  Future<String>? _cover;
+  MediaThumbnailHandle? _cover;
+  @override
+  void dispose() {
+    _cover?.release();
+    super.dispose();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -417,8 +425,9 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
   void _load() {
     final id = widget.album.coverMediaId;
     final gateway = ref.read(coreGatewayProvider);
+    _cover?.release();
     _cover = id != null && gateway is LocalLibraryGateway
-        ? (gateway as LocalLibraryGateway).thumbnail(id, sizeClass: 256)
+        ? MediaThumbnailHandle(gateway as LocalLibraryGateway, id, 256)
         : null;
   }
 
@@ -545,7 +554,8 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
                     width: 32,
                     height: 32,
                     child: FutureBuilder<String>(
-                      future: _cover,
+                      future: _cover?.future,
+                      initialData: _cover?.path,
                       builder: (context, snapshot) => snapshot.hasData
                           ? Image(
                               image: FileImage(File(snapshot.data!)),

@@ -21,42 +21,63 @@ pub struct MediaDetails {
 }
 pub fn read(path: &Path) -> MediaDetails {
     let mime = super::mime_from_extension(path).unwrap_or("");
+    if mime.starts_with("video/") {
+        return super::external::probe(path)
+            .map(|value| from_video_probe(&value))
+            .unwrap_or_default();
+    }
+    let mut head = Vec::new();
+    let mut size = 0;
+    if let Ok(file) = File::open(path) {
+        size = file.metadata().map(|m| m.len()).unwrap_or(0);
+        let _ = file.take(256 * 1024).read_to_end(&mut head);
+    }
+    read_with_head(path, &head, size)
+}
+pub(super) fn from_video_probe(value: &serde_json::Value) -> MediaDetails {
+    MediaDetails {
+        duration_ms: value["format"]["duration"]
+            .as_str()
+            .and_then(|s| s.parse::<f64>().ok())
+            .map(|v| (v * 1000.) as i64),
+        ..MediaDetails::default()
+    }
+}
+pub(super) fn read_with_head(path: &Path, head: &[u8], file_len: u64) -> MediaDetails {
+    let mime = super::mime_from_extension(path).unwrap_or("");
     let mut details = MediaDetails {
         animated: mime == "image/gif",
-        ..Default::default()
+        ..MediaDetails::default()
     };
-    if mime.starts_with("video/") {
-        if let Ok(value) = super::external::probe(path) {
-            details.duration_ms = value["format"]["duration"]
-                .as_str()
-                .and_then(|s| s.parse::<f64>().ok())
-                .map(|v| (v * 1000.) as i64);
-        }
-        return details;
-    }
-    if let Ok(file) = File::open(path) {
-        let mut head = Vec::new();
-        if file.take(256 * 1024).read_to_end(&mut head).is_ok() {
-            details.hdr = [
-                b"hdrgm:Version".as_slice(),
-                b"HDRGainMap".as_slice(),
-                b"hdr_capacity_max".as_slice(),
-            ]
-            .iter()
-            .any(|marker| head.windows(marker.len()).any(|w| w == *marker));
-            details.animated |= (mime == "image/webp"
-                && head.get(12..16) == Some(b"VP8X")
-                && head.get(20).is_some_and(|b| b & 2 != 0))
-                || (mime == "image/png" && head.windows(4).any(|w| w == b"acTL"));
-        }
-    }
+    details.hdr = [
+        b"hdrgm:Version".as_slice(),
+        b"HDRGainMap".as_slice(),
+        b"hdr_capacity_max".as_slice(),
+    ]
+    .iter()
+    .any(|marker| head.windows(marker.len()).any(|w| w == *marker));
+    details.animated |= (mime == "image/webp"
+        && head.get(12..16) == Some(b"VP8X")
+        && head.get(20).is_some_and(|b| b & 2 != 0))
+        || (mime == "image/png" && head.windows(4).any(|w| w == b"acTL"));
     let exif = if mime == "image/heic" {
         super::heif::exif(path).and_then(|raw| exif::Reader::new().read_raw(raw).ok())
     } else {
-        File::open(path).ok().and_then(|file| {
-            exif::Reader::new()
-                .read_from_container(&mut BufReader::new(file))
-                .ok()
+        let from_head = exif::Reader::new()
+            .read_from_container(&mut std::io::Cursor::new(head))
+            .ok();
+        // PNG/WebP can carry EXIF after compressed pixels. Preserve that rare
+        // slow path without rereading ordinary JPEG sources during scans.
+        from_head.or_else(|| {
+            if file_len > head.len() as u64 && matches!(mime, "image/png" | "image/webp") {
+                File::open(path).ok().and_then(|file| {
+                    exif::Reader::new()
+                        .read_from_container(&mut BufReader::new(file))
+                        .ok()
+                })
+            } else {
+                None
+            }
         })
     };
     if let Some(exif) = exif {
@@ -77,6 +98,7 @@ pub fn read(path: &Path) -> MediaDetails {
         details.iso = text(Tag::PhotographicSensitivity);
         details.focal_length = text(Tag::FocalLength);
     }
-    details.motion_offset = super::motion_photo::detect(path).map(|info| info.video_offset as i64);
+    details.motion_offset = super::motion_photo::detect_with_head(path, head, file_len)
+        .map(|info| info.video_offset as i64);
     details
 }

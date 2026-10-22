@@ -26,10 +26,8 @@ impl CloudEngine {
         let state = store(self.library.cloud_sync_state(account_id.clone()))?.unwrap_or_default();
         let applied_token = state.sync_token.ok_or("NotCurrent")?;
         let pending = store(self.library.cloud_pending_uploads(account_id.clone()))?;
-        let dirty: Vec<CloudBinding> = store(self.library.cloud_bindings(account_id.clone()))?
-            .into_iter()
-            .filter(|binding| binding.dirty == 2)
-            .collect();
+        let dirty: Vec<CloudBinding> =
+            store(self.library.cloud_dirty_bindings(account_id.clone()))?;
         if pending.is_empty() && dirty.is_empty() {
             return Ok(());
         }
@@ -79,7 +77,23 @@ impl CloudEngine {
                 .ok_or("Protocol")?;
         }
         if phase == sdk::UploadPhase::Modify {
-            self.upload_metadata(session, lease, dirty, report).await?;
+            for batch in dirty.chunks(20) {
+                let before = report.favorites_uploaded;
+                let failed = report.failed;
+                self.upload_metadata(session, lease, batch, report).await?;
+                eprintln!(
+                    "cloud_uplink_batch kind=metadata items={} uploaded={} failed={} status={}",
+                    batch.len(),
+                    report.favorites_uploaded - before,
+                    report.failed - failed,
+                    if report.failed == failed {
+                        "complete"
+                    } else {
+                        "partial"
+                    }
+                );
+                tokio::task::yield_now().await;
+            }
             if !lease.is_held() {
                 return Err("LeaseLost".into());
             }
@@ -89,7 +103,27 @@ impl CloudEngine {
                 .map_err(|error| sdk_code(&error))?;
         }
         if lease.phase() == Some(sdk::UploadPhase::Create) {
-            self.upload_photos(session, lease, pending, report).await?;
+            for batch in pending.chunks(5) {
+                let before = report.uploaded;
+                let failed = report.failed;
+                let skipped = report.skipped;
+                self.upload_photos(session, lease, batch, report).await?;
+                eprintln!(
+                    "cloud_uplink_batch kind=photos items={} uploaded={} failed={} deferred_or_skipped={} status={}",
+                    batch.len(),
+                    report.uploaded - before,
+                    report.failed - failed,
+                    report.skipped - skipped,
+                    if report.failed > failed {
+                        "partial"
+                    } else if report.skipped > skipped {
+                        "deferred"
+                    } else {
+                        "complete"
+                    }
+                );
+                tokio::task::yield_now().await;
+            }
         }
         Ok(())
     }
@@ -305,13 +339,12 @@ impl CloudEngine {
                 super::note_failure(report, "SourceChanged");
                 continue;
             }
-            store(self.library.cloud_mark_upload_publishing(
-                account_id.clone(),
-                upload.media_id.clone(),
-                upload.content_generation.clone(),
-            ))?;
-            let staging = match self.prepare_thumbnail(&account_id, upload, &photo).await {
+            let staging = match self.prepare_thumbnail(&account_id, &photo).await {
                 Ok(path) => Staging(path),
+                Err(code) if code == "ThumbnailDeferred" => {
+                    report.skipped += 1;
+                    continue;
+                }
                 Err(code) => {
                     let state = if code == "Internal" {
                         "pending"
@@ -332,8 +365,13 @@ impl CloudEngine {
                     continue;
                 }
             };
-            // The preview is generated from the same bytes that are about to
-            // be uploaded; a change in between invalidates the whole intent.
+            store(self.library.cloud_mark_upload_publishing(
+                account_id.clone(),
+                upload.media_id.clone(),
+                upload.content_generation.clone(),
+            ))?;
+            // Reuse a versioned local cache. Source changes still invalidate
+            // the upload intent before any assets are sent.
             let metadata = match fs::symlink_metadata(&photo.path) {
                 Ok(metadata) => metadata,
                 Err(_) => {
@@ -443,59 +481,50 @@ impl CloudEngine {
     async fn prepare_thumbnail(
         &self,
         account_id: &str,
-        upload: &CloudUpload,
         photo: &crate::local_library::LocalPhoto,
     ) -> Result<PathBuf, String> {
-        let directory = self
-            .library
-            .root
-            .join("cloud")
-            .join(account_id)
-            .join("staging");
-        paths::private_directory(&directory)?;
-        let destination = directory.join(format!("{}.jpg", Uuid::new_v4()));
-        let source = PathBuf::from(&photo.path);
-        for max_edge in [2048_u32, 1600, 1200, 800] {
-            let attempt = directory.join(format!("{}.{max_edge}.jpg", Uuid::new_v4()));
-            let source = source.clone();
-            let expected_size = upload.size_bytes;
-            let expected_ns = upload.modified_ns;
-            let target = attempt.clone();
-            let generated = tokio::task::spawn_blocking(move || {
-                crate::media::prepare_preview(
+        let library = self.library.clone();
+        let photo = photo.clone();
+        let account = account_id.to_owned();
+        tokio::task::spawn_blocking(move || -> Result<PathBuf, String> {
+            let source = crate::thumbnail_loader::cached_upload_source(&library, &photo)
+                .ok_or("ThumbnailDeferred")?;
+            let directory = library.root.join("cloud").join(account).join("staging");
+            paths::private_directory(&directory)?;
+            let destination = directory.join(format!("{}.jpg", Uuid::new_v4()));
+            let result = (|| -> Result<(), String> {
+                let metadata = fs::metadata(&source).map_err(|_| "Internal")?;
+                if metadata.len() <= THUMBNAIL_LIMIT {
+                    fs::copy(&source, &destination).map_err(|_| "Internal")?;
+                    return Ok(());
+                }
+                let modified_ns = metadata
+                    .modified()
+                    .map_err(|_| "Internal")?
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|_| "Internal")?
+                    .as_nanos() as i64;
+                crate::media::prepare_thumbnail(
                     &source,
-                    expected_size,
-                    expected_ns,
-                    max_edge,
-                    &target,
+                    metadata.len(),
+                    modified_ns,
+                    512,
+                    &destination,
                 )
-            })
-            .await
-            .map_err(|_| "Internal")?;
-            match generated {
-                Ok(()) => {
-                    let size = fs::metadata(&attempt).map(|m| m.len()).unwrap_or(u64::MAX);
-                    if size <= THUMBNAIL_LIMIT {
-                        fs::rename(&attempt, &destination).map_err(|_| "Internal")?;
-                        return Ok(destination);
-                    }
-                    let _ = fs::remove_file(&attempt);
+                .map_err(|_| "ThumbnailFailed")?;
+                if fs::metadata(&destination).map_err(|_| "Internal")?.len() > THUMBNAIL_LIMIT {
+                    return Err("ThumbnailTooLarge".into());
                 }
-                Err(error) => {
-                    let _ = fs::remove_file(&attempt);
-                    return Err(if error.starts_with("SourceChanged") {
-                        "SourceChanged".into()
-                    } else if error.starts_with("UnsupportedSource")
-                        || error.starts_with("UnsupportedMedia")
-                    {
-                        "UnsupportedMedia".into()
-                    } else {
-                        "ThumbnailFailed".into()
-                    });
-                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                let _ = fs::remove_file(&destination);
+                return Err(error);
             }
-        }
-        Err("ThumbnailTooLarge".into())
+            Ok(destination)
+        })
+        .await
+        .map_err(|_| "Internal".to_owned())?
     }
 
     async fn fail_upload(
@@ -578,5 +607,93 @@ impl CloudEngine {
         ))?;
         report.uploaded += 1;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod thumbnail_tests {
+    use super::*;
+    use crate::local_library::{LocalLibrary, MediaInput, PhotoFilter};
+    use crate::thumbnail_loader::ThumbnailLoader;
+    use tempfile::TempDir;
+    fn fixture() -> (
+        TempDir,
+        TempDir,
+        CloudEngine,
+        crate::local_library::LocalPhoto,
+    ) {
+        let root = TempDir::new().unwrap();
+        let source_root = TempDir::new().unwrap();
+        let source = source_root.path().join("source.jpg");
+        image::RgbImage::from_pixel(64, 48, image::Rgb([10, 100, 200]))
+            .save(&source)
+            .unwrap();
+        let media = crate::media::inspect_file(&source).unwrap();
+        let library = LocalLibrary::open(root.path()).unwrap();
+        let id = library.add_source(source_root.path()).unwrap();
+        library
+            .upsert_batch(
+                id,
+                vec![MediaInput {
+                    path: source.to_string_lossy().into(),
+                    name: media.display_name,
+                    parent: media.parent_path.to_string_lossy().into(),
+                    size_bytes: media.size_bytes,
+                    modified_ns: media.modified_ns,
+                    mime_type: media.mime_type,
+                    width: media.width,
+                    height: media.height,
+                    orientation: media.orientation,
+                    capture_time_ms: media.capture_time_ms,
+                }],
+            )
+            .unwrap();
+        let photo = library
+            .query_window(PhotoFilter::default(), 0, 1)
+            .unwrap()
+            .items
+            .remove(0);
+        (root, source_root, CloudEngine::new(library), photo)
+    }
+    #[tokio::test]
+    async fn missing_cache_defers_without_decoding_or_creating_staging() {
+        let (root, _sources, engine, photo) = fixture();
+        let bytes = fs::read(&photo.path).unwrap();
+        assert_eq!(
+            engine
+                .prepare_thumbnail("test-account", &photo)
+                .await
+                .unwrap_err(),
+            "ThumbnailDeferred"
+        );
+        assert!(!root.path().join("cache").exists());
+        assert!(!root.path().join("cloud").exists());
+        assert_eq!(fs::read(&photo.path).unwrap(), bytes);
+    }
+    #[tokio::test]
+    async fn cached_upload_reuses_bytes_without_accessing_the_original() {
+        let (_root, _sources, engine, photo) = fixture();
+        let loader = ThumbnailLoader::new(engine.library.clone(), 1);
+        let path = loader
+            .request(
+                photo.id.clone(),
+                Some(photo.content_version),
+                512,
+                "fixture".into(),
+                0,
+            )
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap();
+        loader.close();
+        let expected = fs::read(&path).unwrap();
+        fs::remove_file(&photo.path).unwrap();
+        let staged = engine
+            .prepare_thumbnail("test-account", &photo)
+            .await
+            .unwrap();
+        assert_eq!(fs::read(&staged).unwrap(), expected);
+        assert!(Path::new(&path).is_file());
     }
 }

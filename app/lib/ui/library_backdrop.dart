@@ -1,3 +1,6 @@
+import 'thumbnail_image.dart';
+import '../services/thumbnail_pipeline.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -8,7 +11,6 @@ import '../services/local_library_gateway.dart';
 import 'backdrop_viewport.dart';
 import 'glass_theme.dart';
 import 'local_library_controller.dart';
-import 'local_photo_image.dart';
 import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 
@@ -30,6 +32,14 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
   int _request = 0;
   ImageProvider? _image;
   BackdropViewport? _focus;
+  ThumbnailHandle? _thumbnail;
+  MediaThumbnailHandle? _coverThumbnail;
+  @override
+  void dispose() {
+    _thumbnail?.release();
+    _coverThumbnail?.release();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +51,10 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
     if (_epoch != library.queryEpoch || gatewayChanged) {
       _epoch = library.queryEpoch;
       _gateway = gateway;
+      _thumbnail?.release();
+      _thumbnail = null;
+      _coverThumbnail?.release();
+      _coverThumbnail = null;
       _cover = null;
       _coverId = null;
       _request++;
@@ -54,6 +68,8 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
         : null;
     if (_focus != focus) {
       _focus = focus;
+      _thumbnail?.release();
+      _thumbnail = null;
       _cover = null;
       _coverId = null;
       // Invalidate late decodes even if this target's DTO page is not here yet.
@@ -77,6 +93,8 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
     final photo = rank == null ? null : library.photoAt(rank);
     // Empty/trash destinations must not retain a previous private photo.
     if (library.trashed || (!library.loading && library.extent == 0)) {
+      _thumbnail?.release();
+      _thumbnail = null;
       _cover = null;
       _coverId = null;
       _image = null;
@@ -104,12 +122,27 @@ class _LibraryBackdropState extends ConsumerState<LibraryBackdrop> {
     int request,
   ) async {
     try {
-      final path = await gateway.thumbnail(id, sizeClass: 512);
+      _thumbnail?.release();
+      _coverThumbnail?.release();
+      _coverThumbnail = photo == null
+          ? MediaThumbnailHandle(gateway, id, 512)
+          : null;
+      _thumbnail = photo == null
+          ? null
+          : ThumbnailPool.forGateway(gateway).acquire(photo, 512, priority: 1);
+      final path = await (_thumbnail?.future ?? _coverThumbnail!.future);
       if (!mounted || request != _request) return;
-      final image = ResizeImage(
-        photo == null ? FileImage(File(path)) : LocalPhotoImage(path, photo),
-        width: 512,
-      );
+      final image = photo == null
+          ? ThumbnailImage(
+              ResizeImage(FileImage(File(path)), width: 512),
+              use: ThumbnailUse.background,
+            )
+          : ThumbnailImage.file(
+              path,
+              photo,
+              width: 512,
+              use: ThumbnailUse.background,
+            );
       var failed = false;
       // A filename alone is not a paintable frame. Decode first while retaining
       // the last complete image, then let the background dissolve into this one.

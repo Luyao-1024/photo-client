@@ -68,6 +68,12 @@ void main() {
     );
   }
 
+  Future<void> waitForPosition(WidgetTester tester, String label) async {
+    for (var i = 0; i < 10 && find.text(label).evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  }
+
   testWidgets('the current filmstrip thumbnail is centred', (tester) async {
     final gateway = await mount(tester);
     await tester.tap(find.byKey(const ValueKey('photo-p5')));
@@ -78,6 +84,8 @@ void main() {
     // Selecting a thumbnail from the strip keeps the same invariant.
     await tester.tap(find.byKey(const ValueKey('viewer-strip-p0')));
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 420));
+    await tester.pumpAndSettle();
     expect(find.text('1 / 30'), findsOneWidget);
     expectCentered(tester, 'p0');
 
@@ -85,18 +93,21 @@ void main() {
     // photo becomes current, not only after a scroll animation settles.
     await tester.tap(find.byKey(const ValueKey('viewer-next')));
     await tester.pump();
-    await tester.pump();
+    await waitForPosition(tester, '2 / 30');
     expect(find.text('2 / 30'), findsOneWidget);
     expectCentered(tester, 'p1');
 
     for (var index = 2; index <= 15; index += 1) {
       await tester.tap(find.byKey(const ValueKey('viewer-next')));
       await tester.pumpAndSettle();
+      await waitForPosition(tester, '${index + 1} / 30');
       expect(find.text('${index + 1} / 30'), findsOneWidget);
     }
     expectCentered(tester, 'p15');
 
     await tester.tap(find.byKey(const ValueKey('viewer-strip-p18')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 420));
     await tester.pumpAndSettle();
     expect(find.text('19 / 30'), findsOneWidget);
     expectCentered(tester, 'p18');
@@ -104,6 +115,7 @@ void main() {
     for (var index = 19; index <= 29; index += 1) {
       await tester.tap(find.byKey(const ValueKey('viewer-next')));
       await tester.pumpAndSettle();
+      await waitForPosition(tester, '${index + 1} / 30');
       expect(find.text('${index + 1} / 30'), findsOneWidget);
     }
     // The last photo must centre too, with trailing space instead of a clamp.

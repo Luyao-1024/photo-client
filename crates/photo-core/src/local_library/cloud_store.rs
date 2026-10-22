@@ -297,10 +297,7 @@ impl LocalLibrary {
         })
     }
 
-    pub(crate) fn cloud_clear_records_and_token(
-        &self,
-        account_id: String,
-    ) -> Result<(), String> {
+    pub(crate) fn cloud_clear_records_and_token(&self, account_id: String) -> Result<(), String> {
         self.execute(move |c| {
             let tx = c.transaction().map_err(error)?;
             tx.execute("DELETE FROM cloud_records WHERE account_id=?1", [&account_id])
@@ -321,8 +318,11 @@ impl LocalLibrary {
     ) -> Result<(), String> {
         self.execute(move |c| {
             let tx = c.transaction().map_err(error)?;
-            tx.execute("DELETE FROM cloud_records WHERE account_id=?1", [&account_id])
-                .map_err(error)?;
+            tx.execute(
+                "DELETE FROM cloud_records WHERE account_id=?1",
+                [&account_id],
+            )
+            .map_err(error)?;
             insert_records(&tx, &account_id, records)?;
             tx.commit().map_err(error)
         })
@@ -364,10 +364,7 @@ impl LocalLibrary {
         })
     }
 
-    pub(crate) fn cloud_bindings(
-        &self,
-        account_id: String,
-    ) -> Result<Vec<CloudBinding>, String> {
+    pub(crate) fn cloud_bindings(&self, account_id: String) -> Result<Vec<CloudBinding>, String> {
         self.execute(move |c| {
             let mut statement = c
                 .prepare(&format!(
@@ -379,6 +376,16 @@ impl LocalLibrary {
                 .map_err(error)?
                 .collect::<rusqlite::Result<Vec<_>>>()
                 .map_err(error)
+        })
+    }
+
+    pub(crate) fn cloud_dirty_bindings(
+        &self,
+        account_id: String,
+    ) -> Result<Vec<CloudBinding>, String> {
+        self.execute(move |c|{
+            let mut statement=c.prepare(&format!("SELECT {BINDING_COLUMNS} FROM cloud_bindings WHERE account_id=?1 AND EXISTS(SELECT 1 FROM media_sync_state s WHERE s.library_id=cloud_bindings.library_id AND s.media_id=cloud_bindings.media_id AND s.dirty=2) ORDER BY photo_id")).map_err(error)?;
+            statement.query_map([account_id],binding_row).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)
         })
     }
 
@@ -912,10 +919,7 @@ impl LocalLibrary {
         })
     }
 
-    pub(crate) fn ensure_managed_cloud_source(
-        &self,
-        account_id: &str,
-    ) -> Result<String, String> {
+    pub(crate) fn ensure_managed_cloud_source(&self, account_id: &str) -> Result<String, String> {
         if account_id.is_empty()
             || !account_id
                 .bytes()
@@ -928,8 +932,7 @@ impl LocalLibrary {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
-                .map_err(error)?;
+            fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(error)?;
         }
         let directory = directory.canonicalize().map_err(error)?;
         let path = directory
@@ -1093,13 +1096,19 @@ mod tests {
         library
             .cloud_apply_record_changes(
                 ACCOUNT.into(),
-                vec![record("A", false, Some("{\"v\":1}")), record("B", false, Some("{\"v\":2}"))],
+                vec![
+                    record("A", false, Some("{\"v\":1}")),
+                    record("B", false, Some("{\"v\":2}")),
+                ],
             )
             .unwrap();
         library
             .cloud_apply_record_changes(
                 ACCOUNT.into(),
-                vec![record("A", true, None), record("B", false, Some("{\"v\":3}"))],
+                vec![
+                    record("A", true, None),
+                    record("B", false, Some("{\"v\":3}")),
+                ],
             )
             .unwrap();
         let records = library.cloud_records(ACCOUNT.into()).unwrap();
@@ -1207,6 +1216,101 @@ mod tests {
             )
             .unwrap();
         (root, library, media)
+    }
+
+    #[tokio::test]
+    async fn a_cached_cloud_thumbnail_displays_without_decoding_the_original() {
+        let (root, library) = open_library();
+        let folder = root.path().join("photos");
+        fs::create_dir_all(&folder).unwrap();
+        let (source, media) = seed_photo(&library, &folder, "cloud.jpg");
+        let original = library.photo(media).unwrap();
+        let thumbnail = root.path().join("cloud-preview.jpg");
+        image::RgbImage::from_pixel(32, 24, image::Rgb([20, 40, 80]))
+            .save(&thumbnail)
+            .unwrap();
+        let mut input = remote_input(
+            &source,
+            "cloud-photo",
+            "cloud.jpg",
+            Path::new(&original.path),
+            false,
+        );
+        input.thumbnail_path = Some(thumbnail.to_string_lossy().into());
+        let media = library
+            .cloud_publish_remote_media(ACCOUNT.into(), input)
+            .unwrap();
+        fs::remove_file(&original.path).unwrap();
+        let loader = crate::thumbnail_loader::ThumbnailLoader::new(library.clone(), 1);
+        let path = loader
+            .request(media, None, 256, "cloud-preview".into(), 0)
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(Path::new(&path), thumbnail);
+        assert_eq!(loader.progress().unwrap().metrics.generated, 0);
+        loader.close();
+    }
+
+    #[test]
+    fn metadata_batch_of_100_is_bounded_and_identical_replays_do_no_writes() {
+        let (root, library) = open_library();
+        let folder = root.path().join("media");
+        fs::create_dir_all(&folder).unwrap();
+        let source = library.add_source(&folder).unwrap();
+        let mut input = Vec::new();
+        for index in 0..100 {
+            let photo = format!("photo-{index}");
+            let name = format!("{index}.jpg");
+            let path = folder.join(&name);
+            fs::write(&path, b"cloud fixture").unwrap();
+            library
+                .cloud_publish_remote_media(
+                    ACCOUNT.into(),
+                    remote_input(&source, &photo, &name, &path, false),
+                )
+                .unwrap();
+            input.push((photo, true, None));
+        }
+        let started = std::time::Instant::now();
+        assert_eq!(
+            library
+                .cloud_apply_remote_metadata_batch(ACCOUNT.into(), input.clone())
+                .unwrap(),
+            100
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "100-record metadata batch took {:?}",
+            started.elapsed()
+        );
+        let counts = library_favorite_counts(&library);
+        assert_eq!(counts, (100, 100));
+        let changes = |library: &LocalLibrary| {
+            library
+                .execute(|c| {
+                    c.query_row("SELECT total_changes()", [], |r| r.get::<_, i64>(0))
+                        .map_err(error)
+                })
+                .unwrap()
+        };
+        let before = changes(&library);
+        let revision = library.info().unwrap().revision;
+        assert_eq!(
+            library
+                .cloud_apply_remote_metadata_batch(ACCOUNT.into(), input.clone())
+                .unwrap(),
+            0
+        );
+        assert_eq!(changes(&library), before);
+        assert_eq!(library.info().unwrap().revision, revision);
+        input.push(("too-many".into(), true, None));
+        assert!(
+            library
+                .cloud_apply_remote_metadata_batch(ACCOUNT.into(), input)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1359,8 +1463,15 @@ mod tests {
                 if keep_local { 2 } else { 0 }
             );
             if keep_local && local_time.is_none() {
-                let issued=library.cloud_issue_metadata(ACCOUNT.into(),metadata_photo(),syncserver_client::ZoneId::primary()).unwrap().unwrap();
-                assert_eq!(issued.mutation.event.edited_at_ms,0);
+                let issued = library
+                    .cloud_issue_metadata(
+                        ACCOUNT.into(),
+                        metadata_photo(),
+                        syncserver_client::ZoneId::primary(),
+                    )
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(issued.mutation.event.edited_at_ms, 0);
                 assert!(!issued.mutation.event.source.is_empty());
                 assert!(!issued.mutation.event.event_id.is_empty());
             }
@@ -1573,13 +1684,39 @@ mod tests {
     }
     #[test]
     fn cloud_scope_pin_rejects_changed_namespace_or_database_generation() {
-        let (_root,library)=open_library();
-        let namespace=syncserver_client::Namespace {tenant:"user".into(),container:"photos".into(),environment:"production".into(),database:"private".into()};
-        assert!(library.cloud_pin_scope(ACCOUNT.into(),namespace.clone(),"generation-1".into()).unwrap());
-        assert!(library.cloud_pin_scope(ACCOUNT.into(),namespace.clone(),"generation-1".into()).unwrap());
-        assert!(!library.cloud_pin_scope(ACCOUNT.into(),namespace.clone(),"generation-2".into()).unwrap());
-        let mut other=namespace.clone();other.tenant="another-user".into();
-        assert!(!library.cloud_pin_scope(ACCOUNT.into(),other,"generation-1".into()).unwrap());
-        assert!(library.cloud_pin_scope(ACCOUNT.into(),namespace,"generation-1".into()).unwrap());
+        let (_root, library) = open_library();
+        let namespace = syncserver_client::Namespace {
+            tenant: "user".into(),
+            container: "photos".into(),
+            environment: "production".into(),
+            database: "private".into(),
+        };
+        assert!(
+            library
+                .cloud_pin_scope(ACCOUNT.into(), namespace.clone(), "generation-1".into())
+                .unwrap()
+        );
+        assert!(
+            library
+                .cloud_pin_scope(ACCOUNT.into(), namespace.clone(), "generation-1".into())
+                .unwrap()
+        );
+        assert!(
+            !library
+                .cloud_pin_scope(ACCOUNT.into(), namespace.clone(), "generation-2".into())
+                .unwrap()
+        );
+        let mut other = namespace.clone();
+        other.tenant = "another-user".into();
+        assert!(
+            !library
+                .cloud_pin_scope(ACCOUNT.into(), other, "generation-1".into())
+                .unwrap()
+        );
+        assert!(
+            library
+                .cloud_pin_scope(ACCOUNT.into(), namespace, "generation-1".into())
+                .unwrap()
+        );
     }
 }

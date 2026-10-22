@@ -1,5 +1,9 @@
+import '../services/media_metadata_cache.dart';
+import 'thumbnail_image.dart';
+import 'progressive_image.dart';
+import '../services/thumbnail_pipeline.dart';
+
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -60,6 +64,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   final _strip = ScrollController();
   final _scheduledPages = <int>{};
   bool _navigating = false;
+  int _navGeneration = 0, _prefetchGeneration = 0;
+  String? _prefetchIdentity;
+  int? _pendingIndex;
+  ThumbnailHandle? _navigationThumbnail;
+  final _neighborThumbnails = <int, ThumbnailHandle>{};
   bool _immersive = false;
   bool _chromeHidden = false;
   Timer? _idleTimer;
@@ -140,6 +149,12 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   @override
   void dispose() {
     _idleTimer?.cancel();
+    _navGeneration++;
+    _prefetchGeneration++;
+    _navigationThumbnail?.release();
+    for (final request in _neighborThumbnails.values) {
+      request.release();
+    }
     _decodeDebounce?.cancel();
     _transform.dispose();
     _strip.dispose();
@@ -167,20 +182,48 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   void _resetZoom() => setState(() => _transform.value = Matrix4.identity());
 
   Future<void> _jumpTo(int target) async {
-    if (_navigating) return;
+    if (_editing) return;
     final library = ref.read(localLibraryProvider);
     if (target < 0 || target >= library.total) return;
+    final generation = ++_navGeneration;
+    _pendingIndex = target;
+    _navigationThumbnail?.release();
+    _navigationThumbnail = null;
     setState(() => _navigating = true);
     final photo = await ref.read(localLibraryProvider.notifier).photoAt(target);
-    if (!mounted) return;
+    if (!mounted || generation != _navGeneration || _editing) return;
     if (photo != null) {
-      // Move the strip before the highlight changes so the first painted
-      // frame after navigation already has the current thumbnail centred.
+      final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
+      final pool = ThumbnailPool.forGateway(gateway);
+      final thumbnail = pool.acquire(
+        photo,
+        pool.bestAvailableSize(photo) ?? 512,
+      );
+      _navigationThumbnail = thumbnail;
+      try {
+        await thumbnail.future
+            .then<void>((path) async {
+              if (!mounted || generation != _navGeneration) return;
+              await precacheImage(
+                ThumbnailImage.file(path, photo),
+                context,
+                onError: (_, _) {},
+              );
+            })
+            .timeout(const Duration(milliseconds: 400));
+      } catch (_) {
+        /* A failed preview must not trap navigation. */
+      }
+      if (!mounted || generation != _navGeneration || _editing) return;
       _centerStripOn(target);
     }
+    _navigationThumbnail?.release();
+    _navigationThumbnail = null;
     setState(() {
       _navigating = false;
-      if (photo != null) {
+      _pendingIndex = null;
+      if (photo != null &&
+          ref.read(localLibraryProvider).queryEpoch == library.queryEpoch) {
         _photo = photo;
         _resolvedIndex = target;
         _transform.value = Matrix4.identity();
@@ -190,8 +233,63 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
 
   Future<void> _move(int delta) async {
     final index =
-        ref.read(localLibraryProvider).indexOf(_photo.id) ?? _resolvedIndex;
+        _pendingIndex ??
+        ref.read(localLibraryProvider).indexOf(_photo.id) ??
+        _resolvedIndex;
     await _jumpTo(index + delta);
+  }
+
+  Future<void> _prefetchNeighbors(int index, String identity) async {
+    final generation = ++_prefetchGeneration;
+    for (final request in _neighborThumbnails.values) {
+      request.release();
+    }
+    _neighborThumbnails.clear();
+    final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
+    final controller = ref.read(localLibraryProvider.notifier);
+    for (final delta in [-1, 1]) {
+      final target = index + delta;
+      if (target < 0 || target >= ref.read(localLibraryProvider).total) {
+        continue;
+      }
+      final photo = await controller.photoAt(target);
+      if (!mounted ||
+          _editing ||
+          generation != _prefetchGeneration ||
+          identity != _detailsIdentity) {
+        return;
+      }
+      if (photo == null) continue;
+      final pool = ThumbnailPool.forGateway(gateway);
+      final handle = pool.acquire(
+        photo,
+        pool.bestAvailableSize(photo) ?? 512,
+        priority: 1,
+      );
+      _neighborThumbnails[target] = handle;
+      if (gateway is ThumbnailPipelineGateway && photo.mediaKind == 'image') {
+        unawaited(
+          (gateway as ThumbnailPipelineGateway)
+              .thumbnailCommand({
+                'op': 'thumbnailPrefetchSource',
+                'id': photo.id,
+                'version': photo.contentVersion,
+              })
+              .then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+        );
+      }
+      unawaited(
+        handle.future.then<void>((path) async {
+          if (mounted && !_editing && generation == _prefetchGeneration) {
+            await precacheImage(
+              ThumbnailImage.file(path, photo),
+              context,
+              onError: (_, _) {},
+            );
+          }
+        }, onError: (Object _, StackTrace _) {}),
+      );
+    }
   }
 
   void _toggleImmersive() {
@@ -291,13 +389,28 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       return;
     }
     final details = await _details;
-    if (!mounted) return;
+    if (!mounted ||
+        _currentPhoto.id != photo.id ||
+        _currentPhoto.contentVersion != photo.contentVersion) {
+      return;
+    }
     if (details?['motion_offset'] != null ||
         details?['animated'] == true ||
         details?['hdr'] == true) {
       return;
     }
     _idleTimer?.cancel();
+    _navGeneration++;
+    _prefetchGeneration++;
+    _prefetchIdentity = null;
+    _pendingIndex = null;
+    _navigating = false;
+    _navigationThumbnail?.release();
+    _navigationThumbnail = null;
+    for (final handle in _neighborThumbnails.values) {
+      handle.release();
+    }
+    _neighborThumbnails.clear();
     setState(() => _editing = true);
   }
 
@@ -560,22 +673,24 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       _detailsIdentity = identity;
       _editAllowed = false;
       _showMotion = false;
-      _animated = false;
-      _details = controller
-          .localCommand({'op': 'metadata', 'id': photo.id})
-          .then(
-            (value) => value is Map
-                ? Map<String, dynamic>.from(value)
-                : <String, dynamic>{},
-          )
-          .catchError((Object error) => <String, dynamic>{});
+      _animated = photo.mimeType == 'image/gif';
+      _details = MediaMetadataCache.load(
+        gateway,
+        photo,
+        () => controller.localCommand({
+          'op': 'metadata',
+          'id': photo.id,
+          'version': photo.contentVersion,
+        }),
+      ).catchError((Object error) => <String, dynamic>{});
       _details!.then((data) {
         if (mounted && _detailsIdentity == identity) {
           final motion = data['motion_offset'] != null;
           final autoPlay = ref.read(presentationProvider).autoPlayMotionPhoto;
           setState(() {
-            _animated = data['animated'] == true;
+            if (data.isNotEmpty) _animated = data['animated'] == true;
             _editAllowed =
+                data.isNotEmpty &&
                 photo.mediaKind == 'image' &&
                 [
                   'image/jpeg',
@@ -598,6 +713,19 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                 .localCommand({'op': 'preview', 'id': photo.id})
                 .then((value) => value as String?)
           : null;
+    }
+
+    final prefetchIdentity = '$identity:${library.queryEpoch}';
+    if (!_editing && index != null && _prefetchIdentity != prefetchIdentity) {
+      _prefetchIdentity = prefetchIdentity;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            !_editing &&
+            _detailsIdentity == identity &&
+            _prefetchIdentity == prefetchIdentity) {
+          unawaited(_prefetchNeighbors(index, identity));
+        }
+      });
     }
 
     // The stage is always dark media chrome; pin the dark glass material so
@@ -654,7 +782,12 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                 body: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _stage(context, strings, photo),
+                    KeyedSubtree(
+                      key: ValueKey(
+                        'viewer-stage-${photo.id}-${photo.contentVersion}',
+                      ),
+                      child: _stage(context, strings, photo),
+                    ),
                     ..._notices(strings, library, index),
                     if (!_editing && !_chromeHidden)
                       Positioned(
@@ -866,6 +999,19 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   }
 
   Widget _stage(BuildContext context, AppStrings strings, LocalPhoto photo) {
+    final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
+    Widget thumbnail() => ViewerThumbnail(photo: photo, gateway: gateway);
+    Widget still() => ProgressiveImage(
+      key: ValueKey('viewer-still-${photo.id}-${photo.contentVersion}'),
+      image: boundedViewerImage(
+        photo.path,
+        photo,
+        MediaQuery.sizeOf(context),
+        MediaQuery.devicePixelRatioOf(context),
+      ),
+      placeholder: thumbnail(),
+      semanticLabel: photo.name,
+    );
     if (photo.mediaKind == 'video') {
       return KeyedSubtree(
         key: ValueKey(photo.id),
@@ -874,6 +1020,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
           child: LocalVideoStage(
             key: _videoKey,
             path: photo.path,
+            placeholder: thumbnail(),
             bottomInset: _chromeHidden ? 0 : _stripHeight + 20,
           ),
         ),
@@ -890,10 +1037,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                 child: LocalVideoStage(
                   key: _videoKey,
                   path: snapshot.data as String,
+                  placeholder: still(),
                   bottomInset: _chromeHidden ? 0 : _stripHeight + 20,
                 ),
               )
-            : const Center(child: CircularProgressIndicator()),
+            : still(),
       );
     }
     if (_animated) {
@@ -903,30 +1051,26 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
             .localCommand({'op': 'animatedFrames', 'id': photo.id})
             .then(
               (value) => (value as List)
-                  .map((entry) => AnimatedFrame.fromJson(
-                        Map<String, dynamic>.from(entry as Map),
-                      ))
+                  .map(
+                    (entry) => AnimatedFrame.fromJson(
+                      Map<String, dynamic>.from(entry as Map),
+                    ),
+                  )
                   .toList(),
             ),
         builder: (context, snapshot) {
           final frames = snapshot.data;
-          if (frames == null || frames.isEmpty) {
-            return Center(
-              child: snapshot.hasError
-                  ? Text(
-                      strings.imageUnavailable,
-                      style: const TextStyle(color: Colors.white),
-                    )
-                  : const CircularProgressIndicator(),
-            );
-          }
+          if (frames == null || frames.isEmpty) return still();
           return InteractiveViewer(
             key: ValueKey('viewer-image-${photo.id}-${photo.contentVersion}'),
             transformationController: _transform,
             minScale: _minScale,
             maxScale: _maxScale,
             child: SizedBox.expand(
-              child: AnimatedImageStage(frames: frames),
+              child: AnimatedImageStage(
+                frames: frames,
+                placeholder: thumbnail(),
+              ),
             ),
           );
         },
@@ -936,16 +1080,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       return FutureBuilder<String?>(
         future: _preview,
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return Center(
-              child: snapshot.hasError
-                  ? Text(
-                      strings.imageUnavailable,
-                      style: const TextStyle(color: Colors.white),
-                    )
-                  : const CircularProgressIndicator(),
-            );
-          }
+          if (!snapshot.hasData) return thumbnail();
           return InteractiveViewer(
             key: const ValueKey('viewer-heic'),
             transformationController: _transform,
@@ -958,7 +1093,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
               });
             },
             child: Center(
-              child: Image.file(File(snapshot.data!), fit: BoxFit.contain),
+              child: ProgressiveImage(
+                image: LocalPhotoImage(snapshot.data!, photo),
+                placeholder: thumbnail(),
+              ),
             ),
           );
         },
@@ -967,29 +1105,21 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     return LayoutBuilder(
       builder: (context, constraints) {
         _viewport = constraints.biggest;
-        final decodeWidth = math.min(
-          4096,
-          math.max(
-            256,
-            (constraints.maxWidth *
-                    MediaQuery.devicePixelRatioOf(context) *
-                    _scale.clamp(1.0, 4.0))
-                .ceil(),
-          ),
-        );
         return InteractiveViewer(
           key: ValueKey('viewer-image-${photo.id}-${photo.contentVersion}'),
           transformationController: _transform,
           minScale: _minScale,
           maxScale: _maxScale,
           child: SizedBox.expand(
-            child: Image(
-              image: ResizeImage.resizeIfNeeded(
-                decodeWidth,
-                null,
-                LocalPhotoImage(photo.path, photo),
+            child: ProgressiveImage(
+              placeholder: thumbnail(),
+              image: boundedViewerImage(
+                photo.path,
+                photo,
+                constraints.biggest,
+                MediaQuery.devicePixelRatioOf(context),
+                scale: _scale,
               ),
-              fit: BoxFit.contain,
               semanticLabel: photo.name,
               errorBuilder: (context, error, stack) => Center(
                 child: Column(
@@ -1596,12 +1726,20 @@ class _FullscreenPreviewState extends ConsumerState<_FullscreenPreview> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final photo = widget.photo;
+    final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
+    Widget thumbnail() => ViewerThumbnail(photo: photo, gateway: gateway);
     Widget image(String path) => InteractiveViewer(
       maxScale: 8,
       child: Center(
-        child: Image(
-          image: LocalPhotoImage(path, photo),
-          fit: BoxFit.contain,
+        child: ProgressiveImage(
+          placeholder: thumbnail(),
+          image: boundedViewerImage(
+            path,
+            photo,
+            MediaQuery.sizeOf(context),
+            MediaQuery.devicePixelRatioOf(context),
+            animate: true,
+          ),
           semanticLabel: photo.name,
           errorBuilder: (context, error, stack) => Center(
             child: Column(
@@ -1639,20 +1777,16 @@ class _FullscreenPreviewState extends ConsumerState<_FullscreenPreview> {
             fit: StackFit.expand,
             children: [
               if (photo.mediaKind == 'video')
-                LocalVideoStage(key: _video, path: photo.path)
+                LocalVideoStage(
+                  key: _video,
+                  path: photo.path,
+                  placeholder: thumbnail(),
+                )
               else if (photo.mimeType == 'image/heic')
                 FutureBuilder<String?>(
                   future: _preview,
-                  builder: (context, snapshot) => snapshot.hasData
-                      ? image(snapshot.data!)
-                      : Center(
-                          child: snapshot.hasError
-                              ? Text(
-                                  strings.imageUnavailable,
-                                  style: const TextStyle(color: Colors.white),
-                                )
-                              : const CircularProgressIndicator(),
-                        ),
+                  builder: (context, snapshot) =>
+                      snapshot.hasData ? image(snapshot.data!) : thumbnail(),
                 )
               else
                 image(photo.path),
@@ -1689,27 +1823,39 @@ class _FilmstripThumb extends StatefulWidget {
 }
 
 class _FilmstripThumbState extends State<_FilmstripThumb> {
-  Future<String>? _future;
+  ThumbnailHandle? _request;
   String? _identity;
 
   @override
-  Widget build(BuildContext context) {
+  void dispose() {
+    _request?.release();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: ThumbnailPool.forGateway(widget.gateway).epoch,
+    builder: (context, _) => _build(context),
+  );
+  Widget _build(BuildContext context) {
     final photo = widget.photo;
-    final identity = '${photo.id}:${photo.contentVersion}';
-    if (_identity != identity) {
-      _identity = identity;
-      _future = widget.gateway.thumbnail(
-        photo.id,
-        sizeClass: thumbnailSizeClassFor(
-          _LocalPhotoViewerState._stripThumb *
-              MediaQuery.devicePixelRatioOf(context),
-        ),
-      );
+    final identity =
+        '${identityHashCode(widget.gateway)}:${photo.id}:${photo.contentVersion}:${ThumbnailPool.forGateway(widget.gateway).epoch.value}';
+    final size = thumbnailSizeClassForCover(
+      _LocalPhotoViewerState._stripThumb *
+          MediaQuery.devicePixelRatioOf(context),
+      photo,
+    );
+    if (_identity != '$identity:$size') {
+      _identity = '$identity:$size';
+      _request?.release();
+      _request = ThumbnailPool.forGateway(widget.gateway).acquire(photo, size);
     }
     return ColoredBox(
       color: Colors.white.withValues(alpha: .06),
       child: FutureBuilder<String>(
-        future: _future,
+        future: _request!.future,
+        initialData: _request!.path,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
@@ -1722,25 +1868,33 @@ class _FilmstripThumbState extends State<_FilmstripThumb> {
           }
           final path = snapshot.data;
           if (path == null) {
-            return const Center(
-              child: Icon(
-                Icons.photo_outlined,
-                color: Colors.white24,
-                size: 20,
-              ),
+            return FutureBuilder<String?>(
+              future: _request!.placeholder,
+              builder: (context, preview) => preview.data == null
+                  ? const Center(
+                      child: Icon(
+                        Icons.photo_outlined,
+                        color: Colors.white24,
+                        size: 20,
+                      ),
+                    )
+                  : Image(
+                      image: ThumbnailImage.file(
+                        preview.data!,
+                        photo,
+                        use: ThumbnailUse.embedded,
+                      ),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
             );
           }
-          final target =
-              (_LocalPhotoViewerState._stripThumb *
-                      MediaQuery.devicePixelRatioOf(context))
-                  .ceil()
-                  .clamp(64, 1024);
+          final target = thumbnailDecodeWidth(
+            _LocalPhotoViewerState._stripThumb *
+                MediaQuery.devicePixelRatioOf(context),
+          );
           return Image(
-            image: ResizeImage.resizeIfNeeded(
-              target,
-              null,
-              LocalPhotoImage(path, photo),
-            ),
+            image: ThumbnailImage.file(path, photo, width: target),
             fit: BoxFit.cover,
             excludeFromSemantics: true,
             errorBuilder: (context, error, stack) => const Center(

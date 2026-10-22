@@ -11,15 +11,16 @@ pub mod motion_photo;
 mod scaled;
 mod thumbnail;
 
-pub use thumbnail::prepare_thumbnail;
+pub use thumbnail::{prepare_embedded_thumbnail, prepare_thumbnail};
 
 /// Published thumbnail encoding revision. Bump it whenever the thumbnail
 /// encoder changes, so entries written by an older encoder are rebuilt
 /// instead of reused.
-pub const THUMBNAIL_CACHE_REVISION: u32 = 3;
+pub const THUMBNAIL_CACHE_REVISION: u32 = 4;
 
 use std::collections::HashMap;
 use std::fs::{self, File, Metadata};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::UNIX_EPOCH;
@@ -156,19 +157,37 @@ pub fn inspect_file(path: &Path) -> Result<DiscoveredMedia, String> {
     inspect_with(path, initial)
 }
 
-fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, String> {    let mime = mime_from_extension(path).ok_or("UnsupportedSource: extension")?;
+fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, String> {
+    let mime = mime_from_extension(path).ok_or("UnsupportedSource: extension")?;
     let mut file = File::open(path).map_err(|e| format!("SourceRead: {e}"))?;
     check_source(path, &file, &initial)?;
+    let video = if mime.starts_with("video/") {
+        Some(external::probe(path)?)
+    } else {
+        None
+    };
+    let mut head = Vec::new();
+    if video.is_none() {
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| format!("SourceRead: {e}"))?;
+        Read::by_ref(&mut file)
+            .take(256 * 1024)
+            .read_to_end(&mut head)
+            .map_err(|e| format!("SourceRead: {e}"))?;
+    }
     let header = if mime == "image/heic" {
         heif::header(path)?
-    } else if mime.starts_with("video/") {
-        external::video_header(path)?
+    } else if let Some(value) = &video {
+        external::video_header(value)?
     } else {
-        headers::read(
-            &mut file,
-            format_for_path(path).ok_or("UnsupportedSource")?.0,
-            initial.size,
-        )?
+        let format = format_for_path(path).ok_or("UnsupportedSource")?.0;
+        headers::read_head(&head, format, initial.size)
+            .or_else(|_| headers::read(&mut file, format, initial.size))?
+    };
+    let details = if let Some(value) = &video {
+        details::from_video_probe(value)
+    } else {
+        details::read_with_head(path, &head, initial.size)
     };
     check_source(path, &file, &initial)?;
     Ok(DiscoveredMedia {
@@ -186,7 +205,7 @@ fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, St
         height: Some(header.height),
         orientation: header.orientation,
         capture_time_ms: header.capture_time_ms,
-        details: details::read(path),
+        details,
     })
 }
 
@@ -376,4 +395,56 @@ pub fn prepare_preview(
         }
     }
     Ok(())
+}
+
+/// Warm only the immediate neighbor's source pages. No pixel decode or hashing,
+/// and no full-file allocation. Large sources get a bounded 16 MiB hint.
+pub fn prefetch_pages(source: &Path, expected_size: u64, expected_ns: i64) -> Result<(), String> {
+    let file = File::open(source).map_err(|_| "SourceUnavailable")?;
+    let expected = Fingerprint::from_metadata(&file.metadata().map_err(|_| "SourceUnavailable")?)?;
+    if expected.size != expected_size || expected.modified_ns != expected_ns {
+        return Err("SourceChanged".into());
+    }
+    check_source(source, &file, &expected)?;
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        // fadvise is advisory and does not change file contents or timestamps.
+        let result = unsafe {
+            libc::posix_fadvise(
+                file.as_raw_fd(),
+                0,
+                expected_size.min(16 * 1024 * 1024) as libc::off_t,
+                libc::POSIX_FADV_WILLNEED,
+            )
+        };
+        if result != 0 {
+            return Err("SourcePrefetchUnavailable".into());
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let mut input = &file;
+        std::io::copy(
+            &mut Read::take(&mut input, 16 * 1024 * 1024),
+            &mut std::io::sink(),
+        )
+        .map_err(|_| "SourceRead")?;
+    }
+    check_source(source, &file, &expected)
+}
+
+/// Cache validation must not invoke image::JpegDecoder, whose constructor
+/// reads the complete compressed file. Native cache entries are small encoded
+/// images; parse only bounded headers and reject aliases/oversized payloads.
+pub fn thumbnail_dimensions(path: &Path) -> Option<(u32, u32)> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 8 * 1024 * 1024
+    {
+        return None;
+    }
+    let format = format_for_path(path)?.0;
+    let mut file = File::open(path).ok()?;
+    let header = headers::read(&mut file, format, metadata.len()).ok()?;
+    Some((header.width, header.height))
 }

@@ -170,3 +170,75 @@ fn blend_on_white(channel: u8, alpha: u8) -> u8 {
     let alpha = u16::from(alpha);
     ((u16::from(channel) * alpha + 255 * (255 - alpha)) / 255) as u8
 }
+
+/// Linux uses the same libjpeg-turbo backend as the pre-rewrite client. It
+/// reads a duplicate of the already fingerprint-checked descriptor; it never
+/// reopens a path that could have been replaced between validation and decode.
+#[cfg(target_os = "linux")]
+pub(super) fn decode_jpeg_turbo(
+    file: &mut std::fs::File,
+    max_edge: u32,
+    source_size: u64,
+) -> Result<RgbImage, String> {
+    use std::ffi::{c_char, c_int, c_void};
+    use std::io::{Seek, SeekFrom};
+    use std::os::fd::AsRawFd;
+    unsafe extern "C" {
+        fn photo_jpeg_create() -> *mut c_void;
+        fn photo_jpeg_destroy(ptr: *mut c_void);
+        fn photo_jpeg_decode_scaled(
+            ptr: *mut c_void,
+            fd: c_int,
+            source_size: u64,
+            edge: c_int,
+            width: *mut c_int,
+            height: *mut c_int,
+            error: *mut c_char,
+            error_size: c_int,
+        ) -> c_int;
+        fn photo_jpeg_take_buffer(ptr: *mut c_void, length: *mut usize) -> *mut u8;
+        fn photo_jpeg_free_buffer(ptr: *mut c_void);
+    }
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| format!("SourceRead: {e}"))?;
+    // The C shim contains every libjpeg call within its setjmp error boundary.
+    unsafe {
+        let shim = photo_jpeg_create();
+        if shim.is_null() {
+            return Err("ThumbnailDecodeFailed: JPEG allocation".into());
+        }
+        let (mut width, mut height) = (0, 0);
+        let mut error = [0_i8; 256];
+        let result = photo_jpeg_decode_scaled(
+            shim,
+            file.as_raw_fd(),
+            source_size,
+            max_edge.min(c_int::MAX as u32) as c_int,
+            &mut width,
+            &mut height,
+            error.as_mut_ptr(),
+            error.len() as c_int,
+        );
+        if result != 0 {
+            photo_jpeg_destroy(shim);
+            return Err("ThumbnailDecodeFailed: libjpeg rejected source".into());
+        }
+        let mut length = 0;
+        let buffer = photo_jpeg_take_buffer(shim, &mut length);
+        photo_jpeg_destroy(shim);
+        if buffer.is_null()
+            || width <= 0
+            || height <= 0
+            || length != width as usize * height as usize * 3
+        {
+            if !buffer.is_null() {
+                photo_jpeg_free_buffer(buffer.cast());
+            }
+            return Err("ThumbnailDecodeFailed: invalid JPEG output".into());
+        }
+        let pixels = std::slice::from_raw_parts(buffer, length).to_vec();
+        photo_jpeg_free_buffer(buffer.cast());
+        RgbImage::from_raw(width as u32, height as u32, pixels)
+            .ok_or_else(|| "ThumbnailDecodeFailed: invalid JPEG output".into())
+    }
+}

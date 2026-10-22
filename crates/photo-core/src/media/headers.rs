@@ -18,8 +18,10 @@ pub(super) struct Header {
     pub bytes_per_pixel: u64,
 }
 
+trait HeaderSource: Read + Seek {}
+impl<T: Read + Seek> HeaderSource for T {}
 struct Reader<'a> {
-    file: &'a mut File,
+    file: &'a mut dyn HeaderSource,
     size: u64,
     remaining: usize,
 }
@@ -101,6 +103,16 @@ pub(super) fn header(
 }
 
 pub(super) fn read(file: &mut File, format: ImageFormat, size: u64) -> Result<Header, String> {
+    read_from(file, format, size)
+}
+pub(super) fn read_head(head: &[u8], format: ImageFormat, size: u64) -> Result<Header, String> {
+    read_from(&mut std::io::Cursor::new(head), format, size)
+}
+fn read_from(
+    file: &mut dyn HeaderSource,
+    format: ImageFormat,
+    size: u64,
+) -> Result<Header, String> {
     file.seek(SeekFrom::Start(0))
         .map_err(|e| format!("SourceRead: {e}"))?;
     let mut r = Reader {

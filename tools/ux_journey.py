@@ -523,13 +523,29 @@ def verify_effects(record: dict, manifest: dict, initial_facts: dict,
         finally:
             connection.close()
 
+    _verify_media_kind_effects(expect, ux, manifest, initial_facts, evidence)
+
+    checks = {}
+    for check in CHECK_ORDER:
+        reasons = errors.get(check, [])
+        checks[check] = ({
+            "status": "FAIL",
+            "reason": "; ".join(reasons[:5]),
+        } if reasons else {
+            "status": "PASS",
+            "reason": "UI steps and real file/database effects agree",
+        })
+    return checks, evidence
+
+
+def _verify_media_kind_effects(expect, ux, manifest, initial_facts, evidence):
     media_scan = ux.get("media_scan") or {}
     expect("UX-11", media_scan.get("discovered") == 4,
            f"the media source discovered {media_scan.get('discovered')} files")
     media_filter = ux.get("media_filter") or {}
     expect("UX-11", media_filter.get("videos") == 1,
            f"the Videos filter showed {media_filter.get('videos')!r} items")
-    expect("UX-11", (media_filter.get("images") or 0) >= 4,
+    expect("UX-11", (media_filter.get("images") or 0) >= int(media_scan.get("base_total") or 0) + 3,
            f"the Images filter showed {media_filter.get('images')!r} items")
     video = ux.get("video_playback") or {}
     expect("UX-11", video.get("playing") is True and video.get("paused") is True
@@ -562,21 +578,25 @@ def verify_effects(record: dict, manifest: dict, initial_facts: dict,
     evidence["media_files"] = sorted(
         path.name for path in media_dir.iterdir()) if media_dir.is_dir() else []
 
-    checks = {}
-    for check in CHECK_ORDER:
-        reasons = errors.get(check, [])
-        checks[check] = ({
-            "status": "FAIL",
-            "reason": "; ".join(reasons[:5]),
-        } if reasons else {
-            "status": "PASS",
-            "reason": "UI steps and real file/database effects agree",
-        })
-    return checks, evidence
+
+def verify_media_effects(record, manifest, initial_facts):
+    errors = []
+    evidence = {}
+    ux = record.get("facts", {}).get("ux", {})
+    def expect(check, passed, reason):
+        if not passed:
+            errors.append(reason)
+    _verify_media_kind_effects(expect, ux, manifest, initial_facts, evidence)
+    expect("UX-11", (ux.get("video_playback") or {}).get("first_frame_ready") is True,
+           "the video started without a paintable first frame")
+    expect("UX-11", ux.get("gif_playback") is True, "the GIF frame index never advanced")
+    return {"UX-11": {"status": "FAIL" if errors else "PASS",
+                       "reason": "; ".join(errors) if errors else "real codecs, playback and unchanged fixtures verified"}}, evidence
 
 
 def run(evidence_dir: Path, root: Path = ROOT, *, mode: str = "debug",
-        skip_build: bool = False) -> int:
+        skip_build: bool = False, scope: str = "all") -> int:
+    checks_to_run = ("UX-11",) if scope == "media" else CHECK_ORDER
     evidence_dir = evidence_dir.resolve()
     evidence_dir.mkdir(parents=True, exist_ok=True)
     if any(evidence_dir.iterdir()):
@@ -587,6 +607,7 @@ def run(evidence_dir: Path, root: Path = ROOT, *, mode: str = "debug",
         "stage": "UX",
         "plan_version": 2,
         "phase": "local-ux",
+        "scope": scope,
         "mode": mode,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.gmtime()),
         "profile_digest": profile_digest(profile),
@@ -616,19 +637,25 @@ def run(evidence_dir: Path, root: Path = ROOT, *, mode: str = "debug",
                  "xdg_data_home": Path(manifest["xdg_data_home"])}
         report["fixtures"] = manifest
         report["source_facts_before"] = initial_facts
+        journey_env = {"XDG_DATA_HOME": manifest["xdg_data_home"]}
+        if scope == "media":
+            # Isolated Xvfb has no audio service. Decode real audio through the
+            # OpenAL null sink so first-frame/playback checks are deterministic.
+            journey_env["ALSOFT_DRIVERS"] = "null"
+            report["audio_output"] = "OpenAL null sink (automated media scope)"
         with XvfbDisplay() as display:
             report["display"] = display
             run_result = run_journey(
                 executable,
                 display=display,
-                phase="ux",
+                phase="ux-media" if scope == "media" else "ux",
                 data_root=Path(manifest["data_root"]),
                 evidence_dir=evidence_dir,
                 log_name="journey-ux.log",
                 timeout=JOURNEY_TIMEOUT,
                 args=[f"--source={manifest['photos_dir']}",
                       "--window-size=1440x900"],
-                env_extra={"XDG_DATA_HOME": manifest["xdg_data_home"]},
+                env_extra=journey_env,
             )
         report["journey"] = run_result.as_evidence(root)
         record = run_result.record
@@ -642,9 +669,10 @@ def run(evidence_dir: Path, root: Path = ROOT, *, mode: str = "debug",
         source_after = file_facts(evidence_dir / "fixtures")
         report["source_facts_after"] = source_after
         checks = step_checks(record)
-        effects, evidence = verify_effects(record, manifest, initial_facts, paths)
+        effects, evidence = (verify_media_effects(record, manifest, initial_facts)
+                             if scope == "media" else verify_effects(record, manifest, initial_facts, paths))
         report["evidence"] = evidence
-        for check in CHECK_ORDER:
+        for check in checks_to_run:
             step = checks[check]
             effect = effects[check]
             if step["status"] == "PASS" and effect["status"] == "PASS":
@@ -666,7 +694,7 @@ def run(evidence_dir: Path, root: Path = ROOT, *, mode: str = "debug",
         (evidence_dir / "report.json").write_text(canonical_json(report) + "\n",
                                                   encoding="utf-8")
         print(f"UX {gate}: {evidence_dir / 'report.json'}")
-        for check in CHECK_ORDER:
+        for check in checks_to_run:
             entry = report["checks"][check]
             print(f"  {check}: {entry['status']} - {entry['reason'][:160]}")
         return 0 if gate == "PASS" else 1
@@ -674,7 +702,7 @@ def run(evidence_dir: Path, root: Path = ROOT, *, mode: str = "debug",
         report["gate_status"] = "FAIL"
         report["error"] = str(exc)
         report.setdefault("checks", {})
-        for check in CHECK_ORDER:
+        for check in checks_to_run:
             report["checks"].setdefault(check, {"status": "NOT RUN", "reason": str(exc)})
         (evidence_dir / "report.json").write_text(canonical_json(report) + "\n",
                                                   encoding="utf-8")
@@ -689,10 +717,11 @@ def main(argv: list[str] | None = None) -> int:
     command.add_argument("--evidence-dir", type=Path, required=True)
     command.add_argument("--mode", choices=("debug", "release"), default="debug")
     command.add_argument("--skip-build", action="store_true")
+    command.add_argument("--scope", choices=("all", "media"), default="all")
     options = parser.parse_args(argv)
     try:
         return run(options.evidence_dir, mode=options.mode,
-                   skip_build=options.skip_build)
+                   skip_build=options.skip_build, scope=options.scope)
     except ProfileError as exc:
         print(f"ux: {exc}", file=sys.stderr)
         return 2

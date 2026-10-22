@@ -64,14 +64,11 @@ impl Drop for PendingThumbnail {
 /// identities and size/mtime fingerprints are checked before reading, after
 /// decoding and immediately before publication. No original is opened for write.
 ///
-/// A source whose full-resolution decode fits the 128 MiB admission budget is
-/// decoded in full and reduced afterwards, which keeps the sharpest result.
-/// Larger sources are derived through the bounded decoders, so a 20 MP photo
-/// still produces a thumbnail instead of being refused. The budget covers
-/// compressed input, conservative decoded buffers, thumbnail transformations
-/// and a codec workspace reserve. Codec heap overhead is not an
-/// operating-system RSS hard limit. Oversized images fail with
-/// DecodeBudgetExceeded, without replacing a previous cache entry.
+/// JPEGs use the pre-rewrite client's libjpeg-turbo scaled-decode path on
+/// Linux. Other formats and unsupported JPEGs retain the bounded Rust fallback.
+/// Admission accounts for intermediate pixels, thumbnail transformations and a
+/// codec workspace reserve. Codec heap overhead is not an OS RSS hard limit.
+/// Oversized images fail without replacing an existing cache entry.
 pub fn prepare_thumbnail(
     source: &Path,
     expected_size: u64,
@@ -136,7 +133,35 @@ pub fn prepare_thumbnail(
         target_height: target_height as u32,
         thumbnail_bytes: thumbnail_bytes.unwrap_or(0),
     };
-    let mut small = if within_budget {
+    let mut jpeg_fast = None;
+    #[cfg(target_os = "linux")]
+    if format == image::ImageFormat::Jpeg {
+        let pixels = u64::from(header.width) * u64::from(header.height);
+        // libjpeg can scale by at most 1/8. Account for the actual intermediate
+        // buffer and its Rust-owned copy, even for extreme aspect ratios.
+        let denominator = [8, 4, 2, 1]
+            .into_iter()
+            .find(|d| longest / d >= max_edge)
+            .unwrap_or(1);
+        let intermediate = u64::from(header.width.div_ceil(denominator))
+            * u64::from(header.height.div_ceil(denominator))
+            * 6;
+        if pixels <= MAX_SOURCE_PIXELS && intermediate + WORKSPACE_RESERVE <= DECODE_BUDGET {
+            if let Ok(decoded) = scaled::decode_jpeg_turbo(&mut file, max_edge, expected.size) {
+                jpeg_fast = Some(DynamicImage::ImageRgb8(image::imageops::thumbnail(
+                    &decoded,
+                    plan.target_width,
+                    plan.target_height,
+                )));
+            }
+            check_source(source, &file, &expected)?;
+            file.seek(SeekFrom::Start(0))
+                .map_err(|e| format!("SourceRead: {e}"))?;
+        }
+    }
+    let mut small = if let Some(decoded) = jpeg_fast {
+        decoded
+    } else if within_budget {
         decode_full(&plan, &mut file)?
     } else {
         decode_scaled(&plan, &mut file)?
@@ -329,4 +354,80 @@ fn flatten_on_white(image: DynamicImage) -> RgbImage {
 fn blend_on_white(channel: u8, alpha: u8) -> u8 {
     let alpha = u16::from(alpha);
     ((u16::from(channel) * alpha + 255 * (255 - alpha)) / 255) as u8
+}
+
+/// Extract only the bounded EXIF IFD1 JPEG, never the original pixels. A missing
+/// or malformed EXIF thumbnail is normal and leaves no placeholder cache file.
+pub fn prepare_embedded_thumbnail(
+    source: &Path,
+    size: u64,
+    modified_ns: i64,
+    destination: &Path,
+) -> Result<bool, String> {
+    if super::mime_from_extension(source) != Some("image/jpeg") {
+        return Ok(false);
+    }
+    let mut file = File::open(source).map_err(|_| "SourceUnavailable")?;
+    let expected = Fingerprint::from_metadata(&file.metadata().map_err(|_| "SourceUnavailable")?)?;
+    if expected.size != size || expected.modified_ns != modified_ns {
+        return Err("SourceChanged".into());
+    }
+    check_source(source, &file, &expected)?;
+    let mut head = Vec::new();
+    Read::by_ref(&mut file)
+        .take(256 * 1024)
+        .read_to_end(&mut head)
+        .map_err(|_| "SourceRead")?;
+    let Some((bytes, orientation)) = (|| {
+        let tiff = exif::get_exif_attr_from_jpeg(&mut std::io::Cursor::new(head)).ok()?;
+        let fields = exif::Reader::new()
+            .continue_on_error(true)
+            .read_raw(tiff.clone())
+            .or_else(|e| e.distill_partial_result(|_| {}))
+            .ok()?;
+        let offset = fields
+            .get_field(exif::Tag::JPEGInterchangeFormat, exif::In::THUMBNAIL)?
+            .value
+            .get_uint(0)? as usize;
+        let length = fields
+            .get_field(exif::Tag::JPEGInterchangeFormatLength, exif::In::THUMBNAIL)?
+            .value
+            .get_uint(0)? as usize;
+        let bytes = tiff.get(offset..offset.checked_add(length)?)?;
+        if bytes.is_empty() {
+            return None;
+        }
+        let orientation = fields
+            .get_field(exif::Tag::Orientation, exif::In::PRIMARY)
+            .and_then(|f| f.value.get_uint(0))
+            .unwrap_or(1) as u8;
+        Some((bytes.to_vec(), orientation))
+    })() else {
+        return Ok(false);
+    };
+    let mut reader =
+        ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg);
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(1024);
+    limits.max_image_height = Some(1024);
+    limits.max_alloc = Some(8 * 1024 * 1024);
+    reader.limits(limits);
+    let Ok(mut image) = reader.decode() else {
+        return Ok(false);
+    };
+    image.apply_orientation(
+        Orientation::from_exif(orientation).unwrap_or(Orientation::NoTransforms),
+    );
+    fs::create_dir_all(destination.parent().ok_or("CacheUnavailable")?)
+        .map_err(|_| "CacheUnavailable")?;
+    let mut stage = tempfile::Builder::new()
+        .suffix(".jpg")
+        .tempfile_in(destination.parent().unwrap())
+        .map_err(|_| "CacheUnavailable")?;
+    JpegEncoder::new_with_quality(stage.as_file_mut(), 90)
+        .encode_image(&image)
+        .map_err(|_| "ThumbnailEncodeFailed")?;
+    check_source(source, &file, &expected)?;
+    stage.persist(destination).map_err(|_| "CacheUnavailable")?;
+    Ok(true)
 }

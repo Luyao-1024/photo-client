@@ -1336,6 +1336,7 @@ dependencies = [
 name = "photo-core"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "fs2",
  "gio",
  "image",

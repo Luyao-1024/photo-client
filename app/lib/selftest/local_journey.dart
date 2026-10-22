@@ -16,6 +16,7 @@ import '../ui/cloud_sync_controller.dart';
 import '../ui/library_shell.dart';
 import '../ui/local_library_controller.dart';
 import '../ui/local_video_stage.dart';
+import '../ui/local_animated_stage.dart';
 import '../ui/presentation_preferences.dart';
 import '../ui/runtime_controller.dart';
 import 'journey_input.dart';
@@ -91,6 +92,8 @@ final class LocalJourney {
           await _holdJourney();
         case 'ux':
           await _uxJourney();
+        case 'ux-media':
+          await _uxMediaJourney();
         case 'cloud-upload':
           await _cloudUploadJourney();
         case 'cloud-download':
@@ -142,7 +145,7 @@ final class LocalJourney {
 
   Future<void> _launchUi() async {
     final LocalSourcePicker picker;
-    if (options.journeyPhase == 'ux') {
+    if (options.journeyPhase.startsWith('ux')) {
       final evidence = options.evidenceDir;
       if (evidence == null) {
         throw JourneyFailure('the ux phase needs --evidence-dir');
