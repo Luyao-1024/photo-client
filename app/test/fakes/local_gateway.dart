@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:photo_client/services/cloud_sync_gateway.dart';
 import 'package:photo_client/services/local_library_gateway.dart';
+import 'package:photo_client/services/local_library_tools.dart';
 
 import '../presentation_test.dart' show FakeGateway;
 
@@ -42,7 +43,6 @@ class FakeLocalGateway extends FakeGateway
   final requestedRenames = <(String, String)>[];
   CloudStatus cloudState = const CloudStatus();
   Set<String> cloudBoundIds = {};
-  Set<String>? cloudProtectedIds;
   CloudSyncReport cloudReport = const CloudSyncReport();
   bool failCloudLogin = false;
   bool failCloudSync = false;
@@ -363,10 +363,6 @@ class FakeLocalGateway extends FakeGateway
   Future<List<String>> cloudBoundMediaIds() async => cloudBoundIds.toList();
 
   @override
-  Future<List<String>> cloudProtectedMediaIds() async =>
-      (cloudProtectedIds ?? cloudBoundIds).toList();
-
-  @override
   Future<List<LocalAlbum>> listAlbums() async {
     final byParent = <String, List<LocalPhoto>>{};
     for (final photo in photos) {
@@ -599,6 +595,94 @@ class FakeLocalGateway extends FakeGateway
 
   @override
   Stream<void> watchLibrary() => changes.stream;
+}
+
+/// Renders list pages through the local-tools channel so viewer paths that
+/// depend on metadata (editing, details) see the same data shape as native.
+class FakeToolsGateway extends FakeLocalGateway implements LocalLibraryTools {
+  FakeToolsGateway({required super.imagePath, super.count});
+
+  @override
+  Future<Object?> localCommand(Map<String, Object?> command) async {
+    switch (command['op']) {
+      case 'preferences':
+        return <String, Object?>{
+          'theme': 'system',
+          'transparency': 0.5,
+          'backgroundBlur': 0.5,
+          'followScroll': true,
+          'reduceMotion': false,
+          'autoPlayMotionPhoto': false,
+          'dayColumns': 5,
+          'thumbnailWorkers': 2,
+          'logLevel': 'info',
+          'order': 'date_desc',
+          'cloudAutoSync': false,
+        };
+      case 'metadata':
+        return <String, Object?>{'animated': false, 'hdr': false};
+      case 'window':
+        final page = await _query(command['filter'] as Map?);
+        final start = command['start'] as int? ?? 0;
+        final count = command['count'] as int? ?? page.total;
+        return <String, Object?>{
+          'items': [
+            for (final photo in page.items.skip(start).take(count))
+              _photoJson(photo),
+          ],
+          'total': page.total,
+          'revision': page.revision,
+          'groups': const <Object?>[],
+        };
+      case 'selection':
+        final page = await _query(command['filter'] as Map?);
+        return <String, Object?>{
+          'items': [for (final photo in page.items) _photoJson(photo)],
+        };
+      case 'rank':
+        final page = await _query(command['filter'] as Map?);
+        final rank = page.items.indexWhere(
+          (photo) => photo.id == command['id'],
+        );
+        return rank < 0 ? null : rank;
+    }
+    return null;
+  }
+
+  Future<LocalPhotoPage> _query(Map<dynamic, dynamic>? filter) => listPhotos(
+    limit: 1 << 20,
+    favoritesOnly: filter?['favorites_only'] == true,
+    search: filter?['search'] as String? ?? '',
+    searchScope: SearchScope.values.firstWhere(
+      (scope) => scope.wire == filter?['search_scope'],
+      orElse: () => SearchScope.all,
+    ),
+    folder: filter?['folder'] as String?,
+    mediaKind: filter?['media_kind'] as String?,
+    trashed: filter?['trashed'] == true,
+  );
+
+  static Map<String, Object?> _photoJson(LocalPhoto photo) => {
+    'id': photo.id,
+    'path': photo.path,
+    'name': photo.name,
+    'parent': photo.parent,
+    'size_bytes': photo.sizeBytes,
+    'modified_ms': photo.modifiedMs,
+    'content_version': photo.contentVersion,
+    'width': photo.width,
+    'height': photo.height,
+    'favorite': photo.favorite,
+    'media_kind': photo.mediaKind,
+    'mime_type': photo.mimeType,
+    'orientation': photo.orientation,
+    'capture_time_ms': photo.captureTimeMs,
+    'sort_time_ms': photo.sortTimeMs,
+    'state': photo.state,
+    'trashed_at_ms': photo.trashedAtMs,
+    'duration_ms': photo.durationMs,
+    'motion_offset': photo.motionOffset,
+  };
 }
 
 class FakePicker implements LocalSourcePicker {

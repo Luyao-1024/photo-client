@@ -9,7 +9,7 @@ const SCHEMA: &str = include_str!("../src/storage/local-schema.sql");
 const EXTENSIONS: &str = include_str!("../src/storage/local-v3.sql");
 
 /// Older supported catalogs are upgraded; future writers are still rejected.
-const CURRENT_SCHEMA_VERSION: i64 = 6;
+const CURRENT_SCHEMA_VERSION: i64 = 7;
 
 fn input(folder: &std::path::Path, name: &str, ns: i64) -> MediaInput {
     let path = folder.join(name);
@@ -627,6 +627,125 @@ fn v4_metadata_upgrade_preserves_dirty_work_and_backs_up_before_migration() {
                 .get::<_, i64>(0))
             .unwrap(),
         1
+    );
+    assert!(photos.path().join("keep.jpg").is_file());
+}
+
+#[test]
+fn v6_upgrade_adds_content_and_delete_obligations_without_dropping_pending_work() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    legacy_catalog(&root, &photos, 6);
+    let old = Connection::open(root.path().join("library.sqlite")).unwrap();
+    old.execute_batch(include_str!("../src/storage/local-v4.sql"))
+        .unwrap();
+    old.execute("INSERT INTO cloud_accounts(account_id,endpoint,username,token_file,device_id,created_at_ms) VALUES('account','http://127.0.0.1:8790','user','cloud/account/session.token','device',1)",[]).unwrap();
+    old.execute("INSERT INTO cloud_sync_state(account_id,status,sync_token,updated_at_ms) VALUES('account','idle','keep-token',1)",[]).unwrap();
+    old.execute("INSERT INTO cloud_bindings(account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,favorite_dirty,created_at_ms,updated_at_ms) VALUES('account','photo-id','master-id','generation','legacy-library','photo','keep.jpg',0,1,1,123456)",[]).unwrap();
+    old.execute_batch(include_str!("../src/storage/local-v5.sql"))
+        .unwrap();
+    old.execute(
+        "UPDATE media_sync_state SET dirty=2,metadata_version=3,acked_metadata_version=1,edited_at_ms=999,source='user',event_id='event-1' WHERE media_id='photo'",
+        [],
+    )
+    .unwrap();
+    old.execute("INSERT INTO cloud_metadata_operations(account_id,photo_id,operation_id,library_id,media_id,zone_name,record_revision,captured_local_version,captured_metadata_version,relative_path,is_favorite,is_hidden,asset_date_ms,edited_at_ms,source,event_id,created_at_ms) VALUES('account','photo-id','operation','legacy-library','photo','zone','revision',1,1,'keep.jpg',0,0,NULL,999,'user','event-1',1)",[]).unwrap();
+    old.execute_batch(include_str!("../src/storage/local-v6.sql"))
+        .unwrap();
+    old.execute(
+        "UPDATE cloud_bindings SET remote_edited_at_ms=555,remote_source='remote',remote_event_id='remote-event' WHERE photo_id='photo-id'",
+        [],
+    )
+    .unwrap();
+    drop(old);
+
+    let library = LocalLibrary::open(root.path()).unwrap();
+    assert_eq!(library.library_id, "legacy-library");
+    assert!(library.photo("photo".into()).unwrap().favorite);
+    let db = Connection::open(root.path().join("library.sqlite")).unwrap();
+    assert_eq!(
+        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        CURRENT_SCHEMA_VERSION
+    );
+    let state: (i64, i64, i64, i64, i64, i64, Option<String>) = db
+        .query_row(
+            "SELECT dirty,metadata_version,acked_metadata_version,path_dirty,content_version,deletion_version,event_id FROM media_sync_state WHERE media_id='photo'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+        )
+        .unwrap();
+    assert_eq!(state, (2, 3, 1, 0, 0, 0, Some("event-1".into())));
+    assert_eq!(
+        db.query_row(
+            "SELECT is_trashed FROM cloud_metadata_operations WHERE operation_id='operation'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('media_sync_state') WHERE name IN ('content_version','acked_content_version','content_edited_at_ms','content_source','content_event_id','deletion_version','acked_deletion_version','deletion_edited_at_ms','deletion_source','deletion_event_id')",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        10
+    );
+    for table in ["cloud_content_operations", "cloud_delete_operations"] {
+        assert_eq!(
+            db.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+    }
+    let binding: (String, String, String) = db
+        .query_row(
+            "SELECT remote_source,remote_event_id,relative_path FROM cloud_bindings WHERE photo_id='photo-id'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        binding,
+        ("remote".into(), "remote-event".into(), "keep.jpg".into())
+    );
+    assert_eq!(
+        db.query_row("SELECT upload_scope FROM cloud_accounts", [], |r| r
+            .get::<_, String>(0))
+            .unwrap(),
+        "none"
+    );
+    assert_eq!(
+        db.query_row("SELECT sync_token FROM cloud_sync_state", [], |r| r
+            .get::<_, String>(0))
+            .unwrap(),
+        "keep-token"
+    );
+    let backups = backup_files(&root);
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    assert_eq!(
+        backup
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        6
+    );
+    assert_eq!(
+        backup
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('media_sync_state') WHERE name='content_version'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+        0
     );
     assert!(photos.path().join("keep.jpg").is_file());
 }

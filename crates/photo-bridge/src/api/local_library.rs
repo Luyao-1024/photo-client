@@ -129,6 +129,14 @@ pub(super) fn changed() {
     }
     let _ = super::bootstrap::runtime().notify("library_changed");
 }
+
+/// A local write may have created a cloud obligation. Cloud synchronization
+/// deliberately uses `changed` instead, so its own downloads cannot re-arm the
+/// automatic scheduler.
+pub(super) fn local_changed() {
+    changed();
+    super::cloud_auto_sync::note_local_change();
+}
 fn root_path(override_path: Option<String>) -> Result<PathBuf, String> {
     if let Some(path) = override_path {
         let path = PathBuf::from(path);
@@ -166,7 +174,7 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
         .map_err(|e| e.to_string())?;
     let auto_discover = data_root.is_none();
     let root = root_path(data_root)?;
-    tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         let mut slot = global().lock().map_err(|_| "LibraryUnavailable")?;
         if slot.is_none() {
             let store = LocalLibrary::open(&root)?;
@@ -258,7 +266,7 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
                 let _ = super::bootstrap::runtime().notify("local_background_scan_started");
                 let _guard = ScanGuard::background(worker.clone());
                 let _ = super::local_watcher::refresh(&worker);
-                changed();
+                local_changed();
             });
         }
         if initial_scan
@@ -278,7 +286,13 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
         })
     })
     .await
-    .map_err(join_error)?
+    .map_err(join_error)?;
+    if result.is_ok()
+        && let Ok(active) = service()
+    {
+        super::cloud_auto_sync::start(active.store.clone());
+    }
+    result
 }
 
 pub async fn list_photos(
@@ -374,7 +388,7 @@ pub async fn trash_media(media_ids: Vec<String>) -> Result<u64, String> {
     tokio::task::spawn_blocking(move || {
         let changed_count = active.store.trash_media(media_ids)?;
         if changed_count > 0 {
-            changed();
+            local_changed();
         }
         Ok(changed_count)
     })
@@ -387,7 +401,7 @@ pub async fn restore_media(media_ids: Vec<String>) -> Result<u64, String> {
     tokio::task::spawn_blocking(move || {
         let changed_count = active.store.restore_media(media_ids)?;
         if changed_count > 0 {
-            changed();
+            local_changed();
         }
         Ok(changed_count)
     })
@@ -400,7 +414,7 @@ pub async fn purge_media(media_ids: Vec<String>) -> Result<u64, String> {
     tokio::task::spawn_blocking(move || {
         let changed_count = active.store.purge_media(media_ids)?;
         if changed_count > 0 {
-            changed();
+            local_changed();
         }
         Ok(changed_count)
     })
@@ -413,7 +427,7 @@ pub async fn empty_trash() -> Result<u64, String> {
     tokio::task::spawn_blocking(move || {
         let changed_count = active.store.empty_trash()?;
         if changed_count > 0 {
-            changed();
+            local_changed();
         }
         Ok(changed_count)
     })
@@ -432,7 +446,7 @@ pub async fn add_to_album(
             .store
             .add_to_album(media_ids, target_folder, move_files)?;
         if changed_count > 0 {
-            changed();
+            local_changed();
         }
         Ok(changed_count)
     })
@@ -444,7 +458,7 @@ pub async fn rename_media(media_id: String, name: String) -> Result<LocalPhoto, 
     let active = service()?;
     tokio::task::spawn_blocking(move || {
         let photo = active.store.rename_media(media_id, name)?;
-        changed();
+        local_changed();
         Ok(LocalPhoto {
             id: photo.id,
             path: photo.path,
@@ -524,7 +538,7 @@ pub async fn save_edited(media_id: String, request: EditRequest) -> Result<Local
             request.save_copy,
             request.expected_content_version,
         )?;
-        changed();
+        local_changed();
         Ok(to_local_photo(photo))
     })
     .await
@@ -656,7 +670,7 @@ pub async fn add_paths(paths: Vec<String>) -> Result<LocalScanResult, String> {
                     let changed_count = active.store.upsert_batch(source_id.clone(), inputs)?;
                     active.store.record_details(details)?;
                     if changed_count > 0 {
-                        changed();
+                        local_changed();
                     }
                     Ok(())
                 },
@@ -667,7 +681,7 @@ pub async fn add_paths(paths: Vec<String>) -> Result<LocalScanResult, String> {
             total.cancelled |= summary.cancelled;
         }
         let _ = super::local_watcher::install(&active);
-        changed();
+        local_changed();
         Ok(total)
     })
     .await
@@ -703,7 +717,7 @@ pub async fn set_favorite(media_id: String, favorite: bool) -> Result<(), String
     let active = service()?;
     tokio::task::spawn_blocking(move || {
         if active.store.set_favorite(media_id, favorite)? {
-            changed();
+            local_changed();
         }
         Ok(())
     })
@@ -713,6 +727,7 @@ pub async fn set_favorite(media_id: String, favorite: bool) -> Result<(), String
 
 pub async fn close_library() -> Result<(), String> {
     tokio::task::spawn_blocking(|| {
+        super::cloud_auto_sync::stop();
         if let Some(active) = global().lock().map_err(|_| "LibraryUnavailable")?.take() {
             active.store.mark_closed();
             active.closed.store(true, Ordering::Release);

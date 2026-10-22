@@ -11,7 +11,7 @@
 ## 升级行为
 
 - 正常打开时取得图库实例锁，通过 SQLite backup API 将包含已提交 WAL 数据的一致备份写入图库 `backups/`。备份文件名包含旧版本、目标版本、时间与唯一 ID；权限为 0600。备份失败则不开始升级。
-- 支持 v1/v2 → v3。v1 补齐 `media.original_uri`、`media.trashed_at_ms`；补齐偏好、相册偏好、媒体详情、文件发布记录、排除目录和待清理记录等表及相关索引。
+- 支持 v1–v6 → v7。v1 补齐 `media.original_uri`、`media.trashed_at_ms`；补齐偏好、相册偏好、媒体详情、文件发布记录、排除目录和待清理记录等表及相关索引。v5/v6/v7 依次补齐通用元数据义务、多账号上传范围和内容/删除义务。
 - 将旧 `app_settings` 的主题、材质与语言转入 `local_preferences`；已有新偏好不覆盖。旧 `plain` 材质归一为 `auto`，`zh-CN`/`en-US` 等语言值转为客户端支持的语言代码。
 - 结构修改、偏好转换、外键校验、迁移记录和版本更新处于同一个事务。失败会回滚并保留备份；不会删除或重新生成图库身份、原有媒体记录、收藏及相册关系。升级代码不改写原始照片。
 - 已是当前版本的图库直接打开，不重复升级或生成备份；比当前客户端更新的版本返回 `SchemaTooNew`，不自动降级或清库。
@@ -39,3 +39,11 @@ dev、release 和人工验证均使用真实桌面、用户文件及真实设置
 v4 没有保存用户当次编辑事件，不能恢复精确的历史修改时间。对于既有 dirty 行，迁移使用该行最后记录的更新时间、安装来源和新迁移事件 ID，保留待办；后续新修改均使用实际本地编辑事件。既有未完成新增保留 `dirty=1`。
 
 定向覆盖 v1/v2/v3 数据与偏好保留、v4 dirty/账号/token/绑定保留、备份原版本、升级失败回滚、备份失败不写库及首次初始化中断恢复。未来版本写保护另做定向检查；不运行全量用例。
+
+## 2026-10-22：v5/v6 → v7
+
+v6 补齐多账号与上传范围：`cloud_accounts` 增加 `upload_scope`、`is_active` 与唯一活动账号索引，`cloud_bindings` 增加远端元数据事件列，新增 `cloud_upload_albums`。
+
+v7 补齐内容替换与永久删除义务：`media_sync_state` 增加 `path_dirty`、内容与删除各自的版本/确认版本/编辑时间/来源/事件列；`cloud_metadata_operations` 增加 `is_trashed`；新增 `cloud_content_operations`（冻结 generation、条件 revision、原图/缩略图摘要与捕获版本）和 `cloud_delete_operations`（冻结两记录 revision、删除事件与捕获版本）。元数据与内容共享 `dirty=2` 但版本独立，永久删除使用 `dirty=4` 并保留本地墓碑直到云端确认。
+
+升级继续先备份再在单个事务中执行表变更、数据迁移和外键校验。v6 已由真实图库升级验证：备份为 `backups/library-v5-before-v6-1792668540858-5e3e4b9b-6f23-41bf-b4b6-3ca4998bca26.sqlite`。v7 在真实图库启动 Release 时完成升级：`user_version=7`，新表存在，备份为 `backups/library-v6-before-v7-1792674724831-27b533e6-ab26-4f39-ae15-9f6ca055215f.sqlite`；原有照片、绑定和账号保留。定向迁移用例覆盖 v1/v2/v3/v4/v6 到 v7 的数据保留、备份与失败回滚，不运行全量用例。

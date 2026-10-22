@@ -171,13 +171,13 @@ class AppStrings {
   String confirmPurgeTitle(int n) =>
       pick('彻底删除 $n 项？', 'Delete $n item(s) permanently?');
   String get confirmPurgeBody => pick(
-    '此操作无法撤销，文件将从磁盘删除。',
-    'This cannot be undone. The files are removed from disk.',
+    '此操作无法撤销，文件将从磁盘删除；已同步的照片也会从云端删除。',
+    'This cannot be undone. Files are removed from disk, and synced photos are also deleted from the cloud.',
   );
   String get confirmEmptyTrashTitle => pick('清空回收站？', 'Empty trash?');
   String get confirmEmptyTrashBody => pick(
-    '回收站中的所有照片都会被彻底删除，无法撤销。',
-    'Every photo in trash is removed from disk. This cannot be undone.',
+    '回收站中的所有照片都会被彻底删除，无法撤销；已同步的照片也会从云端删除。',
+    'Every photo in trash is removed from disk and synced photos are also deleted from the cloud. This cannot be undone.',
   );
   String get actionFailed => pick('操作失败，请重试。', 'The action failed. Try again.');
   String trashedCount(int n) =>
@@ -238,8 +238,8 @@ class AppStrings {
   String get cloudSyncNow => pick('立即同步', 'Sync now');
   String get cloudAutoSync => pick('自动同步', 'Auto sync');
   String get cloudAutoSyncHint => pick(
-    '打开后立即同步一次，并在之后应用启动时自动同步；关闭时只在你点击“立即同步”时同步。',
-    'Turning this on syncs once right away and again at each app start; when off, syncing only happens when you press "Sync now".',
+    '打开后立即同步一次；之后本地照片、收藏或相册发生变化时，停止变更 10 秒后自动同步；应用启动时也会同步。关闭时只在你点击“立即同步”时同步。',
+    'Turning this on syncs once right away, again 10 seconds after local photos, favorites or albums change, and at each app start; when off, syncing only happens when you press "Sync now".',
   );
   String get cloudAutoSyncNeedsSignIn =>
       pick('登录后可开启自动同步。', 'Sign in to enable auto sync.');
@@ -251,7 +251,7 @@ class AppStrings {
   String cloudUploadLiveProgress(int done, int total) =>
       pick('正在上传中，已上传 $done/$total', 'Uploading… $done/$total uploaded');
   String cloudFavoriteLiveProgress(int done, int total) =>
-      pick('正在同步收藏，已同步 $done/$total', 'Syncing favorites… $done/$total');
+      pick('正在同步更改，已同步 $done/$total', 'Syncing changes… $done/$total');
   String indexingProgress(int done, int total) =>
       pick('正在索引中 $done/$total', 'Indexing $done/$total');
   String indexedProgress(int done, int total) =>
@@ -329,10 +329,6 @@ class AppStrings {
   String get cloudSignedOut => pick(
     '云同步未登录，请先在设置中登录。',
     'Cloud sync is signed out. Sign in from Settings.',
-  );
-  String get cloudReadOnly => pick(
-    '云端照片为只读，可收藏、复制或导出。',
-    'Cloud photos are read-only. You can favorite, copy or export them.',
   );
   String get cloudUpload => pick('上传到云端', 'Upload to cloud');
   String get cloudUploadQueued => pick('已加入上传队列', 'Added to the upload queue');

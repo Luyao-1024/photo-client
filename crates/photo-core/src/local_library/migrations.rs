@@ -1,7 +1,7 @@
 //! Additive catalog upgrades. Originals and catalog identities stay intact.
 use super::{
-    ACCOUNT_SCHEMA, CLOUD_SCHEMA, EXTENSIONS, METADATA_SCHEMA, SCHEMA, SCHEMA_VERSION, error,
-    now_ms,
+    ACCOUNT_SCHEMA, CLOUD_SCHEMA, EXTENSIONS, METADATA_SCHEMA, SCHEMA, SCHEMA_VERSION,
+    SYNC_OBLIGATION_SCHEMA, error, now_ms,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
@@ -50,7 +50,7 @@ pub(super) fn upgrade(
     root: &Path,
     version: i64,
 ) -> Result<(), String> {
-    if !matches!(version, 1 | 2 | 3 | 4 | 5) {
+    if !matches!(version, 1 | 2 | 3 | 4 | 5 | 6) {
         return Err("SchemaUpgradeRequired".into());
     }
     backup(connection, root, version)?;
@@ -76,6 +76,9 @@ pub(super) fn upgrade(
     if !has_column(&tx, "media_details", "hdr")? {
         tx.execute_batch("ALTER TABLE media_details ADD COLUMN hdr INTEGER NOT NULL DEFAULT 0")
             .map_err(error)?;
+    }
+    if !has_column(&tx, "media_sync_state", "content_version")? {
+        tx.execute_batch(SYNC_OBLIGATION_SCHEMA).map_err(error)?;
     }
 
     let (theme, glass, locale): (String, String, String) = tx
@@ -126,7 +129,8 @@ pub(super) fn upgrade(
                         EXTENSIONS,
                         CLOUD_SCHEMA,
                         METADATA_SCHEMA,
-                        ACCOUNT_SCHEMA
+                        ACCOUNT_SCHEMA,
+                        SYNC_OBLIGATION_SCHEMA
                     ]
                     .concat()
                     .as_bytes()

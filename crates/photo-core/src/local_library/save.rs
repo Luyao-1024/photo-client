@@ -141,9 +141,6 @@ impl LocalLibrary {
         expected_version: Option<u64>,
     ) -> Result<LocalPhoto, String> {
         let _mutation = self.mutation_guard()?;
-        if self.cloud_media_read_only(id.clone())? {
-            return Err("CloudMediaReadOnly".into());
-        }
         if adjustments.is_identity() {
             return Err("NoEdits".into());
         }
@@ -338,6 +335,9 @@ impl LocalLibrary {
             }else{
                 tx.execute("UPDATE media SET size_bytes=?3,modified_ns=?4,content_version=content_version+1,width=?5,height=?6,orientation=1 WHERE library_id=?1 AND media_id=?2",params![library,id,published.size as i64,published.modified_ns,w,h]).map_err(error)?;
                 tx.execute("DELETE FROM thumbnails WHERE library_id=?1 AND media_id=?2",params![library,id]).map_err(error)?;
+                if cloud_store::is_bound(&tx,&library,&id)?{
+                    metadata::note_local_content_edit(&tx,&library,&id)?;
+                }
             }
             let _=favorite;
             tools::recount(&tx,&library)?;
@@ -412,9 +412,7 @@ impl LocalLibrary {
             if photo.state != "trashed" {
                 return Err("PhotoNotTrashed".into());
             }
-            if self.cloud_media_read_only(id.clone())? {
-                return Err("CloudMediaReadOnly".into());
-            }
+            let bound = self.cloud_media_bound(id.clone())?;
             let source = PathBuf::from(&photo.path);
             let op = Uuid::new_v4().to_string();
             let stage = source.with_file_name(format!(".photo-client-purge-{op}"));
@@ -424,10 +422,10 @@ impl LocalLibrary {
             let source_uri = photo.path.clone();
             let stage_uri = stage.to_string_lossy().into_owned();
             self.execute(move|c|{c.execute("INSERT INTO pending_purges(library_id,operation_id,media_id,source_uri,staged_uri) VALUES(?1,?2,?3,?4,?5)",params![library,operation,media_id,source_uri,stage_uri]).map_err(error)?;Ok(())})?;
-            prepared.push((id, op, source, stage));
+            prepared.push((id, op, source, stage, bound));
         }
         let mut rollback = super::system_trash::FileRollback::new();
-        for (_, _, source, stage) in &prepared {
+        for (_, _, source, stage, _) in &prepared {
             if source.exists() {
                 fs::rename(source, stage).map_err(error)?;
                 rollback.moves.push((source.clone(), stage.clone()));
@@ -436,23 +434,28 @@ impl LocalLibrary {
         let library = self.library_id.clone();
         let entries = prepared
             .iter()
-            .map(|(id, op, _, _)| (id.clone(), op.clone()))
+            .map(|(id, op, _, _, bound)| (id.clone(), op.clone(), *bound))
             .collect::<Vec<_>>();
         self.execute(move|c|{let tx=c.transaction().map_err(error)?;
-            for(id,op)in entries{
+            for(id,op,bound)in entries{
                 tx.execute("DELETE FROM file_publications WHERE library_id=?1 AND operation_id IN(SELECT operation_id FROM file_operations WHERE library_id=?1 AND media_id=?2)",params![library,id]).map_err(error)?;
                 for table in ["thumbnails","album_members","file_operations","edit_projects","library_memberships"]{
                     if table=="edit_projects"{tx.execute("DELETE FROM edit_steps WHERE library_id=?1 AND edit_id IN(SELECT edit_id FROM edit_projects WHERE library_id=?1 AND media_id=?2)",params![library,id]).map_err(error)?;}
                     tx.execute(&format!("DELETE FROM {table} WHERE library_id=?1 AND media_id=?2"),params![library,id]).map_err(error)?;
                 }
-                tx.execute("DELETE FROM media WHERE library_id=?1 AND media_id=?2",params![library,id]).map_err(error)?;
+                if bound {
+                    metadata::note_local_delete(&tx,&library,&id)?;
+                    tx.execute("UPDATE media SET state='missing',original_uri=NULL,trashed_at_ms=NULL WHERE library_id=?1 AND media_id=?2",params![library,id]).map_err(error)?;
+                }else{
+                    tx.execute("DELETE FROM media WHERE library_id=?1 AND media_id=?2",params![library,id]).map_err(error)?;
+                }
                 tx.execute("UPDATE pending_purges SET committed=1 WHERE library_id=?1 AND operation_id=?2",params![library,op]).map_err(error)?;
             }
             tools::recount(&tx,&library)?;tx.commit().map_err(error)
         })?;
         rollback.committed = true;
         let count = prepared.len() as u64;
-        for (_, op, source, stage) in prepared {
+        for (_, op, source, stage, _) in prepared {
             if stage.exists() {
                 fs::remove_file(stage).map_err(error)?;
             }

@@ -20,7 +20,6 @@ class CloudSyncState {
     this.autoSync = false,
     this.status = const CloudStatus(),
     this.boundIds = const <String>{},
-    this.protectedIds = const <String>{},
     this.errorCode,
     this.report,
   });
@@ -39,15 +38,11 @@ class CloudSyncState {
 
   /// Bound photos of the active account.
   final Set<String> boundIds;
-
-  /// Bound photos of every saved account; they stay read-only.
-  final Set<String> protectedIds;
   final String? errorCode;
   final CloudSyncReport? report;
 
   bool get loggedIn => status.loggedIn;
   bool isBound(String mediaId) => boundIds.contains(mediaId);
-  bool isProtected(String mediaId) => protectedIds.contains(mediaId);
 
   CloudSyncState copyWith({
     bool? available,
@@ -57,7 +52,6 @@ class CloudSyncState {
     bool? autoSync,
     CloudStatus? status,
     Set<String>? boundIds,
-    Set<String>? protectedIds,
     String? errorCode,
     bool clearError = false,
     CloudSyncReport? report,
@@ -69,7 +63,6 @@ class CloudSyncState {
     autoSync: autoSync ?? this.autoSync,
     status: status ?? this.status,
     boundIds: boundIds ?? this.boundIds,
-    protectedIds: protectedIds ?? this.protectedIds,
     errorCode: clearError ? null : errorCode ?? this.errorCode,
     report: report ?? this.report,
   );
@@ -82,6 +75,7 @@ class CloudSyncController extends Notifier<CloudSyncState> {
   CloudSyncGateway? _gateway;
   bool _disposed = false;
   bool _started = false;
+  bool _autoSyncing = false;
   Future<void>? _loading;
   Timer? _statusTicker;
 
@@ -113,6 +107,13 @@ class CloudSyncController extends Notifier<CloudSyncState> {
       },
       fireImmediately: true,
     );
+    ref.listen<String?>(runtimeProvider.select((view) => view.runtimeStatus), (
+      previous,
+      next,
+    ) {
+      if (next == 'cloud_auto_sync_started') _beginAutoSync();
+      if (next == 'cloud_auto_sync_finished') _endAutoSync();
+    });
     if (_gateway == null) {
       return const CloudSyncState(available: false, loading: false);
     }
@@ -148,14 +149,12 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     try {
       final status = await gateway.cloudStatus();
       final bound = await gateway.cloudBoundMediaIds();
-      final protected = await gateway.cloudProtectedMediaIds();
       final autoSync = await _readAutoSync();
       if (_disposed) return;
       state = state.copyWith(
         loading: false,
         status: status,
         boundIds: bound.toSet(),
-        protectedIds: protected.toSet(),
         autoSync: autoSync,
         clearError: true,
       );
@@ -217,14 +216,12 @@ class CloudSyncController extends Notifier<CloudSyncState> {
         password: password,
       );
       final bound = await gateway.cloudBoundMediaIds();
-      final protected = await gateway.cloudProtectedMediaIds();
       if (_disposed) return null;
       state = state.copyWith(
         busy: false,
         loading: false,
         status: status,
         boundIds: bound.toSet(),
-        protectedIds: protected.toSet(),
         clearError: true,
       );
       // Signing in answers with the session, not with a download. The grid is
@@ -268,17 +265,20 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     try {
       final status = await gateway.cloudSwitchAccount(accountId);
       final bound = await gateway.cloudBoundMediaIds();
-      final protected = await gateway.cloudProtectedMediaIds();
       if (_disposed) return null;
       state = state.copyWith(
         busy: false,
         loading: false,
         status: status,
         boundIds: bound.toSet(),
-        protectedIds: protected.toSet(),
         clearError: true,
       );
       await _refreshLibrary();
+      // Switching accounts is a configuration change: the selected account
+      // starts its own sweep, but only when automatic syncing is on.
+      if (!_disposed && state.autoSync && state.loggedIn) {
+        unawaited(syncNow());
+      }
       return null;
     } catch (error) {
       final code = cloudErrorCode(error);
@@ -296,14 +296,12 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     try {
       final status = await gateway.cloudRemoveAccount(accountId);
       final bound = await gateway.cloudBoundMediaIds();
-      final protected = await gateway.cloudProtectedMediaIds();
       if (_disposed) return null;
       state = state.copyWith(
         busy: false,
         loading: false,
         status: status,
         boundIds: bound.toSet(),
-        protectedIds: protected.toSet(),
         clearError: true,
       );
       await _refreshLibrary();
@@ -327,6 +325,11 @@ class CloudSyncController extends Notifier<CloudSyncState> {
       final status = await gateway.cloudSetUploadScope(mode, albums);
       if (_disposed) return null;
       state = state.copyWith(busy: false, status: status, clearError: true);
+      // An accepted scope is a standing obligation: enroll it now instead of
+      // waiting for the next unrelated trigger.
+      if (state.autoSync && state.loggedIn) {
+        unawaited(syncNow());
+      }
       return null;
     } catch (error) {
       final code = cloudErrorCode(error);
@@ -351,14 +354,12 @@ class CloudSyncController extends Notifier<CloudSyncState> {
       final report = await gateway.cloudSyncNow();
       final status = await gateway.cloudStatus();
       final bound = await gateway.cloudBoundMediaIds();
-      final protected = await gateway.cloudProtectedMediaIds();
       if (_disposed) return report;
       state = state.copyWith(
-        busy: false,
+        busy: _autoSyncing,
         loading: false,
         status: status,
         boundIds: bound.toSet(),
-        protectedIds: protected.toSet(),
         report: report,
         clearError: report.errorCode == null,
         errorCode: report.errorCode,
@@ -368,12 +369,59 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     } catch (error) {
       final code = cloudErrorCode(error);
       if (!_disposed) {
-        state = state.copyWith(busy: false, errorCode: code);
+        state = state.copyWith(busy: _autoSyncing, errorCode: code);
       }
       return null;
     } finally {
-      _stopStatusTicker();
-      if (!_disposed) state = state.copyWith(syncRunning: false);
+      if (!_autoSyncing) {
+        _stopStatusTicker();
+        if (!_disposed) state = state.copyWith(syncRunning: false);
+      }
+    }
+  }
+
+  /// The native local-change scheduler only starts this after a 10-second
+  /// quiet period following an actual local write. There is no idle poll.
+  void _beginAutoSync() {
+    if (_disposed || _gateway == null || _autoSyncing) return;
+    _autoSyncing = true;
+    state = state.copyWith(busy: true, syncRunning: true, clearError: true);
+    _startStatusTicker();
+    unawaited(_refreshStatus());
+  }
+
+  void _endAutoSync() {
+    if (_disposed || !_autoSyncing) return;
+    _autoSyncing = false;
+    _stopStatusTicker();
+    unawaited(_refreshAfterAutoSync());
+  }
+
+  Future<void> _refreshAfterAutoSync() async {
+    final gateway = _gateway;
+    if (gateway == null || _disposed) return;
+    try {
+      final status = await gateway.cloudStatus();
+      final bound = await gateway.cloudBoundMediaIds();
+      if (_disposed) return;
+      state = state.copyWith(
+        busy: false,
+        loading: false,
+        syncRunning: false,
+        status: status,
+        boundIds: bound.toSet(),
+        clearError: status.errorCode == null,
+        errorCode: status.errorCode,
+      );
+      await _refreshLibrary();
+    } catch (error) {
+      if (!_disposed) {
+        state = state.copyWith(
+          busy: false,
+          syncRunning: false,
+          errorCode: cloudErrorCode(error),
+        );
+      }
     }
   }
 
@@ -399,6 +447,9 @@ class CloudSyncController extends Notifier<CloudSyncState> {
       final status = await gateway.cloudStatus();
       if (_disposed) return;
       state = state.copyWith(status: status);
+      // The native side emits a finish event, but a missed event must not
+      // leave the automatic-sync controls disabled forever.
+      if (_autoSyncing && !status.syncing) _endAutoSync();
     } catch (_) {
       // A failed status read never disturbs the sweep it observes.
     }

@@ -9,6 +9,7 @@ pub struct MetadataMutation {
     pub photo_id: String,
     pub record_revision: String,
     pub metadata: PhotoMetadata,
+    pub is_trashed: bool,
     pub event: EditEvent,
 }
 
@@ -26,6 +27,7 @@ pub fn validate_metadata_confirmation(
         || record.int64("isFavorite") != Some(i64::from(mutation.metadata.is_favorite))
         || record.string("relativePath") != Some(mutation.metadata.relative_path.as_str())
         || record.int64("isHidden") != Some(i64::from(mutation.metadata.is_hidden))
+        || record.int64("isTrashed").unwrap_or(0) != i64::from(mutation.is_trashed)
         || record.int64("assetDate") != mutation.metadata.asset_date_ms
     {
         return Err(Error::Protocol(
@@ -86,6 +88,10 @@ pub async fn update_metadata(
             (
                 "isHidden".into(),
                 Some(Field::int64(i64::from(metadata.is_hidden))),
+            ),
+            (
+                "isTrashed".into(),
+                Some(Field::int64(i64::from(mutation.is_trashed))),
             ),
             (
                 "assetDate".into(),

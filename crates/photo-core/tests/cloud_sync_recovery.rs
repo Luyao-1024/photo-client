@@ -88,6 +88,7 @@ async fn freeze_metadata(fixture: &Fixture, photo: &sdk::RemotePhoto) -> sdk::Me
         photo_id: photo.photo_id.clone(),
         record_revision: photo.asset_revision.clone(),
         metadata,
+        is_trashed: false,
         event: sdk::EditEvent {
             edited_at_ms: time,
             source,

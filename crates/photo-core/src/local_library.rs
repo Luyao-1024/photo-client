@@ -17,13 +17,16 @@ const EXTENSIONS: &str = include_str!("storage/local-v3.sql");
 const CLOUD_SCHEMA: &str = include_str!("storage/local-v4.sql");
 const METADATA_SCHEMA: &str = include_str!("storage/local-v5.sql");
 const ACCOUNT_SCHEMA: &str = include_str!("storage/local-v6.sql");
-const SCHEMA_VERSION: i64 = 6;
+const SYNC_OBLIGATION_SCHEMA: &str = include_str!("storage/local-v7.sql");
+const SCHEMA_VERSION: i64 = 7;
 mod cloud_store;
+mod media_sync;
 mod metadata;
 pub(crate) use cloud_store::{
     CloudAccount, CloudBinding, CloudBindingMedia, CloudBindingUpdate, CloudQueueCounts,
     CloudUpload, CloudUploadIntent, RemoteMediaInput, StoredCloudRecord,
 };
+pub(crate) use media_sync::{IssuedContent, IssuedDelete};
 mod migrations;
 mod save;
 mod system_trash;
@@ -189,6 +192,9 @@ impl LocalLibrary {
             transaction.execute_batch(CLOUD_SCHEMA).map_err(error)?;
             transaction.execute_batch(METADATA_SCHEMA).map_err(error)?;
             transaction.execute_batch(ACCOUNT_SCHEMA).map_err(error)?;
+            transaction
+                .execute_batch(SYNC_OBLIGATION_SCHEMA)
+                .map_err(error)?;
             let installation_id = Uuid::new_v4().to_string();
             let library_id = Uuid::new_v4().to_string();
             transaction
@@ -217,7 +223,8 @@ impl LocalLibrary {
                                     EXTENSIONS,
                                     CLOUD_SCHEMA,
                                     METADATA_SCHEMA,
-                                    ACCOUNT_SCHEMA
+                                    ACCOUNT_SCHEMA,
+                                    SYNC_OBLIGATION_SCHEMA
                                 ]
                                 .concat()
                                 .as_bytes()
@@ -659,9 +666,7 @@ impl LocalLibrary {
                 if state != "active" {
                     continue;
                 }
-                if cloud_store::is_bound(&tx, &library, &media_id)? {
-                    return Err("CloudMediaReadOnly".into());
-                }
+                let bound = cloud_store::is_bound(&tx, &library, &media_id)?;
                 let source = PathBuf::from(&source_uri);
                 if !source.is_file() {
                     return Err("SourceUnavailable".into());
@@ -682,6 +687,9 @@ impl LocalLibrary {
                     params![library, media_id, destination_uri, parent, now_ms()],
                 )
                 .map_err(error)?;
+                if bound {
+                    metadata::note_local_edit(&tx, &library, &media_id)?;
+                }
                 moved += 1;
                 if favorite {
                     favorite_delta += 1;
@@ -727,6 +735,7 @@ impl LocalLibrary {
                 let Some(original_uri) = original_uri else {
                     return Err("RestoreTargetMissing".into());
                 };
+                let bound = cloud_store::is_bound(&tx, &library, &media_id)?;
                 let source = PathBuf::from(&trash_uri);
                 let original = PathBuf::from(&original_uri);
                 let parent = original.parent().ok_or("RestoreTargetMissing")?;
@@ -751,6 +760,9 @@ impl LocalLibrary {
                     params![library, media_id, destination_uri, parent_uri,destination.file_name().unwrap_or_default().to_string_lossy()],
                 )
                 .map_err(error)?;
+                if bound {
+                    metadata::note_local_edit(&tx, &library, &media_id)?;
+                }
                 restored += 1;
                 if favorite {
                     favorite_delta += 1;
@@ -843,9 +855,7 @@ impl LocalLibrary {
                 if state != "active" {
                     continue;
                 }
-                if move_files && cloud_store::is_bound(&tx, &library, &media_id)? {
-                    return Err("CloudMediaReadOnly".into());
-                }
+                let bound = move_files && cloud_store::is_bound(&tx, &library, &media_id)?;
                 if move_files && parent_uri == target_uri {
                     continue;
                 }
@@ -874,6 +884,9 @@ impl LocalLibrary {
                         params![library, media_id, target_source, destination_uri, destination_name, target_uri],
                     )
                     .map_err(error)?;
+                    if bound {
+                        metadata::note_local_path_edit(&tx, &library, &media_id)?;
+                    }
                 } else {
                     let size = i64::try_from(size_bytes).map_err(|_| "FileTooLarge")?;
                     let content_version = i64::try_from(content_version).map_err(|_| "VersionOutOfRange")?;
@@ -932,9 +945,6 @@ impl LocalLibrary {
             let Some(source_uri) = row else {
                 return Err("PhotoNotFound".into());
             };
-            if cloud_store::is_bound(c, &library, &media_id)? {
-                return Err("CloudMediaReadOnly".into());
-            }
             let source = PathBuf::from(&source_uri);
             let parent = source.parent().ok_or("SourceUnavailable")?;
             let destination = unique_destination(parent, &requested)?;
@@ -959,6 +969,9 @@ impl LocalLibrary {
                 [&library],
             )
             .map_err(error)?;
+            if cloud_store::is_bound(&tx, &library, &media_id)? {
+                metadata::note_local_path_edit(&tx, &library, &media_id)?;
+            }
             tx.commit().map_err(error)?;
             rollback.committed=true;
             c.query_row(

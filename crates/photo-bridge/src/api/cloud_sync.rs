@@ -320,6 +320,63 @@ pub async fn cloud_sync_now() -> Result<CloudSyncReportView, String> {
     Ok(report_view(report))
 }
 
+/// One unattended sweep, requested by the local-change scheduler after its
+/// quiet period. It never runs without durable work, and a failure is not
+/// retried on a timer: only another local change can ask again.
+pub(super) async fn run_auto_sync(
+    library: photo_core::local_library::LocalLibrary,
+) -> Result<bool, String> {
+    let engine = CloudEngine::new(library.clone());
+    if !engine.auto_sync_enabled()? || !engine.auto_sync_needed()? {
+        return Ok(false);
+    }
+    // A manual sweep may be running. Re-check after taking the same lock so a
+    // change that was already caught up by it does not cause a second sweep.
+    let _guard = lock().await;
+    let engine = CloudEngine::new(library);
+    if !engine.auto_sync_enabled()? || !engine.auto_sync_needed()? {
+        return Ok(false);
+    }
+    begin_activity();
+    let _ = super::bootstrap::runtime().notify("cloud_auto_sync_started");
+    eprintln!("cloud_auto_sync phase=start trigger=local_change");
+    let engine = engine
+        .with_change_observer(changed)
+        .with_progress(apply_progress);
+    let report = engine.sync_now().await;
+    changed();
+    let (state, error) = match &report {
+        Ok(report) => (
+            if report.error_code.is_some() {
+                "error"
+            } else {
+                "idle"
+            },
+            report.error_code.clone(),
+        ),
+        Err(error) => ("error", Some(error.clone())),
+    };
+    end_activity(state, error);
+    let _ = super::bootstrap::runtime().notify("cloud_auto_sync_finished");
+    match report {
+        Ok(report) => {
+            eprintln!(
+                "cloud_auto_sync phase=finish downloaded={} uploaded={} favorites={} failed={} status={}",
+                report.downloaded,
+                report.uploaded,
+                report.favorites_applied + report.favorites_uploaded,
+                report.failed,
+                report.state
+            );
+            Ok(true)
+        }
+        Err(error) => {
+            eprintln!("cloud_auto_sync phase=error error={error}");
+            Err(error)
+        }
+    }
+}
+
 /// Queueing only writes durable intents; the Flutter side then calls syncNow.
 pub async fn cloud_queue_upload(media_ids: Vec<String>) -> Result<CloudQueueResultView, String> {
     let _guard = lock().await;

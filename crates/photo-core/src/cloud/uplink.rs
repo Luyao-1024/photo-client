@@ -5,9 +5,17 @@ use std::path::PathBuf;
 use syncserver_client as sdk;
 
 use super::*;
-use crate::local_library::{CloudBinding, CloudUpload};
+use crate::local_library::{CloudBinding, CloudUpload, IssuedContent, IssuedDelete};
 
 const THUMBNAIL_LIMIT: u64 = 2 * 1024 * 1024;
+
+fn missing_remote(error: &sdk::Error) -> bool {
+    match error {
+        sdk::Error::NotFound(_) => true,
+        sdk::Error::InBand(failure) => failure.code == "UNKNOWN_ITEM",
+        _ => false,
+    }
+}
 
 struct Staging(PathBuf);
 impl Drop for Staging {
@@ -28,9 +36,13 @@ impl CloudEngine {
         let pending = store(self.library.cloud_pending_uploads(account_id.clone()))?;
         let dirty: Vec<CloudBinding> =
             store(self.library.cloud_dirty_bindings(account_id.clone()))?;
-        report.upload_total = pending.len() as u32;
+        let content: Vec<CloudBinding> =
+            store(self.library.cloud_content_bindings(account_id.clone()))?;
+        let deletes: Vec<CloudBinding> =
+            store(self.library.cloud_delete_bindings(account_id.clone()))?;
+        report.upload_total = (pending.len() + content.len() + deletes.len()) as u32;
         report.favorite_total = dirty.len() as u32;
-        if pending.is_empty() && dirty.is_empty() {
+        if pending.is_empty() && dirty.is_empty() && content.is_empty() && deletes.is_empty() {
             self.notify("uploading", report);
             return Ok(());
         }
@@ -50,12 +62,22 @@ impl CloudEngine {
             Err(error) => return Err(sdk_code(&error)),
         };
         let outcome = self
-            .drive_upload(session, &lease, &applied_token, &pending, &dirty, report)
+            .drive_upload(
+                session,
+                &lease,
+                &applied_token,
+                &pending,
+                &dirty,
+                &content,
+                &deletes,
+                report,
+            )
             .await;
         let _ = lease.release().await;
         outcome
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn drive_upload(
         &self,
         session: &CloudSession,
@@ -63,6 +85,8 @@ impl CloudEngine {
         applied_token: &str,
         pending: &[CloudUpload],
         dirty: &[CloudBinding],
+        content: &[CloudBinding],
+        deletes: &[CloudBinding],
         report: &mut CloudSyncReport,
     ) -> Result<(), String> {
         let check = lease
@@ -74,6 +98,24 @@ impl CloudEngine {
         }
         let mut phase = lease.phase().ok_or("NotCurrent")?;
         if phase == sdk::UploadPhase::Delete {
+            for batch in deletes.chunks(20) {
+                let before = report.uploaded;
+                let failed = report.failed;
+                self.delete_photos(session, lease, batch, report).await?;
+                eprintln!(
+                    "cloud_uplink_batch kind=deletes items={} uploaded={} failed={} status={}",
+                    batch.len(),
+                    report.uploaded - before,
+                    report.failed - failed,
+                    if report.failed == failed {
+                        "complete"
+                    } else {
+                        "partial"
+                    }
+                );
+                self.notify("uploading", report);
+                tokio::task::yield_now().await;
+            }
             phase = lease
                 .advance_phase()
                 .await
@@ -81,6 +123,24 @@ impl CloudEngine {
                 .ok_or("Protocol")?;
         }
         if phase == sdk::UploadPhase::Modify {
+            for batch in content.chunks(5) {
+                let before = report.uploaded;
+                let failed = report.failed;
+                self.upload_content(session, lease, batch, report).await?;
+                eprintln!(
+                    "cloud_uplink_batch kind=content items={} uploaded={} failed={} status={}",
+                    batch.len(),
+                    report.uploaded - before,
+                    report.failed - failed,
+                    if report.failed == failed {
+                        "complete"
+                    } else {
+                        "partial"
+                    }
+                );
+                self.notify("uploading", report);
+                tokio::task::yield_now().await;
+            }
             for batch in dirty.chunks(20) {
                 let before = report.favorites_uploaded;
                 let failed = report.failed;
@@ -270,6 +330,465 @@ impl CloudEngine {
             }
         }
         Ok(())
+    }
+
+    async fn delete_photos(
+        &self,
+        session: &CloudSession,
+        lease: &sdk::UploadLease,
+        bindings: &[CloudBinding],
+        report: &mut CloudSyncReport,
+    ) -> Result<(), String> {
+        let account = session.account.account_id.clone();
+        for binding in bindings {
+            if self.library.is_closed() {
+                return Err("LibraryClosed".into());
+            }
+            if !lease.is_held() {
+                return Err("LeaseLost".into());
+            }
+            let mut issued = store(
+                self.library
+                    .cloud_issued_delete(account.clone(), binding.photo_id.clone()),
+            )?;
+            let mut handled = false;
+            for attempt in 0..2 {
+                if issued.is_none() {
+                    match session
+                        .connection
+                        .fetch_photo(&session.zone, &binding.photo_id)
+                        .await
+                    {
+                        Ok(remote) => {
+                            issued = store(self.library.cloud_issue_delete(
+                                account.clone(),
+                                &remote,
+                                session.zone.clone(),
+                            ))?;
+                            if issued.is_none() {
+                                break;
+                            }
+                        }
+                        Err(error) if missing_remote(&error) => {
+                            store(self.library.cloud_confirm_absent_delete(
+                                account.clone(),
+                                binding.photo_id.clone(),
+                            ))?;
+                            report.uploaded += 1;
+                            handled = true;
+                            break;
+                        }
+                        Err(error) => {
+                            let code = sdk_code(&error);
+                            super::note_failure(report, &code);
+                            if super::fatal(&code) {
+                                return Err(code);
+                            }
+                            break;
+                        }
+                    }
+                }
+                let Some(current) = issued.clone() else {
+                    break;
+                };
+                let outcome = match session
+                    .connection
+                    .operation_status(&current.operation_id)
+                    .await
+                {
+                    Ok(sdk::OperationState::Committed(_)) => Ok(()),
+                    Ok(sdk::OperationState::Pending(_)) => {
+                        report.skipped += 1;
+                        break;
+                    }
+                    Ok(sdk::OperationState::Unknown) => {
+                        self.send_delete(session, lease, &current).await
+                    }
+                    Err(error) => Err(error),
+                };
+                match outcome {
+                    Ok(()) => {
+                        store(self.library.cloud_confirm_delete(account.clone(), current))?;
+                        report.uploaded += 1;
+                        handled = true;
+                        break;
+                    }
+                    Err(error) if missing_remote(&error) => {
+                        store(self.library.cloud_confirm_absent_delete(
+                            account.clone(),
+                            binding.photo_id.clone(),
+                        ))?;
+                        report.uploaded += 1;
+                        handled = true;
+                        break;
+                    }
+                    Err(sdk::Error::InBand(failure)) if failure.code == "CONFLICT" => {
+                        store(
+                            self.library
+                                .cloud_forget_delete(account.clone(), current.operation_id),
+                        )?;
+                        issued = None;
+                        if attempt == 1 {
+                            super::note_failure(report, "Conflict");
+                        }
+                    }
+                    Err(error) => {
+                        let code = sdk_code(&error);
+                        super::note_failure(report, &code);
+                        if error.is_lease_lost() || super::fatal(&code) {
+                            return Err(code);
+                        }
+                        break;
+                    }
+                }
+            }
+            if !handled {
+                continue;
+            }
+        }
+        Ok(())
+    }
+
+    async fn send_delete(
+        &self,
+        session: &CloudSession,
+        lease: &sdk::UploadLease,
+        issued: &IssuedDelete,
+    ) -> Result<(), sdk::Error> {
+        let events = sdk::EditEvents {
+            deletion_event: Some(issued.event.clone()),
+            ..sdk::EditEvents::default()
+        };
+        let asset =
+            sdk::RecordOperation::delete(issued.photo_id.clone(), issued.asset_revision.clone())
+                .with_events(events.clone());
+        let master =
+            sdk::RecordOperation::delete(issued.master_id.clone(), issued.master_revision.clone())
+                .with_events(events);
+        let request = sdk::ModifyRequest::new(issued.zone.clone(), vec![asset, master])
+            .idempotency_key(issued.operation_id.clone());
+        let results = session.connection.modify(&lease.proof(), request).await?;
+        if results.len() != 2 {
+            return Err(sdk::Error::Protocol(
+                "delete did not confirm both records".into(),
+            ));
+        }
+        for result in results {
+            if let sdk::RecordResult::Failed(failure) = result {
+                return Err(sdk::Error::InBand(Box::new(failure)));
+            }
+        }
+        Ok(())
+    }
+
+    async fn upload_content(
+        &self,
+        session: &CloudSession,
+        lease: &sdk::UploadLease,
+        bindings: &[CloudBinding],
+        report: &mut CloudSyncReport,
+    ) -> Result<(), String> {
+        let account = session.account.account_id.clone();
+        for binding in bindings {
+            if self.library.is_closed() {
+                return Err("LibraryClosed".into());
+            }
+            if !lease.is_held() {
+                return Err("LeaseLost".into());
+            }
+            let mut issued = store(
+                self.library
+                    .cloud_issued_content(account.clone(), binding.photo_id.clone()),
+            )?;
+            for attempt in 0..2 {
+                let photo = match store(self.library.photo(binding.media_id.clone())) {
+                    Ok(photo) if photo.state == "active" => photo,
+                    _ => {
+                        report.skipped += 1;
+                        break;
+                    }
+                };
+                let mut prepared = None;
+                let current = match issued.clone() {
+                    Some(current) => current,
+                    None => {
+                        let assets = match self.prepare_content_assets(&account, &photo).await {
+                            Ok(assets) => assets,
+                            Err(code) => {
+                                super::note_failure(report, &code);
+                                break;
+                            }
+                        };
+                        let remote = match session
+                            .connection
+                            .fetch_photo(&session.zone, &binding.photo_id)
+                            .await
+                        {
+                            Ok(remote) => remote,
+                            Err(error) => {
+                                let code = sdk_code(&error);
+                                super::note_failure(report, &code);
+                                if super::fatal(&code) {
+                                    return Err(code);
+                                }
+                                break;
+                            }
+                        };
+                        let generation = Uuid::new_v4().to_string();
+                        let Some(issued_now) = store(self.library.cloud_issue_content(
+                            account.clone(),
+                            &remote,
+                            session.zone.clone(),
+                            generation,
+                            assets.0.digest.hex().to_owned(),
+                            assets.1.digest.hex().to_owned(),
+                        ))?
+                        else {
+                            break;
+                        };
+                        prepared = Some(assets);
+                        issued_now
+                    }
+                };
+                if current.captured_media_version != photo.content_version {
+                    match session
+                        .connection
+                        .operation_status(&current.operation_id)
+                        .await
+                    {
+                        Ok(sdk::OperationState::Committed(_)) => {
+                            if !self
+                                .confirm_content(session, &account, &current, report)
+                                .await?
+                            {
+                                issued = None;
+                                continue;
+                            }
+                            break;
+                        }
+                        Ok(sdk::OperationState::Pending(_)) => {
+                            report.skipped += 1;
+                            break;
+                        }
+                        Ok(sdk::OperationState::Unknown) => {
+                            store(
+                                self.library
+                                    .cloud_forget_content(account.clone(), current.operation_id),
+                            )?;
+                            issued = None;
+                            if attempt == 1 {
+                                super::note_failure(report, "SourceChanged");
+                            }
+                            continue;
+                        }
+                        Err(error) => {
+                            let code = sdk_code(&error);
+                            super::note_failure(report, &code);
+                            if super::fatal(&code) {
+                                return Err(code);
+                            }
+                            break;
+                        }
+                    }
+                }
+                let assets = match prepared {
+                    Some(assets) => assets,
+                    None => match self.prepare_content_assets(&account, &photo).await {
+                        Ok(assets) => assets,
+                        Err(code) => {
+                            super::note_failure(report, &code);
+                            break;
+                        }
+                    },
+                };
+                if assets.0.digest.hex() != current.original_sha256
+                    || assets.1.digest.hex() != current.thumbnail_sha256
+                {
+                    // The captured bytes are no longer reconstructible. Let a
+                    // fresh generation describe the current file.
+                    store(
+                        self.library
+                            .cloud_forget_content(account.clone(), current.operation_id),
+                    )?;
+                    issued = None;
+                    if attempt == 1 {
+                        super::note_failure(report, "SourceChanged");
+                    }
+                    continue;
+                }
+                let outcome =
+                    match session
+                        .connection
+                        .operation_status(&current.operation_id)
+                        .await
+                    {
+                        Ok(sdk::OperationState::Committed(_)) => Ok(true),
+                        Ok(sdk::OperationState::Pending(_)) => {
+                            report.skipped += 1;
+                            break;
+                        }
+                        Ok(sdk::OperationState::Unknown) => {
+                            match session
+                                .connection
+                                .fetch_photo(&session.zone, &binding.photo_id)
+                                .await
+                            {
+                                Ok(remote) => {
+                                    if remote.content_generation == current.content_generation {
+                                        Ok(true)
+                                    } else if remote.content_generation != current.base_generation
+                                        || remote.asset_revision != current.asset_revision
+                                        || remote.master_revision != current.master_revision
+                                    {
+                                        Ok(false)
+                                    } else {
+                                        let update = sdk::PhotoContentUpdate::with_generation(
+                                            current.content_generation.clone(),
+                                            assets.0.clone(),
+                                            assets.1.clone(),
+                                        );
+                                        match session
+                                            .connection
+                                            .update_photo_content(lease, &remote, update)
+                                            .await
+                                        {
+                                            Ok(remote) => Ok(remote.content_generation
+                                                == current.content_generation),
+                                            Err(error) => Err(error),
+                                        }
+                                    }
+                                }
+                                Err(error) => Err(error),
+                            }
+                        }
+                        Err(error) => Err(error),
+                    };
+                match outcome {
+                    Ok(true) => {
+                        if !self
+                            .confirm_content(session, &account, &current, report)
+                            .await?
+                        {
+                            issued = None;
+                            continue;
+                        }
+                        break;
+                    }
+                    Ok(false) => {
+                        // The captured base changed. A new generation will
+                        // describe the bytes that are still on disk.
+                        store(
+                            self.library
+                                .cloud_forget_content(account.clone(), current.operation_id),
+                        )?;
+                        issued = None;
+                        if attempt == 1 {
+                            super::note_failure(report, "Conflict");
+                        }
+                    }
+                    Err(sdk::Error::InBand(failure)) if failure.code == "CONFLICT" => {
+                        store(
+                            self.library
+                                .cloud_forget_content(account.clone(), current.operation_id),
+                        )?;
+                        issued = None;
+                        if attempt == 1 {
+                            super::note_failure(report, "Conflict");
+                        }
+                    }
+                    Err(error) => {
+                        let code = sdk_code(&error);
+                        super::note_failure(report, &code);
+                        if error.is_lease_lost() || super::fatal(&code) {
+                            return Err(code);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn confirm_content(
+        &self,
+        session: &CloudSession,
+        account: &str,
+        issued: &IssuedContent,
+        report: &mut CloudSyncReport,
+    ) -> Result<bool, String> {
+        let remote = match session
+            .connection
+            .fetch_photo(&session.zone, &issued.photo_id)
+            .await
+        {
+            Ok(remote) => remote,
+            Err(error) => {
+                let code = sdk_code(&error);
+                super::note_failure(report, &code);
+                if super::fatal(&code) {
+                    return Err(code);
+                }
+                return Ok(false);
+            }
+        };
+        if remote.content_generation != issued.content_generation {
+            // The captured generation lost to a newer writer. Drop the stale
+            // request so the remaining obligation can describe the file anew.
+            store(
+                self.library
+                    .cloud_forget_content(account.to_owned(), issued.operation_id.clone()),
+            )?;
+            return Ok(false);
+        }
+        store(self.library.cloud_confirm_content(
+            account.to_owned(),
+            issued.clone(),
+            remote.content_generation,
+        ))?;
+        report.uploaded += 1;
+        Ok(true)
+    }
+
+    async fn prepare_content_assets(
+        &self,
+        account_id: &str,
+        photo: &crate::local_library::LocalPhoto,
+    ) -> Result<(sdk::AssetUpload, sdk::AssetUpload, Staging), String> {
+        let library = self.library.clone();
+        let account = account_id.to_owned();
+        let source = photo.clone();
+        let staging = tokio::task::spawn_blocking(move || -> Result<PathBuf, String> {
+            let directory = library.root.join("cloud").join(account).join("staging");
+            paths::private_directory(&directory)?;
+            let destination = directory.join(format!("content-{}.jpg", Uuid::new_v4()));
+            crate::media::prepare_thumbnail(
+                std::path::Path::new(&source.path),
+                source.size_bytes,
+                source.modified_ns,
+                512,
+                &destination,
+            )
+            .map_err(|_| "ThumbnailFailed".to_owned())?;
+            if fs::metadata(&destination).map_err(|_| "Internal")?.len() > THUMBNAIL_LIMIT {
+                let _ = fs::remove_file(&destination);
+                return Err("ThumbnailTooLarge".into());
+            }
+            Ok(destination)
+        })
+        .await
+        .map_err(|_| "Internal".to_owned())??;
+        let mut original =
+            sdk::AssetUpload::from_file(PathBuf::from(&photo.path), photo.mime_type.clone())
+                .await
+                .map_err(|_| "SourceChanged")?;
+        if let (Some(width), Some(height)) = (photo.width, photo.height) {
+            original = original.with_dimensions(width, height);
+        }
+        let thumbnail = sdk::AssetUpload::from_file(staging.clone(), "image/jpeg".to_owned())
+            .await
+            .map_err(|_| "ThumbnailFailed")?;
+        Ok((original, thumbnail, Staging(staging)))
     }
 
     async fn upload_photos(

@@ -13,9 +13,6 @@ abstract interface class CloudSyncGateway {
 
   /// Cloud-bound photos of the active account: badges and upload eligibility.
   Future<List<String>> cloudBoundMediaIds();
-
-  /// Cloud-bound photos of every saved account: read-only protection.
-  Future<List<String>> cloudProtectedMediaIds();
   Future<CloudStatus> cloudSwitchAccount(String accountId);
   Future<CloudStatus> cloudRemoveAccount(String accountId);
   Future<CloudStatus> cloudSetUploadScope(String mode, List<String> albums);

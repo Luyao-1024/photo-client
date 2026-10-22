@@ -184,7 +184,7 @@ void main() {
   testWidgets('editor rotates and overwrites the original on save', (
     tester,
   ) async {
-    final gateway = FakeLocalGateway(imagePath: image, count: 1);
+    final gateway = FakeToolsGateway(imagePath: image, count: 1);
     await mount(tester, gateway);
     await tester.tap(find.byKey(const ValueKey('photo-p0')));
     await tester.pumpAndSettle();
@@ -217,10 +217,10 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
-  testWidgets('cloud-bound photo is read-only in the grid and viewer', (
+  testWidgets('cloud-bound photos stay editable and send every change', (
     tester,
   ) async {
-    final gateway = FakeLocalGateway(imagePath: image, count: 2)
+    final gateway = FakeToolsGateway(imagePath: image, count: 2)
       ..cloudState = const CloudStatus(
         loggedIn: true,
         endpoint: 'http://127.0.0.1:8790',
@@ -236,26 +236,47 @@ void main() {
 
     await tester.longPress(find.byKey(const ValueKey('photo-p0')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('tile-menu-favorite')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tile-menu-rename')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tile-menu-move-album')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tile-menu-trash')), findsOneWidget);
     expect(find.byKey(const ValueKey('photo-upload-cloud')), findsNothing);
-    expect(find.byKey(const ValueKey('tile-menu-rename')), findsNothing);
-    expect(find.byKey(const ValueKey('tile-menu-move-album')), findsNothing);
-    expect(find.byKey(const ValueKey('tile-menu-trash')), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.tap(find.byKey(const ValueKey('tile-menu-rename')));
     await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Renamed.png');
+    await tester.tap(find.byKey(const ValueKey('rename-confirm')));
+    await tester.pumpAndSettle();
+    expect(gateway.renameCalls, 1);
+    expect(gateway.requestedRenames.single, ('p0', 'Renamed.png'));
 
     await tester.tap(find.byKey(const ValueKey('photo-p0')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer')), findsOneWidget);
-    expect(find.byKey(const ValueKey('viewer-edit')), findsNothing);
+    final editButton = tester.widget<IconButton>(
+      find.byKey(const ValueKey('viewer-edit')),
+    );
+    expect(editButton.onPressed, isNotNull);
     final trashButton = tester.widget<IconButton>(
       find.byKey(const ValueKey('viewer-trash')),
     );
-    expect(trashButton.onPressed, isNull);
+    expect(trashButton.onPressed, isNotNull);
+
+    await tester.tap(find.byKey(const ValueKey('viewer-edit')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('editor')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('editor-rotate-right')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('editor-save')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('editor-confirm-overwrite')));
+    await tester.pumpAndSettle();
+    expect(gateway.requestedEdits, hasLength(1));
+
     await tester.sendKeyEvent(LogicalKeyboardKey.delete);
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('viewer-confirm-trash')), findsNothing);
-    expect(gateway.trashCalls, 0);
+    expect(find.byKey(const ValueKey('viewer-confirm-trash')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('viewer-confirm-trash')));
+    await tester.pumpAndSettle();
+    expect(gateway.trashCalls, 1);
     await disposeApp(tester, gateway);
   });
 

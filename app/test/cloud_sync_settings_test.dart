@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/app.dart';
 import 'package:photo_client/services/cloud_sync_gateway.dart';
+import 'package:photo_client/services/core_gateway.dart';
+import 'package:photo_client/services/local_library_gateway.dart';
+import 'package:photo_client/services/local_library_tools.dart';
 
 import 'fakes/local_gateway.dart';
 
@@ -447,4 +450,135 @@ void main() {
     expect(find.text('bob'), findsOneWidget);
     await disposeApp(tester, gateway);
   });
+
+  testWidgets('a background sweep shows progress and settles on its own', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image)
+      ..cloudState = const CloudStatus(
+        loggedIn: true,
+        accountId: 'a1',
+        endpoint: 'http://127.0.0.1:8790',
+        username: 'alice',
+      );
+    await mount(tester, gateway);
+    expect(find.byKey(const ValueKey('cloud-sync-progress')), findsNothing);
+
+    gateway.cloudState = const CloudStatus(
+      loggedIn: true,
+      accountId: 'a1',
+      endpoint: 'http://127.0.0.1:8790',
+      username: 'alice',
+      syncing: true,
+      activity: CloudActivity(
+        phase: 'receiving',
+        syncing: true,
+        downloaded: 1,
+        downloadTotal: 4,
+      ),
+    );
+    gateway.events.add(
+      const CoreRuntimeEvent(sequence: 1, status: 'cloud_auto_sync_started'),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Syncing… 1/4 synced'), findsOneWidget);
+
+    gateway.cloudState = const CloudStatus(
+      loggedIn: true,
+      accountId: 'a1',
+      endpoint: 'http://127.0.0.1:8790',
+      username: 'alice',
+    );
+    gateway.events.add(
+      const CoreRuntimeEvent(sequence: 2, status: 'cloud_auto_sync_finished'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('cloud-sync-progress')), findsNothing);
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('auto sync follows account switches and scope changes', (
+    tester,
+  ) async {
+    final gateway = _AutoSyncGateway(imagePath: image);
+    gateway.cloudState = const CloudStatus(
+      loggedIn: true,
+      accountId: 'a1',
+      endpoint: 'http://127.0.0.1:8790',
+      username: 'alice',
+      accounts: [
+        CloudAccount(
+          accountId: 'a1',
+          endpoint: 'http://127.0.0.1:8790',
+          username: 'alice',
+          active: true,
+          signedIn: true,
+        ),
+        CloudAccount(
+          accountId: 'a2',
+          endpoint: 'http://127.0.0.1:8791',
+          username: 'bob',
+          active: false,
+          signedIn: true,
+        ),
+      ],
+    );
+    await mount(tester, gateway);
+    await openCloudSettings(tester);
+    // The switch is already on, so startup establishes the baseline sweep.
+    expect(gateway.cloudSyncCalls, 1);
+
+    await tester.tap(find.byKey(const ValueKey('cloud-switch-account')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cloud-account-a2')));
+    await tester.pumpAndSettle();
+    expect(gateway.cloudSwitchCalls, 1);
+    expect(gateway.cloudSyncCalls, 2);
+
+    final choose = find.byKey(const ValueKey('cloud-choose-albums'));
+    await tester.ensureVisible(choose);
+    await tester.pumpAndSettle();
+    await tester.tap(choose);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cloud-scope-selected')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('cloud-scope-album-/local/album-a')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cloud-upload-scope-save')));
+    await tester.pumpAndSettle();
+    expect(gateway.cloudScopeCalls, 1);
+    expect(gateway.cloudSyncCalls, 3);
+    await disposeApp(tester, gateway);
+  });
+}
+
+class _AutoSyncGateway extends FakeLocalGateway implements LocalLibraryTools {
+  _AutoSyncGateway({required super.imagePath});
+
+  @override
+  Future<Object?> localCommand(Map<String, Object?> command) async {
+    if (command['op'] == 'preferences') {
+      return <String, Object?>{'cloudAutoSync': true};
+    }
+    // The controller takes the indexed native path once this interface is
+    // implemented. An empty window is enough for this scheduling test.
+    if (command['op'] == 'window') {
+      return <String, Object?>{
+        'items': <Object?>[],
+        'total': 0,
+        'revision': 1,
+        'groups': <Object?>[],
+      };
+    }
+    return null;
+  }
+
+  @override
+  Future<List<LocalAlbum>> listAlbums() async => const [
+    LocalAlbum(path: '/local/album-a', name: 'album-a', count: 0),
+    LocalAlbum(path: '/local/album-b', name: 'album-b', count: 0),
+  ];
 }

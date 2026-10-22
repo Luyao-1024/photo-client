@@ -1,5 +1,5 @@
 //! Desktop filesystem changes are independent of any network/account runtime.
-use super::local_library::{SCAN_BACKGROUND, Service, changed};
+use super::local_library::{SCAN_BACKGROUND, Service, local_changed};
 use notify::{RecursiveMode, Watcher};
 use photo_core::{local_library::MediaInput, media};
 use std::{
@@ -54,7 +54,7 @@ pub(super) fn install(service: &Arc<Service>) -> Result<(), String> {
                     service
                         .store
                         .log_event("filesystem_scan", result.is_ok(), 0);
-                    changed();
+                    local_changed();
                     drop(_guard);
                     if result.is_err() {
                         let _ = super::bootstrap::runtime().notify("local_background_scan_failed");
@@ -152,7 +152,7 @@ pub(super) fn refresh(service: &Arc<Service>) -> Result<(), String> {
                 let changed_count = service.store.upsert_batch(source.id.clone(), inputs)?;
                 service.store.record_details(details)?;
                 if changed_count > 0 {
-                    changed();
+                    local_changed();
                 }
                 Ok(())
             },

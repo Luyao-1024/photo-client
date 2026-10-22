@@ -22,7 +22,7 @@ filter 首版为全部/收藏/逻辑路径前缀；不开放任意 SQL 条件。
 
 ## 流程与状态
 
-可见集合必须有 media_items 指针、完整本地版本，且 desired_hidden=false、desired_trashed=false、desired_deleted=false。RepairRequired 可在故障状态展示明确不可读标记，但不能出现在正常完成计数中。
+可见集合必须有 media_items 指针、完整本地版本，且 desired_hidden=false、desired_trashed=false、desired_deleted=false；回收站视图是同一查询投影的 `desired_trashed=true` 子集。RepairRequired 可在故障状态展示明确不可读标记，但不能出现在正常完成计数中。
 
 排序使用稳定 `(sort_time_ms, entry_id)`；无拍摄时间时采用首次导入/接收确定的时间，不在每次查询使用 now。cursor 包含账户/epoch/filter/order/anchor/query_id/view_revision，成员/排序改变后的过时请求返回 PageInvalidated；纯不影响排序的图标更新不使整库失效，UI 保留 anchor 并重读当前窗口，不能拼接不同查询的页。
 
@@ -54,7 +54,7 @@ can_favorite 由当前照片允许上行范围决定；仅接收或未覆盖照�
 
 读取文件缺失提交 RepairRequired 的受控命令，先验证捕获 LocalVersionId 仍为当前，防止旧读取失败污染新版本。缩略图缓存缺失走本地重建，规范资源缺失才影响完整性。
 
-隐藏/回收站/永久删除/改名/导出 UI 首版无入口；云端已知状态按 M07 接收。只有明确后续设计才能开放本地移除副本，不能让用户误以为删除本地文件等于删除云端。
+回收站、恢复、永久删除、改名、移动相册和导出都有入口：回收站/恢复生成 `isTrashed` 元数据义务，改名/移动生成路径义务，永久删除先生成本地墓碑并在云端 Delete 确认后清理；删除本地副本仍不等于删除云端，不能让用户误以为删除本地文件等于删除云端。
 
 ## 验收
 

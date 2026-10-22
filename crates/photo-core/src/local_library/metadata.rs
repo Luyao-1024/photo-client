@@ -13,6 +13,19 @@ pub(crate) struct IssuedMetadata {
     pub metadata_version: i64,
 }
 
+struct DesiredMetadata {
+    library: String,
+    media: String,
+    local_version: i64,
+    metadata_version: i64,
+    favorite: bool,
+    relative_path: String,
+    is_trashed: bool,
+    edited_at_ms: i64,
+    source: String,
+    event_id: String,
+}
+
 pub(super) fn note_local_edit(c: &Connection, library: &str, media: &str) -> Result<(), String> {
     let source: String = c
         .query_row(
@@ -25,6 +38,64 @@ pub(super) fn note_local_edit(c: &Connection, library: &str, media: &str) -> Res
         "INSERT INTO media_sync_state(library_id,media_id,dirty,local_version,metadata_version,edited_at_ms,source,event_id) VALUES(?1,?2,2,1,1,?3,?4,?5) ON CONFLICT(library_id,media_id) DO UPDATE SET dirty=CASE WHEN dirty=1 THEN 1 ELSE 2 END,local_version=local_version+1,metadata_version=metadata_version+1,edited_at_ms=excluded.edited_at_ms,source=excluded.source,event_id=excluded.event_id",
         params![library,media,now_ms(),source,Uuid::new_v4().to_string()],
     ).map_err(error)?;
+    Ok(())
+}
+
+pub(super) fn note_local_path_edit(
+    c: &Connection,
+    library: &str,
+    media: &str,
+) -> Result<(), String> {
+    note_local_edit(c, library, media)?;
+    c.execute(
+        "UPDATE media_sync_state SET path_dirty=1 WHERE library_id=?1 AND media_id=?2",
+        params![library, media],
+    )
+    .map_err(error)?;
+    Ok(())
+}
+
+pub(super) fn note_local_content_edit(
+    c: &Connection,
+    library: &str,
+    media: &str,
+) -> Result<(), String> {
+    let source: String = c
+        .query_row(
+            "SELECT installation_id FROM app_meta WHERE singleton=1",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(error)?;
+    c.execute(
+        "INSERT INTO media_sync_state(library_id,media_id,dirty,content_version,content_edited_at_ms,content_source,content_event_id) VALUES(?1,?2,2,1,?3,?4,?5) ON CONFLICT(library_id,media_id) DO UPDATE SET dirty=CASE WHEN dirty=1 THEN 1 ELSE 2 END,content_version=content_version+1,content_edited_at_ms=excluded.content_edited_at_ms,content_source=excluded.content_source,content_event_id=excluded.content_event_id",
+        params![library,media,now_ms(),source,Uuid::new_v4().to_string()],
+    ).map_err(error)?;
+    Ok(())
+}
+
+pub(super) fn note_local_delete(c: &Connection, library: &str, media: &str) -> Result<(), String> {
+    let source: String = c
+        .query_row(
+            "SELECT installation_id FROM app_meta WHERE singleton=1",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(error)?;
+    c.execute(
+        "INSERT INTO media_sync_state(library_id,media_id,dirty,deletion_version,deletion_edited_at_ms,deletion_source,deletion_event_id) VALUES(?1,?2,4,1,?3,?4,?5) ON CONFLICT(library_id,media_id) DO UPDATE SET dirty=4,deletion_version=deletion_version+1,deletion_edited_at_ms=excluded.deletion_edited_at_ms,deletion_source=excluded.deletion_source,deletion_event_id=excluded.deletion_event_id",
+        params![library,media,now_ms(),source,Uuid::new_v4().to_string()],
+    ).map_err(error)?;
+    c.execute(
+        "DELETE FROM cloud_metadata_operations WHERE library_id=?1 AND media_id=?2",
+        params![library, media],
+    )
+    .map_err(error)?;
+    c.execute(
+        "DELETE FROM cloud_content_operations WHERE library_id=?1 AND media_id=?2",
+        params![library, media],
+    )
+    .map_err(error)?;
     Ok(())
 }
 
@@ -45,17 +116,178 @@ pub(super) fn settle_create(
 }
 
 fn issued(c: &Connection, account: &str, photo: &str) -> Result<Option<IssuedMetadata>, String> {
-    c.query_row("SELECT operation_id,zone_name,record_revision,captured_local_version,captured_metadata_version,relative_path,is_favorite,is_hidden,asset_date_ms,edited_at_ms,source,event_id,library_id,media_id FROM cloud_metadata_operations WHERE account_id=?1 AND photo_id=?2", params![account,photo], |r| {
+    c.query_row("SELECT operation_id,zone_name,record_revision,captured_local_version,captured_metadata_version,relative_path,is_favorite,is_hidden,asset_date_ms,edited_at_ms,source,event_id,library_id,media_id,is_trashed FROM cloud_metadata_operations WHERE account_id=?1 AND photo_id=?2", params![account,photo], |r| {
         Ok(IssuedMetadata {
             mutation: sdk::MetadataMutation {
                 operation_id: r.get(0)?, zone: sdk::ZoneId::new(r.get::<_,String>(1)?),
                 photo_id: photo.into(), record_revision: r.get(2)?,
                 metadata: sdk::PhotoMetadata { relative_path: r.get(5)?, is_favorite:r.get(6)?, is_hidden:r.get(7)?, asset_date_ms:r.get(8)? },
+                is_trashed: r.get(14)?,
                 event: sdk::EditEvent {edited_at_ms:r.get(9)?,source:r.get(10)?,event_id:r.get(11)?},
             },
             local_version:r.get(3)?,metadata_version:r.get(4)?,library_id:r.get(12)?,media_id:r.get(13)?,
         })
     }).optional().map_err(error)
+}
+
+fn desired_metadata(
+    c: &Connection,
+    account: &str,
+    photo: &str,
+) -> Result<Option<DesiredMetadata>, String> {
+    let row = c
+        .query_row(
+            "SELECT b.library_id,b.media_id,s.local_version,s.metadata_version,m.favorite,m.display_name,m.state,m.source_uri,m.parent_uri,sr.root_uri,sr.source_kind,b.relative_path,s.edited_at_ms,s.source,s.event_id,s.path_dirty
+             FROM cloud_bindings b
+             JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id
+             JOIN media m ON m.library_id=b.library_id AND m.media_id=b.media_id
+             JOIN sources sr ON sr.library_id=m.library_id AND sr.source_id=m.source_id
+             WHERE b.account_id=?1 AND b.photo_id=?2 AND s.dirty=2 AND s.metadata_version>s.acked_metadata_version",
+            params![account, photo],
+            |r| Ok((
+                r.get::<_, String>(0)?, r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)?, r.get::<_, i64>(3)?,
+                r.get::<_, bool>(4)?, r.get::<_, String>(5)?,
+                r.get::<_, String>(6)?, r.get::<_, String>(7)?,
+                r.get::<_, String>(8)?, r.get::<_, String>(9)?,
+                r.get::<_, String>(10)?, r.get::<_, String>(11)?,
+                r.get::<_, i64>(12)?, r.get::<_, String>(13)?,
+                r.get::<_, String>(14)?, r.get::<_, bool>(15)?,
+            )),
+        )
+        .optional()
+        .map_err(error)?;
+    let Some((
+        library,
+        media,
+        local_version,
+        metadata_version,
+        favorite,
+        name,
+        state,
+        source_uri,
+        parent_uri,
+        root,
+        source_kind,
+        current_path,
+        edited_at_ms,
+        source,
+        event_id,
+        path_dirty,
+    )) = row
+    else {
+        return Ok(None);
+    };
+    let is_trashed = state == "trashed";
+    let relative_path = if path_dirty {
+        desired_cloud_path(
+            &name,
+            &state,
+            &source_uri,
+            &parent_uri,
+            &root,
+            &source_kind,
+            &current_path,
+        )
+    } else {
+        current_path
+    };
+    Ok(Some(DesiredMetadata {
+        library,
+        media,
+        local_version,
+        metadata_version,
+        favorite,
+        relative_path,
+        is_trashed,
+        edited_at_ms,
+        source,
+        event_id,
+    }))
+}
+
+/// Derive the cloud path from the local album/name while a photo is visible.
+/// A trashed photo keeps the path it had; restore recomputes it from the file
+/// that returned to the library.
+fn desired_cloud_path(
+    name: &str,
+    state: &str,
+    source_uri: &str,
+    parent_uri: &str,
+    root: &str,
+    source_kind: &str,
+    current_path: &str,
+) -> String {
+    if state != "active" {
+        return current_path.to_owned();
+    }
+    let album = if source_kind == "managed" {
+        relative_album(Path::new(parent_uri), Path::new(root))
+    } else {
+        Path::new(source_uri)
+            .parent()
+            .and_then(|parent| relative_album(parent, Path::new(root)))
+            .or_else(|| relative_album(Path::new(parent_uri), Path::new(root)))
+    };
+    let file_name = safe_file_name(name).or_else(|| {
+        Path::new(current_path)
+            .file_name()
+            .and_then(|name| safe_file_name(&name.to_string_lossy()))
+    });
+    let Some(file_name) = file_name else {
+        return current_path.to_owned();
+    };
+    let album = album
+        .or_else(|| {
+            current_path
+                .rsplit_once('/')
+                .map(|(parent, _)| parent.to_owned())
+        })
+        .unwrap_or_default();
+    let candidate = if album.is_empty() {
+        file_name
+    } else {
+        format!("{album}/{file_name}")
+    };
+    if syncserver_client::photo::is_safe_relative_path(&candidate) {
+        candidate
+    } else {
+        current_path.to_owned()
+    }
+}
+
+fn relative_album(path: &Path, root: &Path) -> Option<String> {
+    let relative = path.strip_prefix(root).ok()?;
+    let mut parts = Vec::new();
+    for component in relative.components() {
+        let std::path::Component::Normal(segment) = component else {
+            return None;
+        };
+        let segment = segment.to_str()?;
+        if segment.is_empty() || segment == "." || segment == ".." || segment.contains('\\') {
+            return None;
+        }
+        parts.push(segment);
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("/"))
+    }
+}
+
+fn safe_file_name(name: &str) -> Option<String> {
+    let name = name.trim();
+    if name.is_empty() || name == "." || name == ".." {
+        return None;
+    }
+    let name = name.replace(['/', '\\', '\0'], "-");
+    let name = name.trim_matches('.').trim();
+    if name.is_empty() || name.len() > 255 {
+        None
+    } else {
+        Some(name.to_owned())
+    }
 }
 
 impl LocalLibrary {
@@ -82,13 +314,9 @@ impl LocalLibrary {
             // the current upload time. Persist a stable fallback before capture
             // so missing old stamps cannot block or change a retry's identity.
             tx.execute("UPDATE media_sync_state SET edited_at_ms=COALESCE(edited_at_ms,0),source=COALESCE(source,(SELECT installation_id FROM app_meta WHERE singleton=1)),event_id=COALESCE(event_id,?3) WHERE (library_id,media_id)=(SELECT library_id,media_id FROM cloud_bindings WHERE account_id=?1 AND photo_id=?2) AND dirty=2 AND metadata_version>acked_metadata_version",params![account,photo.photo_id,format!("unknown-{}",Uuid::new_v4())]).map_err(error)?;
-            let state = tx.query_row(
-                "SELECT b.library_id,b.media_id,s.local_version,s.metadata_version,m.favorite,s.edited_at_ms,s.source,s.event_id FROM cloud_bindings b JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id JOIN media m ON m.library_id=b.library_id AND m.media_id=b.media_id WHERE b.account_id=?1 AND b.photo_id=?2 AND s.dirty=2 AND s.metadata_version>s.acked_metadata_version",
-                params![account,photo.photo_id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,i64>(2)?,r.get::<_,i64>(3)?,r.get::<_,bool>(4)?,r.get::<_,i64>(5)?,r.get::<_,String>(6)?,r.get::<_,String>(7)?)),
-            ).optional().map_err(error)?;
-            let Some((library,media,local,metadata,favorite,time,source,event)) = state else { return Ok(None); };
-            tx.execute("INSERT INTO cloud_metadata_operations(account_id,photo_id,operation_id,zone_name,record_revision,captured_local_version,captured_metadata_version,relative_path,is_favorite,is_hidden,asset_date_ms,edited_at_ms,source,event_id,created_at_ms,library_id,media_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
-                params![account,photo.photo_id,format!("photo-op-{}",Uuid::new_v4()),zone.zone_name,photo.asset_revision,local,metadata,photo.relative_path,favorite,photo.is_hidden,photo.asset_date_ms,time,source,event,now_ms(),library,media],
+            let Some(desired) = desired_metadata(&tx, &account, &photo.photo_id)? else { return Ok(None); };
+            tx.execute("INSERT INTO cloud_metadata_operations(account_id,photo_id,operation_id,zone_name,record_revision,captured_local_version,captured_metadata_version,relative_path,is_favorite,is_hidden,asset_date_ms,edited_at_ms,source,event_id,created_at_ms,library_id,media_id,is_trashed) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+                params![account,photo.photo_id,format!("photo-op-{}",Uuid::new_v4()),zone.zone_name,photo.asset_revision,desired.local_version,desired.metadata_version,desired.relative_path,desired.favorite,photo.is_hidden,photo.asset_date_ms,desired.edited_at_ms,desired.source,desired.event_id,now_ms(),desired.library,desired.media,desired.is_trashed],
             ).map_err(error)?;
             let operation = issued(&tx,&account,&photo.photo_id)?;
             tx.commit().map_err(error)?;
@@ -108,12 +336,12 @@ impl LocalLibrary {
             .map_err(|_| "InvalidMetadataConfirmation".to_owned())?;
         self.execute(move |c| {
             let tx=c.transaction().map_err(error)?;
-            let current=issued(&tx,&account,&operation.mutation.photo_id)?.ok_or("MetadataOperationNotIssued")?;
-            if current.mutation.operation_id!=operation.mutation.operation_id { return Err("MetadataOperationChanged".into()); }
+            let Some(current)=issued(&tx,&account,&operation.mutation.photo_id)? else { return Ok(false); };
+            if current.mutation.operation_id!=operation.mutation.operation_id { return Ok(false); }
             let event=&operation.mutation.event;
-            tx.execute("UPDATE media_sync_state SET acked_metadata_version=MAX(acked_metadata_version,?3),remote_edited_at_ms=?4,remote_source=?5,remote_event_id=?6 WHERE library_id=?1 AND media_id=?2", params![operation.library_id,operation.media_id,operation.metadata_version,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
-            tx.execute("UPDATE media_sync_state SET dirty=CASE WHEN local_version<>?3 OR metadata_version>acked_metadata_version THEN 2 ELSE 0 END WHERE library_id=?1 AND media_id=?2", params![operation.library_id,operation.media_id,operation.local_version]).map_err(error)?;
-            tx.execute("UPDATE cloud_bindings SET cloud_favorite=?3,remote_edited_at_ms=?7,remote_source=?8,remote_event_id=?9,updated_at_ms=?4 WHERE account_id=?1 AND photo_id=?2 AND library_id=?5 AND media_id=?6", params![account,operation.mutation.photo_id,operation.mutation.metadata.is_favorite,now_ms(),operation.library_id,operation.media_id,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
+            tx.execute("UPDATE media_sync_state SET acked_metadata_version=MAX(acked_metadata_version,?3),path_dirty=CASE WHEN metadata_version=?3 THEN 0 ELSE path_dirty END,remote_edited_at_ms=?4,remote_source=?5,remote_event_id=?6 WHERE library_id=?1 AND media_id=?2", params![operation.library_id,operation.media_id,operation.metadata_version,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
+            tx.execute("UPDATE media_sync_state SET dirty=CASE WHEN deletion_version>acked_deletion_version THEN 4 WHEN local_version<>?3 OR metadata_version>acked_metadata_version OR content_version>acked_content_version THEN 2 ELSE 0 END WHERE library_id=?1 AND media_id=?2", params![operation.library_id,operation.media_id,operation.local_version]).map_err(error)?;
+            tx.execute("UPDATE cloud_bindings SET relative_path=?10,is_trashed=?11,cloud_favorite=?3,remote_edited_at_ms=?7,remote_source=?8,remote_event_id=?9,updated_at_ms=?4 WHERE account_id=?1 AND photo_id=?2 AND library_id=?5 AND media_id=?6", params![account,operation.mutation.photo_id,operation.mutation.metadata.is_favorite,now_ms(),operation.library_id,operation.media_id,event.edited_at_ms,event.source,event.event_id,operation.mutation.metadata.relative_path,operation.mutation.is_trashed]).map_err(error)?;
             tx.execute("DELETE FROM cloud_metadata_operations WHERE account_id=?1 AND photo_id=?2 AND operation_id=?3", params![account,operation.mutation.photo_id,operation.mutation.operation_id]).map_err(error)?;
             let dirty=tx.query_row("SELECT dirty<>0 FROM media_sync_state WHERE library_id=?1 AND media_id=?2",params![operation.library_id,operation.media_id],|r|r.get(0)).map_err(error)?;
             tx.commit().map_err(error)?;

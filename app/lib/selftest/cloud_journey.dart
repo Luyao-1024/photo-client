@@ -421,22 +421,23 @@ extension CloudJourney on LocalJourney {
     }
   }
 
-  Future<void> _expectReadOnlyViewer(LocalPhoto photo) async {
+  Future<void> _expectEditableViewer(LocalPhoto photo) async {
     await _tapKey('photo-${photo.id}');
     await _waitForElement('viewer', reason: 'the viewer did not open');
     final viewer = _elementByKey(const ValueKey('viewer'))!;
     final image = await _waitForRenderedImage(viewer, 'cloud original');
     _expectDecodedMatchesRecord(image, photo);
-    if (_elementByKey(const ValueKey('viewer-edit')) != null) {
-      throw JourneyFailure('a bound photo still offers the editor');
+    if (_elementByKey(const ValueKey('viewer-edit')) == null) {
+      throw JourneyFailure('a bound photo does not offer the editor');
     }
     for (final key in const [
+      'viewer-edit',
       'viewer-trash',
       'viewer-rotate-left',
       'viewer-rotate-right',
     ]) {
-      if (!_controlDisabled(key)) {
-        throw JourneyFailure('$key is enabled for a read-only cloud photo');
+      if (_controlDisabled(key)) {
+        throw JourneyFailure('$key is disabled for a cloud photo');
       }
     }
     await _tapKey('viewer-details');
@@ -444,20 +445,23 @@ extension CloudJourney on LocalJourney {
       'viewer-details-panel',
       reason: 'the details panel did not open',
     );
-    if (!_controlDisabled('viewer-details-rename')) {
-      throw JourneyFailure('cloud photos can still be renamed from details');
+    if (_controlDisabled('viewer-details-rename')) {
+      throw JourneyFailure('cloud photos cannot be renamed from details');
     }
     await _tapKey('viewer-details-close');
-    await _key('Delete');
+    await _tapKey('viewer-trash');
     await _settle();
-    if (_elementByKey(const ValueKey('viewer-confirm-trash')) != null) {
-      throw JourneyFailure('the Delete key opened trash for a cloud photo');
-    }
-    facts['cloud_read_only'] = {
+    await _waitForElement(
+      'viewer-confirm-trash',
+      reason: 'trash did not open confirmation for a cloud photo',
+    );
+    await _key('Escape');
+    await _settle();
+    facts['cloud_editable'] = {
       'photo': photo.name,
-      'editor': 'absent',
-      'trash_rotate_rename': 'disabled',
-      'delete_key': 'ignored',
+      'editor': 'enabled',
+      'trash_rotate_rename': 'enabled',
+      'trash_confirmation': 'opened',
     };
   }
 
@@ -627,17 +631,17 @@ extension CloudJourney on LocalJourney {
         throw JourneyFailure('the right-click upload did not bind the photo');
       }
     });
-    await _step('cloud-bound-photo-is-read-only', () async {
+    await _step('cloud-bound-photo-is-editable', () async {
       final album = await _openAlbumPath(
         options.requireCloudAlbum(
           'cloud-single-album',
           options.cloudSingleAlbum,
         ),
       );
-      await _expectReadOnlyViewer(_state.pages[0]!.single);
+      await _expectEditableViewer(_state.pages[0]!.single);
       await _closeViewer();
-      facts['cloud_read_only_album'] = album.path;
-      await _screenshot('31-cloud-read-only');
+      facts['cloud_editable_album'] = album.path;
+      await _screenshot('31-cloud-editable');
     });
     await _step('cloud-favorite-uploads', () async {
       final photo = _state.pages[0]!.single;
@@ -793,10 +797,10 @@ extension CloudJourney on LocalJourney {
         'decoded_height': image.height,
       };
     });
-    await _step('cloud-downloaded-photo-is-read-only', () async {
-      await _expectReadOnlyViewer(_state.pages[0]!.first);
+    await _step('cloud-downloaded-photo-is-editable', () async {
+      await _expectEditableViewer(_state.pages[0]!.first);
       await _closeViewer();
-      await _screenshot('41-cloud-download-read-only');
+      await _screenshot('41-cloud-download-editable');
     });
     await _step('cloud-favorite-round-trip', () async {
       await _favoriteAndUpload(_state.pages[0]!.first);

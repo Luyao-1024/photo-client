@@ -62,6 +62,7 @@ pub(crate) struct CloudBinding {
     pub is_hidden: bool,
     pub is_trashed: bool,
     pub content_stale: bool,
+    pub dirty: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -177,11 +178,11 @@ fn binding_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudBinding> {
         is_hidden: row.get(3)?,
         is_trashed: row.get(4)?,
         content_stale: row.get(5)?,
+        dirty: row.get(6)?,
     })
 }
 
-const BINDING_COLUMNS: &str =
-    "photo_id,content_generation,media_id,is_hidden,is_trashed,content_stale";
+const BINDING_SELECT: &str = "SELECT b.photo_id,b.content_generation,b.media_id,b.is_hidden,b.is_trashed,b.content_stale,COALESCE(s.dirty,0) FROM cloud_bindings b LEFT JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id";
 
 /// Whether a media row belongs to any cloud account. File-mutating catalog
 /// operations call this inside their transaction before touching the file.
@@ -455,7 +456,7 @@ impl LocalLibrary {
         self.execute(move |c| {
             let mut statement = c
                 .prepare(&format!(
-                    "SELECT {BINDING_COLUMNS} FROM cloud_bindings WHERE account_id=?1 ORDER BY photo_id"
+                    "{BINDING_SELECT} WHERE b.account_id=?1 ORDER BY b.photo_id"
                 ))
                 .map_err(error)?;
             statement
@@ -471,8 +472,64 @@ impl LocalLibrary {
         account_id: String,
     ) -> Result<Vec<CloudBinding>, String> {
         self.execute(move |c|{
-            let mut statement=c.prepare(&format!("SELECT {BINDING_COLUMNS} FROM cloud_bindings WHERE account_id=?1 AND EXISTS(SELECT 1 FROM media_sync_state s WHERE s.library_id=cloud_bindings.library_id AND s.media_id=cloud_bindings.media_id AND s.dirty=2) ORDER BY photo_id")).map_err(error)?;
+            let mut statement=c.prepare(&format!("{BINDING_SELECT} WHERE b.account_id=?1 AND s.dirty=2 AND NOT (s.content_version>s.acked_content_version) ORDER BY b.photo_id")).map_err(error)?;
             statement.query_map([account_id],binding_row).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)
+        })
+    }
+
+    pub(crate) fn cloud_content_bindings(
+        &self,
+        account_id: String,
+    ) -> Result<Vec<CloudBinding>, String> {
+        self.execute(move |c| {
+            let mut statement = c
+                .prepare(&format!(
+                    "{BINDING_SELECT} WHERE b.account_id=?1 AND s.dirty=2 AND s.content_version>s.acked_content_version ORDER BY b.photo_id"
+                ))
+                .map_err(error)?;
+            statement
+                .query_map([&account_id], binding_row)
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
+        })
+    }
+
+    pub(crate) fn cloud_delete_bindings(
+        &self,
+        account_id: String,
+    ) -> Result<Vec<CloudBinding>, String> {
+        self.execute(move |c| {
+            let mut statement = c
+                .prepare(&format!(
+                    "{BINDING_SELECT} WHERE b.account_id=?1 AND s.dirty=4 ORDER BY b.photo_id"
+                ))
+                .map_err(error)?;
+            statement
+                .query_map([&account_id], binding_row)
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
+        })
+    }
+
+    /// Remote photos whose local copy was permanently deleted. They must not
+    /// be downloaded again while their cloud deletion is still outstanding.
+    pub(crate) fn cloud_pending_delete_photo_ids(
+        &self,
+        account_id: String,
+    ) -> Result<Vec<String>, String> {
+        self.execute(move |c| {
+            let mut statement = c
+                .prepare(
+                    "SELECT b.photo_id FROM cloud_bindings b JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id WHERE b.account_id=?1 AND s.dirty=4",
+                )
+                .map_err(error)?;
+            statement
+                .query_map([&account_id], |r| r.get(0))
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
         })
     }
 
@@ -530,7 +587,7 @@ impl LocalLibrary {
         })
     }
 
-    pub(crate) fn cloud_media_read_only(&self, media_id: String) -> Result<bool, String> {
+    pub(crate) fn cloud_media_bound(&self, media_id: String) -> Result<bool, String> {
         let library = self.library_id.clone();
         self.execute(move |c| is_bound(c, &library, &media_id))
     }
@@ -1001,7 +1058,9 @@ impl LocalLibrary {
                 .map_err(error)?;
             let pending_uploads = c
                 .query_row(
-                    "SELECT COUNT(*) FROM cloud_uploads WHERE account_id=?1 AND state IN ('pending','publishing')",
+                    "SELECT (SELECT COUNT(*) FROM cloud_uploads WHERE account_id=?1 AND state IN ('pending','publishing'))
+                        + (SELECT COUNT(*) FROM cloud_bindings b JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id WHERE b.account_id=?1 AND s.dirty=2 AND s.content_version>s.acked_content_version)
+                        + (SELECT COUNT(*) FROM cloud_bindings b JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id WHERE b.account_id=?1 AND s.dirty=4)",
                     [&account_id],
                     |r| r.get::<_, i64>(0),
                 )
@@ -1017,7 +1076,7 @@ impl LocalLibrary {
                 .map_err(error)?;
             let pending_favorites = c
                 .query_row(
-                    "SELECT COUNT(*) FROM cloud_bindings b JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id WHERE b.account_id=?1 AND s.dirty=2",
+                    "SELECT COUNT(*) FROM cloud_bindings b JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id WHERE b.account_id=?1 AND s.dirty=2 AND NOT (s.content_version>s.acked_content_version)",
                     [&account_id],
                     |r| r.get::<_, i64>(0),
                 )
@@ -1096,6 +1155,29 @@ impl LocalLibrary {
     /// Local photos the active account's explicit upload scope still owes.
     /// Managed cloud sources are downloads, and a binding or an existing
     /// upload row means this account has already seen the photo.
+    /// Whether the explicit upload scope still owns at least one local photo.
+    /// The automatic scheduler asks this before starting a sweep; it must not
+    /// become a periodic remote poll when nothing local changed.
+    pub(crate) fn cloud_scope_has_candidates(
+        &self,
+        account_id: String,
+        all_albums: bool,
+    ) -> Result<bool, String> {
+        let library = self.library_id.clone();
+        self.execute(move |c| {
+            c.query_row(
+                "SELECT EXISTS(SELECT 1 FROM media m JOIN sources s ON s.library_id=m.library_id AND s.source_id=m.source_id
+                 WHERE m.library_id=?1 AND m.state='active' AND s.source_kind<>'managed'
+                   AND NOT EXISTS(SELECT 1 FROM cloud_bindings b WHERE b.account_id=?2 AND b.media_id=m.media_id)
+                   AND NOT EXISTS(SELECT 1 FROM cloud_uploads u WHERE u.account_id=?2 AND u.media_id=m.media_id)
+                   AND (?3=1 OR EXISTS(SELECT 1 FROM cloud_upload_albums a WHERE a.account_id=?2 AND a.folder=m.parent_uri)))",
+                params![library, account_id, all_albums],
+                |r| r.get(0),
+            )
+            .map_err(error)
+        })
+    }
+
     pub(crate) fn cloud_scope_candidates(
         &self,
         account_id: String,

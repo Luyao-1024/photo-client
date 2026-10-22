@@ -1,6 +1,6 @@
 //! Reliable downlink: cache complete change pages, rebuild once, then settle
 //! every referenced file before advancing the zone token.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -174,6 +174,12 @@ impl CloudEngine {
             .into_iter()
             .map(|binding| (binding.photo_id.clone(), binding))
             .collect();
+        let pending_deletes: HashSet<String> = store(
+            self.library
+                .cloud_pending_delete_photo_ids(account_id.clone()),
+        )?
+        .into_iter()
+        .collect();
         let media: HashMap<String, CloudBindingMedia> =
             store(self.library.cloud_binding_media(account_id.clone()))?
                 .into_iter()
@@ -184,6 +190,10 @@ impl CloudEngine {
         let mut downloads = Vec::new();
         let mut skipped = 0;
         for photo in &graph.photos {
+            if pending_deletes.contains(&photo.photo_id) {
+                skipped += 1;
+                continue;
+            }
             let hidden = photo.is_hidden;
             let trashed = records::is_trashed(photo);
             let inactive = hidden || trashed;
@@ -199,10 +209,14 @@ impl CloudEngine {
             let unsupported = info.is_some_and(|info| info.state == "unsupported");
             let present = info.is_some_and(|info| Path::new(&info.path).is_file());
             let was_inactive = binding.is_hidden || binding.is_trashed;
+            let pending = binding.dirty != 0;
+            let locally_trashed = info.is_some_and(|info| info.state == "trashed");
             let generation_changed = binding.content_generation != photo.content_generation;
             let mut media_state = None;
             if inactive {
-                if !unsupported {
+                // A pending local edit (trash/restore) owns the local state
+                // until the server echoes it.
+                if !unsupported && !pending && !locally_trashed {
                     media_state = Some("missing".to_owned());
                 }
                 skipped += 1;
@@ -210,9 +224,15 @@ impl CloudEngine {
                 // A decoded failure is not retried every cycle; the binding
                 // keeps the file so export/copy still work.
             } else if present {
-                if was_inactive || info.is_some_and(|info| info.state != "active") {
+                if !pending
+                    && !locally_trashed
+                    && (was_inactive || info.is_some_and(|info| info.state != "active"))
+                {
                     media_state = Some("active".to_owned());
                 }
+            } else if locally_trashed {
+                // The file lives in the system trash until the local restore.
+                skipped += 1;
             } else {
                 downloads.push(photo.clone());
             }

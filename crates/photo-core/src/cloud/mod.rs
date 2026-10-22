@@ -287,6 +287,42 @@ impl CloudEngine {
         })
     }
 
+    /// The automatic-sync switch, read from the same preferences the settings
+    /// page writes. Automatic work is opt-in, so a missing value means off.
+    pub fn auto_sync_enabled(&self) -> Result<bool, String> {
+        let preferences: serde_json::Value =
+            serde_json::from_str(&store(self.library.preferences())?).map_err(|_| "Internal")?;
+        Ok(preferences
+            .get("cloudAutoSync")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false))
+    }
+
+    /// Whether an unattended sweep would find durable work. This is what keeps
+    /// the local-change trigger from turning into an idle remote poll.
+    pub fn auto_sync_needed(&self) -> Result<bool, String> {
+        let status = self.status()?;
+        if !status.logged_in
+            || matches!(
+                status.error_code.as_deref(),
+                Some("AuthFailed" | "TokenExpired" | "CloudScopeChanged")
+            )
+        {
+            return Ok(false);
+        }
+        if status.pending_uploads > 0 || status.pending_favorites > 0 {
+            return Ok(true);
+        }
+        let Some(account_id) = status.account_id else {
+            return Ok(false);
+        };
+        match status.upload_scope.as_str() {
+            "all" => store(self.library.cloud_scope_has_candidates(account_id, true)),
+            "selected" => store(self.library.cloud_scope_has_candidates(account_id, false)),
+            _ => Ok(false),
+        }
+    }
+
     pub async fn sync_now(&self) -> Result<CloudSyncReport, String> {
         if self.library.is_closed() {
             return Err("LibraryClosed".into());
@@ -323,20 +359,18 @@ impl CloudEngine {
         // A new photo is created in the final lease phase. Publish any local
         // edit stamp in a following modify lease, preserving the original edit
         // time rather than accepting the server's create/commit time as it.
-        if report.uploaded > 0
-            && report.failed == 0
-            && store(
+        if report.uploaded > 0 && report.failed == 0 {
+            let counts = store(
                 self.library
                     .cloud_counts(session.account.account_id.clone()),
-            )?
-            .pending_favorites
-                > 0
-        {
-            if let Err(code) = self.downlink(&session, &mut report).await {
-                return Ok(self.failed_report(&session, report, &code));
-            }
-            if let Err(code) = self.uplink(&session, &mut report).await {
-                return Ok(self.failed_report(&session, report, &code));
+            )?;
+            if counts.pending_uploads > 0 || counts.pending_favorites > 0 {
+                if let Err(code) = self.downlink(&session, &mut report).await {
+                    return Ok(self.failed_report(&session, report, &code));
+                }
+                if let Err(code) = self.uplink(&session, &mut report).await {
+                    return Ok(self.failed_report(&session, report, &code));
+                }
             }
         }
         self.notify("finalizing", &report);
@@ -586,10 +620,32 @@ mod scope_tests {
             )
             .unwrap();
         let account = library.cloud_account().unwrap().unwrap();
+        assert!(
+            library
+                .cloud_scope_has_candidates("account".into(), false)
+                .unwrap()
+        );
+        assert!(
+            library
+                .cloud_scope_has_candidates("account".into(), true)
+                .unwrap()
+        );
         let engine = CloudEngine::new(library.clone());
         let mut report = CloudSyncReport::default();
         engine.queue_scope_uploads(&account, &mut report).unwrap();
 
+        // The selected album has been enrolled; the other album is not in the
+        // selected scope and must not keep the scheduler awake.
+        assert!(
+            !library
+                .cloud_scope_has_candidates("account".into(), false)
+                .unwrap()
+        );
+        assert!(
+            library
+                .cloud_scope_has_candidates("account".into(), true)
+                .unwrap()
+        );
         let pending = library.cloud_pending_uploads("account".into()).unwrap();
         assert_eq!(pending.len(), 1);
         assert!(pending[0].relative_path.starts_with("Selected/"));

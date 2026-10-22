@@ -15,7 +15,6 @@ import '../services/window_controller.dart';
 import 'glass_dialog.dart';
 import 'glass_surface.dart';
 import 'glass_theme.dart';
-import 'cloud_sync_controller.dart';
 import 'local_animated_stage.dart';
 import 'local_library_controller.dart';
 import 'local_photo_editor.dart';
@@ -378,7 +377,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   }
 
   Future<void> _openEditor() async {
-    if (ref.read(cloudSyncProvider).isProtected(_currentPhoto.id)) return;
     if (_editing) {
       await _editorKey.currentState?.requestClose();
       return;
@@ -442,10 +440,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   Future<void> _deleteCurrent() async {
     final library = ref.read(localLibraryProvider);
     final photo = _currentPhoto;
-    if (ref.read(cloudSyncProvider).isProtected(photo.id)) {
-      _toast(AppStrings.of(context).cloudReadOnly);
-      return;
-    }
     final index = library.indexOf(photo.id) ?? 0;
     final strings = AppStrings.of(context);
     final accepted = await showDialog<bool>(
@@ -505,21 +499,18 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   Future<void> _renameCurrent() async {
     final strings = AppStrings.of(context);
     final photo = _currentPhoto;
-    if (ref.read(cloudSyncProvider).isProtected(photo.id)) {
-      _toast(strings.cloudReadOnly);
-      return;
-    }
-    final controller = TextEditingController(text: photo.name);
-    final name = await showDialog<String>(
+    var name = photo.name;
+    final result = await showDialog<String>(
       context: context,
       builder: (context) => GlassAlertDialog(
         title: Text(strings.renamePhoto),
-        content: TextField(
+        content: TextFormField(
           key: const ValueKey('viewer-rename-field'),
-          controller: controller,
+          initialValue: photo.name,
           autofocus: true,
           decoration: InputDecoration(hintText: photo.name),
-          onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+          onChanged: (value) => name = value.trim(),
+          onFieldSubmitted: (value) => Navigator.of(context).pop(value.trim()),
         ),
         actions: [
           TextButton(
@@ -528,18 +519,17 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
           ),
           FilledButton(
             key: const ValueKey('viewer-rename-confirm'),
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            onPressed: () => Navigator.of(context).pop(name),
             child: Text(strings.save),
           ),
         ],
       ),
     );
-    controller.dispose();
-    if (name == null || name.isEmpty || name == photo.name) return;
+    if (result == null || result.isEmpty || result == photo.name) return;
     try {
       final updated = await ref
           .read(localLibraryProvider.notifier)
-          .renamePhoto(photo.id, name);
+          .renamePhoto(photo.id, result);
       if (!mounted) return;
       setState(() => _photo = updated);
     } catch (_) {
@@ -652,7 +642,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     _photo = photo;
     final controller = ref.read(localLibraryProvider.notifier);
     final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
-    final cloudBound = ref.watch(cloudSyncProvider).isProtected(photo.id);
     final canPrevious = !_navigating && index != null && index > 0;
     final canNext = !_navigating && index != null && index + 1 < library.total;
 
@@ -740,12 +729,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
           const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _move(-1),
           const SingleActivator(LogicalKeyboardKey.arrowRight): () => _move(1),
           const SingleActivator(LogicalKeyboardKey.keyF): _toggleImmersive,
-          if (!cloudBound)
-            const SingleActivator(LogicalKeyboardKey.keyR): () =>
-                unawaited(_rotateCurrent(90)),
-          if (!cloudBound)
-            const SingleActivator(LogicalKeyboardKey.keyR, shift: true): () =>
-                unawaited(_rotateCurrent(-90)),
+          const SingleActivator(LogicalKeyboardKey.keyR): () =>
+              unawaited(_rotateCurrent(90)),
+          const SingleActivator(LogicalKeyboardKey.keyR, shift: true): () =>
+              unawaited(_rotateCurrent(-90)),
           const SingleActivator(LogicalKeyboardKey.space): () =>
               _videoKey.currentState?.togglePlayback(),
           const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
@@ -754,12 +741,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
               _openFullscreen,
           const SingleActivator(LogicalKeyboardKey.keyI): _toggleDetails,
           const SingleActivator(LogicalKeyboardKey.keyH): _toggleFavorite,
-          if (!cloudBound)
-            const SingleActivator(LogicalKeyboardKey.keyE): () =>
-                unawaited(_openEditor()),
-          if (!cloudBound)
-            const SingleActivator(LogicalKeyboardKey.delete): () =>
-                unawaited(_deleteCurrent()),
+          const SingleActivator(LogicalKeyboardKey.keyE): () =>
+              unawaited(_openEditor()),
+          const SingleActivator(LogicalKeyboardKey.delete): () =>
+              unawaited(_deleteCurrent()),
           const SingleActivator(LogicalKeyboardKey.equal): () =>
               _applyZoom(1.25),
           const SingleActivator(LogicalKeyboardKey.add): () => _applyZoom(1.25),
@@ -866,7 +851,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                               key: const ValueKey('viewer-rotate-left'),
                               tooltip: strings.rotateLeft,
                               style: _chromeStyle,
-                              onPressed: _editAllowed && !cloudBound
+                              onPressed: _editAllowed
                                   ? () => unawaited(_rotateCurrent(-90))
                                   : null,
                               icon: const Icon(Icons.rotate_left, size: 20),
@@ -875,7 +860,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                               key: const ValueKey('viewer-rotate-right'),
                               tooltip: strings.rotateRight,
                               style: _chromeStyle,
-                              onPressed: _editAllowed && !cloudBound
+                              onPressed: _editAllowed
                                   ? () => unawaited(_rotateCurrent(90))
                                   : null,
                               icon: const Icon(Icons.rotate_right, size: 20),
@@ -894,7 +879,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                           index: index,
                           library: library,
                           controller: controller,
-                          cloudBound: cloudBound,
                         ),
                       ),
                       Positioned(
@@ -933,7 +917,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                       ),
                     ],
                     if (_detailsOpen && index != null)
-                      _detailsPanel(strings, photo, cloudBound),
+                      _detailsPanel(strings, photo),
                     if (_editing)
                       Positioned.fill(
                         child: LocalPhotoEditor(
@@ -973,7 +957,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
 
   Future<void> _rotateCurrent(int degrees) async {
     final photo = _currentPhoto;
-    if (ref.read(cloudSyncProvider).isProtected(photo.id)) return;
     if (photo.mediaKind != 'image' ||
         !['image/jpeg', 'image/png', 'image/webp'].contains(photo.mimeType)) {
       return;
@@ -1193,7 +1176,6 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     required int? index,
     required LibraryViewState library,
     required LocalLibraryController controller,
-    required bool cloudBound,
   }) => GlassSurface(
     key: const ValueKey('viewer-header'),
     role: GlassRole.raised,
@@ -1310,24 +1292,21 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                       ? null
                       : () => controller.setFavorite(photo),
                 ),
-                if (!cloudBound)
-                  IconButton(
-                    key: const ValueKey('viewer-edit'),
-                    style: actionStyle,
-                    tooltip: strings.edit,
-                    icon: const Icon(Icons.edit_outlined),
-                    onPressed: _editAllowed
-                        ? () => unawaited(_openEditor())
-                        : null,
-                  ),
+                IconButton(
+                  key: const ValueKey('viewer-edit'),
+                  style: actionStyle,
+                  tooltip: strings.edit,
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: _editAllowed
+                      ? () => unawaited(_openEditor())
+                      : null,
+                ),
                 IconButton(
                   key: const ValueKey('viewer-trash'),
                   style: actionStyle,
                   tooltip: strings.moveToTrash,
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: cloudBound
-                      ? null
-                      : () => unawaited(_deleteCurrent()),
+                  onPressed: () => unawaited(_deleteCurrent()),
                 ),
                 IconButton(
                   key: const ValueKey('viewer-details'),
@@ -1476,7 +1455,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
 
   /// Overlay glass side panel sliding over the stage's right side; the media
   /// stays visible behind it and the stage is never re-laid-out.
-  Widget _detailsPanel(AppStrings strings, LocalPhoto photo, bool cloudBound) {
+  Widget _detailsPanel(AppStrings strings, LocalPhoto photo) {
     final modified = DateTime.fromMillisecondsSinceEpoch(photo.modifiedMs)
         .toLocal();
     final localizations = MaterialLocalizations.of(context);
@@ -1525,9 +1504,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                             tooltip: strings.rename,
                             icon: const Icon(Icons.drive_file_rename_outline),
                             color: Colors.white,
-                            onPressed: cloudBound
-                                ? null
-                                : () => unawaited(_renameCurrent()),
+                            onPressed: () => unawaited(_renameCurrent()),
                           ),
                           TextButton(
                             key: const ValueKey('viewer-details-close'),

@@ -449,20 +449,12 @@ final class NativeCoreGateway
       native_cloud.cloudBoundMediaIds();
 
   @override
-  Future<List<String>> cloudProtectedMediaIds() =>
-      native_cloud.cloudProtectedMediaIds();
-
-  @override
   Future<CloudStatus> cloudSwitchAccount(String accountId) async =>
-      _cloudStatus(
-        await native_cloud.cloudSwitchAccount(accountId: accountId),
-      );
+      _cloudStatus(await native_cloud.cloudSwitchAccount(accountId: accountId));
 
   @override
   Future<CloudStatus> cloudRemoveAccount(String accountId) async =>
-      _cloudStatus(
-        await native_cloud.cloudRemoveAccount(accountId: accountId),
-      );
+      _cloudStatus(await native_cloud.cloudRemoveAccount(accountId: accountId));
 
   @override
   Future<CloudStatus> cloudSetUploadScope(

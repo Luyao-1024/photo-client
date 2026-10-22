@@ -741,11 +741,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final ids = _selectedIds(state);
     if (ids.isEmpty) return;
     final strings = AppStrings.of(context);
-    final cloud = ref.read(cloudSyncProvider);
-    if (ids.any(cloud.isProtected)) {
-      _notify(strings.cloudReadOnly);
-      return;
-    }
     final ok = await _confirm(
       title: strings.confirmTrashTitle(ids.length),
       body: strings.confirmTrashBody,
@@ -778,11 +773,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final ids = _selectedIds(state);
     if (ids.isEmpty) return;
     final strings = AppStrings.of(context);
-    final cloud = ref.read(cloudSyncProvider);
-    if (ids.any(cloud.isProtected)) {
-      _notify(strings.cloudReadOnly);
-      return;
-    }
     final ok = await _confirm(
       title: strings.confirmPurgeTitle(ids.length),
       body: strings.confirmPurgeBody,
@@ -816,10 +806,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final ids = _selectedIds(state);
     if (ids.isEmpty) return;
     final strings = AppStrings.of(context);
-    if (move && ids.any(ref.read(cloudSyncProvider).isProtected)) {
-      _notify(strings.cloudReadOnly);
-      return;
-    }
     final target = await _pickAlbumTarget(state.albums);
     if (target == null || !mounted) return;
     await _runBatch(
@@ -842,10 +828,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   Future<void> _trashOne(LocalPhoto photo) async {
     final strings = AppStrings.of(context);
-    if (ref.read(cloudSyncProvider).isProtected(photo.id)) {
-      _notify(strings.cloudReadOnly);
-      return;
-    }
     final ok = await _confirm(
       title: strings.confirmTrashTitle(1),
       body: strings.confirmTrashBody,
@@ -870,10 +852,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   Future<void> _addOneToAlbum(LocalPhoto photo, {required bool move}) async {
     final strings = AppStrings.of(context);
-    if (move && ref.read(cloudSyncProvider).isProtected(photo.id)) {
-      _notify(strings.cloudReadOnly);
-      return;
-    }
     final target = await _pickAlbumTarget(
       ref.read(localLibraryProvider).albums,
     );
@@ -1030,21 +1008,18 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   Future<void> _renamePhoto(LocalPhoto photo) async {
     final strings = AppStrings.of(context);
-    if (ref.read(cloudSyncProvider).isProtected(photo.id)) {
-      _notify(strings.cloudReadOnly);
-      return;
-    }
-    final controller = TextEditingController(text: photo.name);
-    final name = await showDialog<String>(
+    var name = photo.name;
+    final result = await showDialog<String>(
       context: context,
       builder: (context) => GlassAlertDialog(
         title: Text(strings.renamePhoto),
-        content: TextField(
+        content: TextFormField(
           key: const ValueKey('rename-field'),
-          controller: controller,
+          initialValue: photo.name,
           autofocus: true,
           decoration: InputDecoration(hintText: photo.name),
-          onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+          onChanged: (value) => name = value.trim(),
+          onFieldSubmitted: (value) => Navigator.of(context).pop(value.trim()),
         ),
         actions: [
           TextButton(
@@ -1053,16 +1028,17 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           ),
           FilledButton(
             key: const ValueKey('rename-confirm'),
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            onPressed: () => Navigator.of(context).pop(name),
             child: Text(strings.save),
           ),
         ],
       ),
     );
-    controller.dispose();
-    if (name == null || name.isEmpty || name == photo.name) return;
+    if (result == null || result.isEmpty || result == photo.name) return;
     try {
-      await ref.read(localLibraryProvider.notifier).renamePhoto(photo.id, name);
+      await ref
+          .read(localLibraryProvider.notifier)
+          .renamePhoto(photo.id, result);
     } catch (_) {
       _notify(strings.actionFailed);
     }
@@ -1106,7 +1082,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       );
     }
     final state = ref.watch(localLibraryProvider);
-    final cloud = ref.watch(cloudSyncProvider);
     final controller = ref.read(localLibraryProvider.notifier);
     final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
     final queryKey =
@@ -1224,7 +1199,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           onBatchPurge: _batchPurge,
           onBatchAddToAlbum: (move) => _addToAlbum(move: move),
           onBatchUploadCloud: _batchUploadCloud,
-          cloudBoundIds: cloud.protectedIds,
           onEmptyTrash: _emptyTrash,
           emptyTrashEnabled: state.extent > 0 || state.hasNext,
           strings: strings,
@@ -1566,9 +1540,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     }
     final item = SectionItem(photo, rank);
     final cloudBound = ref.watch(cloudSyncProvider).isBound(item.photo.id);
-    final cloudProtected = ref
-        .watch(cloudSyncProvider)
-        .isProtected(item.photo.id);
     return PhotoTile(
       key: ValueKey('photo-${item.photo.id}'),
       photo: item.photo,
@@ -1592,20 +1563,16 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       onEnterSelection: () => _enterSelection(item.photo.id),
       onToggleFavorite: () => unawaited(controller.setFavorite(item.photo)),
       onShowDetails: () => showPhotoDetails(context, item.photo),
-      onRename: widget.trashMode || cloudProtected
-          ? null
-          : () => _renamePhoto(item.photo),
+      onRename: widget.trashMode ? null : () => _renamePhoto(item.photo),
       onRestore: widget.trashMode
           ? () => unawaited(_restoreOne(item.photo))
           : null,
       onPurge: widget.trashMode ? () => unawaited(_purgeOne(item.photo)) : null,
-      onMoveToTrash: widget.trashMode || cloudProtected
-          ? null
-          : () => _trashOne(item.photo),
+      onMoveToTrash: widget.trashMode ? null : () => _trashOne(item.photo),
       onCopyToAlbum: widget.trashMode
           ? null
           : () => _addOneToAlbum(item.photo, move: false),
-      onMoveToAlbum: widget.trashMode || cloudProtected
+      onMoveToAlbum: widget.trashMode
           ? null
           : () => _addOneToAlbum(item.photo, move: true),
     );
@@ -1914,7 +1881,6 @@ class _Header extends StatelessWidget {
     required this.onBatchPurge,
     required this.onBatchAddToAlbum,
     required this.onBatchUploadCloud,
-    required this.cloudBoundIds,
     required this.onEmptyTrash,
     required this.emptyTrashEnabled,
     required this.strings,
@@ -1948,7 +1914,6 @@ class _Header extends StatelessWidget {
   final VoidCallback onBatchPurge;
   final ValueChanged<bool> onBatchAddToAlbum;
   final VoidCallback onBatchUploadCloud;
-  final Set<String> cloudBoundIds;
   final VoidCallback onEmptyTrash;
   final bool emptyTrashEnabled;
   final AppStrings strings;
@@ -2216,9 +2181,6 @@ class _Header extends StatelessWidget {
         selectedPhotos.isNotEmpty &&
         selectedPhotos.every((photo) => photo.favorite);
     final mixed = !allFavorite && selectedPhotos.any((photo) => photo.favorite);
-    final hasCloudBound = selectedPhotos.any(
-      (photo) => cloudBoundIds.contains(photo.id),
-    );
     return Row(
       children: [
         IconButton(
@@ -2255,11 +2217,10 @@ class _Header extends StatelessWidget {
                     value: false,
                     child: Text(strings.copyToAlbum),
                   ),
-                  if (!hasCloudBound)
-                    PopupMenuItem<bool>(
-                      value: true,
-                      child: Text(strings.moveToAlbum),
-                    ),
+                  PopupMenuItem<bool>(
+                    value: true,
+                    child: Text(strings.moveToAlbum),
+                  ),
                 ],
               ),
             ],
@@ -2294,9 +2255,7 @@ class _Header extends StatelessWidget {
           child: _GlassActionButton(
             key: const ValueKey('batch-trash'),
             icon: Icons.delete_outline,
-            onPressed: selectedPhotos.isEmpty || hasCloudBound
-                ? null
-                : onBatchTrash,
+            onPressed: selectedPhotos.isEmpty ? null : onBatchTrash,
           ),
         ),
       ],
