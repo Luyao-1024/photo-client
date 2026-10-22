@@ -1,9 +1,31 @@
 //! An opt-in real server fixture. Each case owns an isolated account, server
 //! directory and client catalog; no desktop or real library is involved.
+//!
+//! # Lifetime guarantees
+//!
+//! The server is a real process, so it has to be guaranteed to stop when the
+//! test ends. Three mechanisms cover the ways a test run can end:
+//!
+//! 1. **Process group** — the server leads its own process group (`setpgid`),
+//!    so the terminal's Ctrl-C does not reach it and the fixture, not the
+//!    terminal, decides when it stops.
+//! 2. **`PR_SET_PDEATHSIG`** — the server asks the kernel to `SIGKILL` it
+//!    when the test binary dies. This is the backstop for a run that ends
+//!    without running any destructor: an interrupted `cargo test`, a killed
+//!    test binary or a reboot. The kernel enforces it, so it holds even when
+//!    the parent is killed with `SIGKILL`.
+//! 3. **`Drop`** — the ordinary path. The server is asked to stop
+//!    gracefully (`SIGTERM`, which the service handles by draining) and is
+//!    then reaped; one that ignores the request is killed outright.
+//!
+//! Without these, an interrupted run leaves the server holding its
+//! data-directory lock and its listening socket, and the next run cannot
+//! bind the port it expects.
 use std::{
     fs::{self, File},
     io::Write,
     net::TcpListener,
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::{Duration, Instant, UNIX_EPOCH},
@@ -17,10 +39,82 @@ use rusqlite::Connection;
 use syncserver_client as sdk;
 use tempfile::TempDir;
 
+/// A running server process that is guaranteed to be gone when the test ends.
+struct ServerProcess {
+    child: Child,
+    /// The process group the child leads. Signalling the group rather than
+    /// the single pid reaches any helper the server itself started.
+    group: i32,
+}
+
+impl ServerProcess {
+    fn spawn(command: &mut Command) -> std::io::Result<Self> {
+        // SAFETY: `pre_exec` runs in the forked child before `execve`. The
+        // closure only calls async-signal-safe syscalls (`setpgid`,
+        // `prctl`), takes no locks and allocates nothing, which is what
+        // `pre_exec` requires.
+        unsafe {
+            command.pre_exec(|| {
+                // Own process group: the terminal's SIGINT must not reach the
+                // server, so only the fixture stops it.
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                // Kernel backstop: if the parent dies without running its
+                // destructors, the kernel kills this child.
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let child = command.spawn()?;
+        // The child is its own group leader, so its pid is the group id.
+        let group = child.id() as i32;
+        Ok(Self { child, group })
+    }
+
+    /// Stop the server and reap it.
+    ///
+    /// `SIGTERM` first, because the service drains its state on that signal
+    /// and releases the data-directory lock cleanly. A server that has not
+    /// exited within the grace period is killed, so a wedged process cannot
+    /// hold the test suite open.
+    fn stop(&mut self) {
+        if self.child.try_wait().ok().flatten().is_some() {
+            return;
+        }
+        // SAFETY: `kill` with a negative pid signals the process group; the
+        // group id was obtained from the child's own pid right after `spawn`.
+        unsafe {
+            libc::kill(-self.group, libc::SIGTERM);
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            match self.child.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+                Err(_) => break,
+            }
+        }
+        // SAFETY: as above; `SIGKILL` cannot be ignored or blocked.
+        unsafe {
+            libc::kill(-self.group, libc::SIGKILL);
+        }
+        let _ = self.child.wait();
+    }
+}
+
+impl Drop for ServerProcess {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
 pub struct Server {
     pub endpoint: String,
-    password: String,
-    child: Child,
+    pub password: String,
+    child: ServerProcess,
     _root: TempDir,
 }
 
@@ -74,12 +168,12 @@ impl Server {
             String::from_utf8_lossy(&result.stderr)
         );
         // Command arguments persist across spawn calls; build a fresh serve command.
-        let child = Command::new(&binary)
+        let mut serve = Command::new(&binary);
+        serve
             .envs(command.get_envs().map(|(key, value)| (key, value.unwrap())))
             .stdout(File::create(root.path().join("server.log")).unwrap())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
+            .stderr(Stdio::null());
+        let child = ServerProcess::spawn(&mut serve).unwrap();
         let mut server = Self {
             endpoint,
             password,
@@ -97,20 +191,13 @@ impl Server {
                 break;
             }
             assert!(
-                server.child.try_wait().unwrap().is_none() && Instant::now() < deadline,
+                server.child.child.try_wait().unwrap().is_none() && Instant::now() < deadline,
                 "server did not start: {}",
                 fs::read_to_string(server._root.path().join("server.log")).unwrap_or_default(),
             );
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
         server
-    }
-}
-
-impl Drop for Server {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
     }
 }
 
