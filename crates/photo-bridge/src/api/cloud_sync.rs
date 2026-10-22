@@ -119,13 +119,10 @@ pub async fn cloud_login(
     let engine = CloudEngine::new(active.store.clone());
     engine.login(&endpoint, &username, &password).await?;
     drop(password);
-    // A failed first sweep is reported through state/error_code, not as a
-    // login failure: the session itself is already established.
-    let report = engine.sync_now().await?;
-    if report.downloaded > 0 || report.favorites_applied > 0 {
-        changed();
-    }
-    // Report the state after the first sweep, not while it still runs.
+    // Signing in establishes the session and nothing else. The answer must
+    // arrive as soon as the session exists: a first sweep can take minutes on
+    // a large library, and the user asked for the login result, not for the
+    // download. Syncing is a separate, explicitly triggered action.
     drop(_flag);
     current_status(&engine).await
 }

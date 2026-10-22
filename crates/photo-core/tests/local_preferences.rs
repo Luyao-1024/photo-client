@@ -95,3 +95,30 @@ fn other_preferences_keep_their_own_rules() {
     assert_eq!(parsed["theme"], serde_json::json!("dark"));
     assert_eq!(parsed["transparency"], serde_json::json!(0.25));
 }
+
+#[test]
+fn the_auto_sync_switch_is_stored_as_a_boolean() {
+    let root = TempDir::new().unwrap();
+    let library = LocalLibrary::open(root.path()).unwrap();
+    // The switch starts off: a signed-in account never sweeps on its own.
+    assert_eq!(
+        library.preferences().unwrap().contains("cloudAutoSync"),
+        false
+    );
+    library
+        .set_preference("cloudAutoSync".into(), "true".into())
+        .unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&library.preferences().unwrap()).unwrap();
+    assert_eq!(parsed["cloudAutoSync"], serde_json::json!(true));
+    library
+        .set_preference("cloudAutoSync".into(), "false".into())
+        .unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&library.preferences().unwrap()).unwrap();
+    assert_eq!(parsed["cloudAutoSync"], serde_json::json!(false));
+    for invalid in ["\"true\"", "1", "null"] {
+        assert_eq!(
+            library.set_preference("cloudAutoSync".into(), invalid.into()),
+            Err("InvalidPreference".into())
+        );
+    }
+}

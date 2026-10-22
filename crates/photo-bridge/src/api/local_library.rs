@@ -850,10 +850,27 @@ pub async fn library_tools(command: String) -> Result<String, String> {
             "thumbnailStats"=>serde_json::to_value(active.thumbnails.progress()?).map_err(|_|"LocalMappingFailed")?,
             "clearLogs"=>{active.store.clear_logs()?;serde_json::Value::Null}
             "cacheUsage"=>serde_json::json!(active.thumbnails.cache_usage()),
-            "clearCache"=>{active.thumbnails.clear_disk()?;changed();serde_json::Value::Null}
+            "cloudUsage"=>serde_json::json!(active.store.cloud_usage()?),
+            "clearCache"=>{
+                // One thorough reset. The downloaded cloud media, the session
+                // token and the cloud rows of the database go together: a user
+                // must not have to find the cloud folder by hand, and a half
+                // state would show photos the library no longer knows. The
+                // user's own photos are never touched.
+                //
+                // The thumbnail cache is emptied the same way: the rows of the
+                // database and the files on the disk go together, and the
+                // loader goes last so that no job publishes a thumbnail into
+                // the cache while it is being emptied.
+                active.store.clear_cloud_state()?;
+                active.store.clear_cache()?;
+                active.thumbnails.clear_disk()?;
+                changed();
+                serde_json::Value::Null
+            }
             _=>return Err("UnknownLocalCommand".into())
         };
-        if !op.starts_with("thumbnail") && !matches!(op,"window"|"rank"|"metadata"|"preview"|"preferences"|"sources"|"cacheUsage"){active.store.log_event(op,true,started.elapsed().as_millis());}
+        if !op.starts_with("thumbnail") && !matches!(op,"window"|"rank"|"metadata"|"preview"|"preferences"|"sources"|"cacheUsage"|"cloudUsage"){active.store.log_event(op,true,started.elapsed().as_millis());}
         Ok(result.to_string())
     }).await.map_err(join_error)?
 }

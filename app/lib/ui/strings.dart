@@ -236,12 +236,26 @@ class AppStrings {
   String get cloudSignIn => pick('登录', 'Sign in');
   String get cloudSignOut => pick('退出登录', 'Sign out');
   String get cloudSyncNow => pick('立即同步', 'Sync now');
+  String get cloudAutoSync => pick('自动同步', 'Auto sync');
+  String get cloudAutoSyncHint => pick(
+    '登录只建立连接，不会自动下载。打开后应用启动时自动同步一次；关闭时只在你点击“立即同步”时同步。',
+    'Signing in only connects; it never downloads. When on, the app syncs once at startup; when off, syncing only happens when you press "Sync now".',
+  );
   String get syncing => pick('同步中…', 'Syncing…');
   String get cloudLastSync => pick('上次同步', 'Last sync');
   String get cloudNeverSynced => pick('尚未同步', 'Not synced yet');
   String get cloudPendingUploads => pick('待上传', 'Pending uploads');
   String get cloudPendingFavorites => pick('待同步收藏', 'Pending favorites');
   String get cloudBoundCount => pick('云端照片', 'Cloud photos');
+  String get cloudDataUsage => pick('云端数据', 'Cloud data');
+  String get clearCacheTitle => pick('清理缓存与云端数据？', 'Clear cache and cloud data?');
+  String get clearCacheBody => pick(
+    '将删除缩略图缓存、已下载的云端照片、云端会话与同步记录。\n'
+    '你的本机照片不会被删除；云端照片之后可以重新下载。',
+    'This removes the thumbnail cache, the downloaded cloud photos, the '
+        'cloud session and the sync records.\n'
+        'Your own photos are kept; the cloud photos can be downloaded again.',
+  );
   String get cloudUnavailable =>
       pick('当前构建不支持云同步。', 'Cloud sync is unavailable in this build.');
   String get cloudSignedOut => pick(

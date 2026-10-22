@@ -104,6 +104,10 @@ final class LocalJourney {
           await _cloudReconnectJourney();
         case 'cloud-reconcile':
           await _cloudReconcileJourney();
+        case 'cloud-clear':
+          await _cloudClearJourney();
+        case 'cache-clear':
+          await _cacheClearJourney();
         default:
           throw JourneyFailure(
             'Unsupported journey phase: ${options.journeyPhase}',

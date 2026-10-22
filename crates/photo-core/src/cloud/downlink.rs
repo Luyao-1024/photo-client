@@ -133,6 +133,26 @@ impl CloudEngine {
             ),
         )?;
 
+        // A photo that was downloaded before the album mapping existed still
+        // sits in the flat cloud album. It moves into the album of its path
+        // without being downloaded again.
+        let albums: Vec<(String, String)> = graph
+            .photos
+            .iter()
+            .map(|photo| {
+                (
+                    photo.relative_path.clone(),
+                    paths::virtual_album(&self.library.root, &account_id, &photo.relative_path)
+                        .to_string_lossy()
+                        .into_owned(),
+                )
+            })
+            .collect();
+        store(
+            self.library
+                .cloud_reparent_media(account_id.clone(), albums),
+        )?;
+
         // A committed create can reach this graph before its response/binding
         // reached the client. Reattach its durable intent before classifying
         // unbound photos as downloads, preserving the original local media ID.
@@ -386,7 +406,7 @@ impl CloudEngine {
             content_generation: photo.content_generation.clone(),
             relative_path: photo.relative_path.clone(),
             display_name,
-            parent_uri: paths::virtual_parent(&self.library.root, &account_id)
+            parent_uri: paths::virtual_album(&self.library.root, &account_id, &photo.relative_path)
                 .to_string_lossy()
                 .into_owned(),
             path: original_path.to_string_lossy().into_owned(),

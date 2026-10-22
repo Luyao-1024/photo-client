@@ -1,6 +1,6 @@
 //! Cache records without transport capabilities and rebuild the photo graph.
-use syncserver_client::{PhotoGraph, RemotePhoto, RemoteRecord};
 use serde_json::Value;
+use syncserver_client::{PhotoGraph, RemotePhoto, RemoteRecord};
 
 use crate::local_library::StoredCloudRecord;
 

@@ -320,6 +320,11 @@ impl ThumbnailLoader {
             .map(|meta| meta.len())
             .sum()
     }
+    /// Drop the thumbnail cache: the files, the rows of the database and the
+    /// memory of this loader go together.
+    ///
+    /// The write lock keeps a job from publishing while the cache is being
+    /// emptied, so no row can claim a file that the clear just removed.
     pub fn clear_disk(&self) -> Result<(), String> {
         let _publication = self.inner.publication.write().unwrap();
         for entry in walkdir::WalkDir::new(self.inner.store.root.join("cache"))
@@ -332,6 +337,7 @@ impl ThumbnailLoader {
                 std::fs::remove_file(entry.path()).map_err(|_| "CacheUnavailable")?;
             }
         }
+        self.inner.store.clear_thumbnail_rows()?;
         self.clear_memory();
         Ok(())
     }
@@ -1193,6 +1199,50 @@ mod tests {
         assert_eq!(loader.cache_usage(), 0);
         assert!(preview.is_file());
         assert!(animation.is_file());
+    }
+    #[test]
+    fn clearing_the_cache_removes_the_rows_and_the_files_together() {
+        let (_r, _s, store, p) = fixture();
+        let loader = paused(store.clone());
+        // A rendered thumbnail: the file on the disk and the row in the
+        // database say the same thing.
+        let key = Key::new(&p[0], 256);
+        let path = cache_path(&store, &key);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        image::RgbImage::from_pixel(48, 32, image::Rgb([240, 10, 20]))
+            .save(&path)
+            .unwrap();
+        store
+            .record_thumbnail_states(vec![(
+                p[0].clone(),
+                256,
+                path.to_string_lossy().into_owned(),
+                "ready".into(),
+            )])
+            .unwrap();
+        // The row keeps the photo out of the candidate list.
+        assert_ne!(
+            store
+                .next_thumbnail_candidate(256, None)
+                .unwrap()
+                .unwrap()
+                .id,
+            p[0].id
+        );
+
+        loader.clear_disk().unwrap();
+
+        // The file and the row are both gone, so the photo is a candidate
+        // again instead of waiting for a content change that never comes.
+        assert!(!path.is_file(), "the thumbnail file survived the clear");
+        assert_eq!(
+            store
+                .next_thumbnail_candidate(256, None)
+                .unwrap()
+                .unwrap()
+                .id,
+            p[0].id
+        );
     }
     #[test]
     fn viewport_anchor_uses_live_media_order_even_when_earlier_rows_are_ready() {

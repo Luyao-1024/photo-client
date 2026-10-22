@@ -2021,6 +2021,13 @@ extension UxJourney on LocalJourney {
         container: 'settings-content',
       );
       await _tapKey('settings-clear-cache');
+      // The cleanup asks first, because it also removes the downloaded cloud
+      // data and the session.
+      await _uxWaitUntil(
+        () => _elementByKey(const ValueKey('settings-clear-cache-confirm')) != null,
+        reason: 'the cache cleanup did not ask for confirmation',
+      );
+      await _tapKey('settings-clear-cache-confirm');
       await _uxWaitUntil(
         () async => await _uxCacheUsage() == 0,
         reason: 'Clear cache left thumbnail bytes on disk',
@@ -2054,8 +2061,11 @@ extension UxJourney on LocalJourney {
       );
       await _uxTapDropdown('settings-thumbnail-workers');
       await _uxTapMenuText('Fastest');
+      // The "Fastest" entry stands for the worker count of this machine, so
+      // the expected value cannot be a fixed number.
+      final fastest = await _uxFastestWorkers();
       await _waitFor(
-        () => _uxPreferences.thumbnailWorkers == 4,
+        () => _uxPreferences.thumbnailWorkers == fastest,
         reason: 'the thumbnail worker dropdown did not apply Fastest',
       );
       _uxRecord('cache_before', usage);
@@ -2313,7 +2323,7 @@ extension UxJourney on LocalJourney {
   Future<void> _uxTapMenuText(String text) async {
     Offset? position;
     await _waitFor(() {
-      for (final match in _textElements(text).reversed) {
+      for (final match in _uxMenuTextElements(text).reversed) {
         if (!_hasScrollableAncestor(match)) continue;
         final center = _centerOf(match, text);
         if (_uxTextIsOnTop(match, center)) {
@@ -2345,6 +2355,25 @@ extension UxJourney on LocalJourney {
     _trace('tap-text', 'SEND', '"$text" at ${position.dx},${position.dy}');
     await _input!.tap(position, _devicePixelRatio);
     await _settle();
+  }
+
+  /// Menu entries may carry more than the word the journey looks for, for
+  /// example "Fastest (8 workers)". The word must still start the label, so
+  /// that "Fast" does not swallow "Fastest".
+  List<Element> _uxMenuTextElements(String text) {
+    final found = <Element>[];
+    bool matches(String? data) =>
+        data == text || (data != null && data.startsWith('$text '));
+    void visit(Element element) {
+      final widget = element.widget;
+      if (widget is Text && matches(widget.data)) found.add(element);
+      if (widget is SelectableText && matches(widget.data)) found.add(element);
+      element.visitChildren(visit);
+    }
+
+    final root = WidgetsBinding.instance.rootElement;
+    if (root != null) visit(root);
+    return found;
   }
 
   List<Element> _textElements(String text) {
@@ -2707,6 +2736,15 @@ extension UxJourney on LocalJourney {
         .read(localLibraryProvider.notifier)
         .localCommand({'op': 'cacheUsage'});
     return (value as num).toInt();
+  }
+
+  /// The worker count the "Fastest" entry stands for on this machine.
+  Future<int> _uxFastestWorkers() async {
+    final value = await _container!
+        .read(localLibraryProvider.notifier)
+        .localCommand({'op': 'thumbnailConfiguration'});
+    final config = value as Map?;
+    return ((config?['fastest_workers'] as num?)?.toInt() ?? 4).clamp(1, 32);
   }
 
   Future<List<String>> _uxDirectoryNames(String path) async {

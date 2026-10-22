@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'cloud_sync_controller.dart';
 import 'cloud_sync_settings_page.dart';
 import 'glass_dialog.dart';
 import 'glass_theme.dart';
@@ -24,8 +25,19 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
   int _category = 0;
   List<dynamic> _sources = [];
   int? _usage;
+  int? _cloudUsage;
   int _maxWorkers = 4;
   bool _busy = false, _failed = false;
+
+  /// Bytes as a short size. The cloud download can reach gigabytes, so the
+  /// megabyte form alone would hide what the cleanup is about to remove.
+  static String _bytes(int bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
+    }
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +49,12 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
       final controller = ref.read(localLibraryProvider.notifier);
       final sources = await controller.localCommand({'op': 'sources'}) as List?;
       final usage = await controller.localCommand({'op': 'cacheUsage'}) as int?;
+      int? cloudUsage;
+      try {
+        cloudUsage = await controller.localCommand({'op': 'cloudUsage'}) as int?;
+      } catch (_) {
+        /* Older/test gateways do not report the cloud download size. */
+      }
       try {
         final config = await controller.localCommand({
           'op': 'thumbnailConfiguration',
@@ -51,6 +69,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
         setState(() {
           _sources = sources ?? [];
           _usage = usage;
+          _cloudUsage = cloudUsage;
           _failed = false;
         });
       }
@@ -103,6 +122,38 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
       await controller.localCommand({'op': 'removeSource', 'id': source['id']});
       await controller.refresh(force: true);
     });
+  }
+
+  /// Ask before the destructive part of the cache cleanup.
+  ///
+  /// The cleanup removes the downloaded cloud photos and the session as well
+  /// as the thumbnails, so the user is told exactly what goes and that their
+  /// own photos stay.
+  Future<bool> _confirmClear() async {
+    final strings = AppStrings.of(context);
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => GlassAlertDialog(
+        title: Text(strings.clearCacheTitle),
+        content: Text(
+          _cloudUsage != null && _cloudUsage! > 0
+              ? '${strings.clearCacheBody}\n${strings.cloudDataUsage} ${_bytes(_cloudUsage!)}'
+              : strings.clearCacheBody,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(strings.cancel),
+          ),
+          TextButton(
+            key: const ValueKey('settings-clear-cache-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(strings.pick('清理', 'Clear')),
+          ),
+        ],
+      ),
+    );
+    return accepted == true;
   }
 
   @override
@@ -419,20 +470,32 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(strings.pick('缩略图缓存', 'Thumbnail cache')),
+              title: Text(strings.pick('缓存与云端数据', 'Cache and cloud data')),
               subtitle: Text(
                 _usage == null
-                    ? strings.pick('正在计算…', 'Calculating…')
-                    : '${(_usage! / 1024 / 1024).toStringAsFixed(1)} MB',
+                    ? strings.pick(
+                        '正在计算…',
+                        'Calculating…',
+                      )
+                    : [
+                        '${strings.pick('缩略图缓存', 'Thumbnail cache')} ${_bytes(_usage!)}',
+                        if (_cloudUsage != null && _cloudUsage! > 0)
+                          '${strings.cloudDataUsage} ${_bytes(_cloudUsage!)}',
+                      ].join(' · '),
               ),
               trailing: TextButton(
                 key: const ValueKey('settings-clear-cache'),
                 onPressed: _busy
                     ? null
                     : () => _run(() async {
+                        final accepted = await _confirmClear();
+                        if (!accepted) return;
                         await ref
                             .read(localLibraryProvider.notifier)
                             .localCommand({'op': 'clearCache'});
+                        // The session goes with the cache, so the cloud state
+                        // must not keep showing a signed-in account.
+                        await ref.read(cloudSyncProvider.notifier).load();
                       }),
                 child: Text(strings.pick('清理', 'Clear')),
               ),

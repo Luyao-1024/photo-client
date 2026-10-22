@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/cloud_sync_gateway.dart';
+import '../services/local_library_tools.dart';
 import 'local_library_controller.dart';
 import 'runtime_controller.dart';
 
@@ -15,6 +16,7 @@ class CloudSyncState {
     this.available = false,
     this.loading = true,
     this.busy = false,
+    this.autoSync = false,
     this.status = const CloudStatus(),
     this.boundIds = const <String>{},
     this.errorCode,
@@ -24,6 +26,10 @@ class CloudSyncState {
   /// False when the active gateway does not implement cloud sync at all.
   final bool available;
   final bool loading, busy;
+
+  /// Whether the app syncs on its own at startup. Off by default: signing in
+  /// establishes a session, it does not start a download.
+  final bool autoSync;
   final CloudStatus status;
   final Set<String> boundIds;
   final String? errorCode;
@@ -36,6 +42,7 @@ class CloudSyncState {
     bool? available,
     bool? loading,
     bool? busy,
+    bool? autoSync,
     CloudStatus? status,
     Set<String>? boundIds,
     String? errorCode,
@@ -45,6 +52,7 @@ class CloudSyncState {
     available: available ?? this.available,
     loading: loading ?? this.loading,
     busy: busy ?? this.busy,
+    autoSync: autoSync ?? this.autoSync,
     status: status ?? this.status,
     boundIds: boundIds ?? this.boundIds,
     errorCode: clearError ? null : errorCode ?? this.errorCode,
@@ -52,19 +60,25 @@ class CloudSyncState {
   );
 }
 
-/// Owns cloud login state and the bound-photo set. Syncs once after startup
-/// and once after login; there is no background polling.
+/// Owns cloud login state and the bound-photo set. Signing in only establishes
+/// the session; every sweep is either user-initiated or allowed by the auto
+/// sync switch. There is no background polling.
 class CloudSyncController extends Notifier<CloudSyncState> {
   CloudSyncGateway? _gateway;
   bool _disposed = false;
   bool _started = false;
   Future<void>? _loading;
+  Timer? _statusTicker;
 
   @override
   CloudSyncState build() {
     final gateway = ref.read(coreGatewayProvider);
     _gateway = gateway is CloudSyncGateway ? gateway as CloudSyncGateway : null;
-    ref.onDispose(() => _disposed = true);
+    ref.onDispose(() {
+      _disposed = true;
+      _statusTicker?.cancel();
+      _statusTicker = null;
+    });
     ref.listen<ConnectionPhase>(runtimeProvider.select((view) => view.phase), (
       previous,
       next,
@@ -103,6 +117,9 @@ class CloudSyncController extends Notifier<CloudSyncState> {
   Future<void> _startup() async {
     await load();
     if (_disposed || !state.loggedIn) return;
+    // A signed-in account does not download by itself: the startup sweep only
+    // runs when the user turned auto sync on.
+    if (!state.autoSync) return;
     await syncNow();
   }
 
@@ -116,16 +133,52 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     try {
       final status = await gateway.cloudStatus();
       final bound = await gateway.cloudBoundMediaIds();
+      final autoSync = await _readAutoSync();
       if (_disposed) return;
       state = state.copyWith(
         loading: false,
         status: status,
         boundIds: bound.toSet(),
+        autoSync: autoSync,
         clearError: true,
       );
     } catch (error) {
       if (_disposed) return;
       state = state.copyWith(loading: false, errorCode: cloudErrorCode(error));
+    }
+  }
+
+  /// Read the stored auto sync switch. A gateway without the local tools
+  /// channel keeps the default: no automatic sweep.
+  Future<bool> _readAutoSync() async {
+    final gateway = ref.read(coreGatewayProvider);
+    if (gateway is! LocalLibraryTools) return false;
+    try {
+      final data = await (gateway as LocalLibraryTools).localCommand({
+        'op': 'preferences',
+      });
+      if (data is Map && data['cloudAutoSync'] == true) return true;
+    } catch (_) {
+      // A missing or unreadable preference means the default, not a failure.
+    }
+    return false;
+  }
+
+  /// Turn the automatic startup sweep on or off. Signing in never syncs on
+  /// its own; this switch only decides whether the app sweeps when it starts.
+  Future<void> setAutoSync(bool value) async {
+    if (_disposed) return;
+    state = state.copyWith(autoSync: value);
+    final gateway = ref.read(coreGatewayProvider);
+    if (gateway is! LocalLibraryTools) return;
+    try {
+      await (gateway as LocalLibraryTools).localCommand({
+        'op': 'setPreference',
+        'key': 'cloudAutoSync',
+        'value': value,
+      });
+    } catch (_) {
+      // The switch still applies to this session when it cannot be stored.
     }
   }
 
@@ -152,8 +205,8 @@ class CloudSyncController extends Notifier<CloudSyncState> {
         boundIds: bound.toSet(),
         clearError: true,
       );
-      // The native login already ran one downlink; refresh the grid so those
-      // photos appear without waiting for another round trip.
+      // Signing in answers with the session, not with a download. The grid is
+      // refreshed so anything already on disk is shown under this account.
       await _refreshLibrary();
       return null;
     } catch (error) {
@@ -190,6 +243,10 @@ class CloudSyncController extends Notifier<CloudSyncState> {
       return null;
     }
     state = state.copyWith(busy: true, clearError: true);
+    // A sweep can run for a long time. The status is refreshed while it runs
+    // so the interface shows that syncing is under way and how far it got
+    // instead of a button that only spins.
+    _startStatusTicker();
     try {
       final report = await gateway.cloudSyncNow();
       final status = await gateway.cloudStatus();
@@ -212,6 +269,35 @@ class CloudSyncController extends Notifier<CloudSyncState> {
         state = state.copyWith(busy: false, errorCode: code);
       }
       return null;
+    } finally {
+      _stopStatusTicker();
+    }
+  }
+
+  void _startStatusTicker() {
+    _statusTicker?.cancel();
+    _statusTicker = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_refreshStatus());
+    });
+  }
+
+  void _stopStatusTicker() {
+    _statusTicker?.cancel();
+    _statusTicker = null;
+  }
+
+  /// Read the live status without touching the busy state: the native side
+  /// answers this while a sweep is running, which is what makes the syncing
+  /// label and the counters live.
+  Future<void> _refreshStatus() async {
+    final gateway = _gateway;
+    if (gateway == null || _disposed) return;
+    try {
+      final status = await gateway.cloudStatus();
+      if (_disposed) return;
+      state = state.copyWith(status: status);
+    } catch (_) {
+      // A failed status read never disturbs the sweep it observes.
     }
   }
 

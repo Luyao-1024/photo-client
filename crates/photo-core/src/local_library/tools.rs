@@ -282,6 +282,7 @@ impl LocalLibrary {
                 | "thumbnailWorkers"
                 | "logLevel"
                 | "order"
+                | "cloudAutoSync"
         ) {
             return Err("InvalidPreference".into());
         }
@@ -294,6 +295,9 @@ impl LocalLibrary {
             return Err("InvalidPreference".into());
         }
         if key == "autoPlayMotionPhoto" && !parsed.is_boolean() {
+            return Err("InvalidPreference".into());
+        }
+        if key == "cloudAutoSync" && !parsed.is_boolean() {
             return Err("InvalidPreference".into());
         }
         if key == "glassMode" {
@@ -377,7 +381,12 @@ impl LocalLibrary {
             .map(|m| m.len())
             .sum())
     }
+    /// Drop the thumbnail cache: the rows of the database and the files on
+    /// the disk go together. A row that still says "ready" while its file is
+    /// gone would keep the photo from being rendered again, because the
+    /// candidate query trusts the row and never asks for a new thumbnail.
     pub fn clear_cache(&self) -> Result<(), String> {
+        self.clear_thumbnail_rows()?;
         let cache = self.root.join("cache");
         if cache.is_dir() {
             fs::remove_dir_all(&cache).map_err(error)?;

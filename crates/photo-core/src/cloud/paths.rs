@@ -24,22 +24,116 @@ pub(super) fn media_dir(
     photo_id: &str,
     generation: &str,
 ) -> Result<PathBuf, String> {
-    if !is_uuid(photo_id) || !is_uuid(generation) {
+    if !is_uuid(generation) {
         return Err("GraphInvalid".into());
     }
     Ok(root
         .join("cloud")
         .join(account_id)
         .join("media")
-        .join(photo_id)
+        .join(media_folder(photo_id)?)
         .join(generation))
 }
 
-/// Gallery grouping name for downloaded photos. The directory is virtual: the
-/// actual files live in per-generation folders, but the album sidebar should
-/// show one stable, human-readable entry instead of a generation UUID.
-pub(super) fn virtual_parent(root: &Path, account_id: &str) -> PathBuf {
-    root.join("cloud").join(account_id).join("Cloud")
+/// The directory name of a photo inside the media folder.
+///
+/// A UUID photo id keeps its exact spelling, so a library that already
+/// downloaded those photos keeps its files. Any other id is reduced to a safe
+/// name with a digest of the original: the service does not require UUID
+/// record names, and a foreign id must not abort the whole download.
+pub(super) fn media_folder(photo_id: &str) -> Result<String, String> {
+    if is_uuid(photo_id) {
+        return Ok(photo_id.to_owned());
+    }
+    let mut name = String::with_capacity(photo_id.len().min(48));
+    for character in photo_id.chars() {
+        if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+            name.push(character);
+        } else {
+            name.push('-');
+        }
+        if name.len() >= 48 {
+            break;
+        }
+    }
+    let trimmed = name.trim_matches('-');
+    if trimmed.is_empty() {
+        return Err("GraphInvalid".into());
+    }
+    Ok(format!("{trimmed}-{:08x}", digest(photo_id)))
+}
+
+/// A short, stable digest of a name. It keeps two different ids apart after
+/// they were reduced to the same safe spelling.
+fn digest(value: &str) -> u32 {
+    let mut hash: u32 = 2_166_136_261;
+    for byte in value.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(16_777_619);
+    }
+    hash
+}
+
+/// The album a downloaded photo belongs to.
+///
+/// The album mirrors the cloud relative path, so a photo that was uploaded
+/// from an album comes back into an album with the same name instead of one
+/// flat "Cloud" album. The path is virtual: the bytes stay in the per
+/// generation media folders.
+pub(super) fn virtual_album(root: &Path, account_id: &str, relative_path: &str) -> PathBuf {
+    let album = album_path(relative_path);
+    let base = root.join("cloud").join(account_id);
+    if album.is_empty() {
+        return base.join("Cloud");
+    }
+    let mut path = base;
+    for segment in album.split('/') {
+        path = path.join(segment);
+    }
+    path
+}
+
+/// The album directory of a cloud relative path: every segment except the
+/// file name. Unsafe segments are dropped, so the result can never escape
+/// the cloud folder.
+pub(super) fn album_path(relative_path: &str) -> String {
+    let segments: Vec<&str> = relative_path.split('/').collect();
+    let mut parts = Vec::new();
+    for segment in segments.iter().take(segments.len().saturating_sub(1)) {
+        if safe_segment(segment) {
+            parts.push(*segment);
+        }
+    }
+    parts.join("/")
+}
+
+/// A path segment that is safe on the wire and as a directory name.
+fn safe_segment(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment != "."
+        && segment != ".."
+        && segment.len() <= 255
+        && !segment.contains(['\\', '\0'])
+}
+
+/// The album prefix of an uploaded photo.
+///
+/// The local album path relative to its source root keeps the cloud record
+/// and the local album in agreement: what is uploaded from "Screenshots" comes
+/// back into "Screenshots". Reserved service directories are never used.
+pub(super) fn safe_album(album: &str) -> String {
+    let mut parts = Vec::new();
+    for segment in album.split('/') {
+        if safe_segment(segment)
+            && !matches!(
+                segment,
+                ".syncserver" | ".photoviewer-sync" | ".sync-staging"
+            )
+        {
+            parts.push(segment);
+        }
+    }
+    parts.join("/")
 }
 
 pub(super) fn download_extension(relative_path: &str, mime: &str) -> Option<String> {
@@ -68,8 +162,7 @@ pub(super) fn upload_extension(path: &Path, mime: &str) -> Option<String> {
 }
 
 fn safe_extension(extension: &str) -> bool {
-    (1..=8).contains(&extension.len())
-        && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    (1..=8).contains(&extension.len()) && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
 fn extension_for_mime(mime: &str) -> Option<&'static str> {
@@ -119,6 +212,7 @@ pub(super) fn safe_stem(name: &str) -> String {
 }
 
 pub(super) fn upload_relative_path(
+    album: &str,
     media_name: &str,
     media_id: &str,
     generation: &str,
@@ -136,8 +230,16 @@ pub(super) fn upload_relative_path(
         .take(8)
         .collect();
     let stem = safe_stem(media_name);
-    let year = year_for_ms(sort_time_ms).max(1970);
-    format!("Uploads/{year}/{stem}-{media_suffix}-{generation_suffix}.{extension}")
+    let name = format!("{stem}-{media_suffix}-{generation_suffix}.{extension}");
+    // The album travels with the photo: a photo uploaded from an album comes
+    // back into that album instead of one flat cloud album.
+    let album = safe_album(album);
+    if album.is_empty() {
+        let year = year_for_ms(sort_time_ms).max(1970);
+        format!("Uploads/{year}/{name}")
+    } else {
+        format!("{album}/{name}")
+    }
 }
 
 pub(super) fn year_for_ms(milliseconds: i64) -> i32 {
@@ -170,6 +272,7 @@ mod tests {
         assert_eq!(safe_stem("My Trip 2024!!.jpg"), "my-trip-2024");
         assert_eq!(safe_stem("旅行.jpg"), "photo");
         let path = upload_relative_path(
+            "",
             "My Trip.jpg",
             "0123456789abcdef",
             "fedcba9876543210",
@@ -178,6 +281,75 @@ mod tests {
         );
         assert_eq!(path, "Uploads/2023/my-trip-01234567-fedcba98.jpg");
         assert!(syncserver_client::photo::is_safe_relative_path(&path));
+    }
+
+    #[test]
+    fn the_upload_path_carries_the_album() {
+        let path = upload_relative_path(
+            "Camera/2026-09",
+            "IMG_1000.jpg",
+            "0123456789abcdef",
+            "fedcba9876543210",
+            "jpg",
+            1_700_000_000_000,
+        );
+        assert_eq!(path, "Camera/2026-09/img-1000-01234567-fedcba98.jpg");
+        assert!(syncserver_client::photo::is_safe_relative_path(&path));
+        // A reserved service directory is never used as an album.
+        let reserved = upload_relative_path(
+            ".syncserver",
+            "IMG_1000.jpg",
+            "0123456789abcdef",
+            "fedcba9876543210",
+            "jpg",
+            1_700_000_000_000,
+        );
+        assert!(reserved.starts_with("Uploads/"));
+        // A traversal segment cannot escape the album.
+        let traversal = upload_relative_path(
+            "../etc",
+            "IMG_1000.jpg",
+            "0123456789abcdef",
+            "fedcba9876543210",
+            "jpg",
+            1_700_000_000_000,
+        );
+        assert!(!traversal.contains(".."));
+        assert!(syncserver_client::photo::is_safe_relative_path(&traversal));
+    }
+
+    #[test]
+    fn a_downloaded_photo_lands_in_the_album_of_its_path() {
+        let root = Path::new("/tmp/root");
+        assert_eq!(
+            virtual_album(root, "acct", "Camera/2026-09/IMG_1000.png"),
+            Path::new("/tmp/root/cloud/acct/Camera/2026-09")
+        );
+        assert_eq!(
+            virtual_album(root, "acct", "IMG_1000.png"),
+            Path::new("/tmp/root/cloud/acct/Cloud")
+        );
+        // An unsafe segment is dropped, so the album stays inside the cloud
+        // folder.
+        assert_eq!(
+            virtual_album(root, "acct", "../escape/IMG_1000.png"),
+            Path::new("/tmp/root/cloud/acct/escape")
+        );
+    }
+
+    #[test]
+    fn a_foreign_photo_id_still_has_a_safe_media_folder() {
+        // A UUID keeps its exact spelling, so existing downloads stay valid.
+        let uuid = "5c9d3d93-8870-4ac1-ac7d-c9da4c485358";
+        assert_eq!(media_folder(uuid).unwrap(), uuid);
+        // A service that does not use UUID record names must not break the
+        // download.
+        let folder = media_folder("seed-photo-0").unwrap();
+        assert!(folder.starts_with("seed-photo-0-"));
+        assert!(!folder.contains('/'));
+        // Two different ids keep different folders.
+        assert_ne!(folder, media_folder("seed-photo-1").unwrap());
+        assert!(media_folder("///").is_err());
     }
 
     #[test]
@@ -197,11 +369,12 @@ mod tests {
             download_extension("album/noext", "image/jpeg"),
             Some("jpg".into())
         );
-        assert_eq!(download_extension("album/noext", "application/x-test"), None);
-        assert!(media_dir(Path::new("/tmp"), "acct", "not-a-uuid", "also-no").is_err());
         assert_eq!(
-            virtual_parent(Path::new("/tmp/root"), "acct"),
-            Path::new("/tmp/root/cloud/acct/Cloud")
+            download_extension("album/noext", "application/x-test"),
+            None
         );
+        // A non UUID generation is still refused: the generation is the
+        // content identity and must stay a UUID.
+        assert!(media_dir(Path::new("/tmp"), "acct", "not-a-uuid", "also-no").is_err());
     }
 }

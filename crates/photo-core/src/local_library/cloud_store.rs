@@ -933,6 +933,237 @@ impl LocalLibrary {
             .map_err(error)
         })
     }
+
+    /// The bytes the app downloaded from the cloud.
+    ///
+    /// The setting shows this next to the thumbnail cache, because the
+    /// cleanup removes both, and the downloaded photos are the bigger part.
+    pub fn cloud_usage(&self) -> Result<u64, String> {
+        let cloud = self.root.join("cloud");
+        Ok(walkdir::WalkDir::new(cloud)
+            .follow_links(false)
+            .into_iter()
+            .flatten()
+            .filter(|entry| entry.file_type().is_file())
+            .filter_map(|entry| entry.metadata().ok())
+            .map(|meta| meta.len())
+            .sum())
+    }
+
+    /// Remove everything the app downloaded from the cloud.
+    ///
+    /// The bytes, the session token and the catalog rows go together: a half
+    /// state would show photos the library no longer knows, and a session
+    /// without its catalog would sync into nothing. The user's own photos are
+    /// never touched; only the managed cloud source and its rows are removed.
+    ///
+    /// The rows go first and the bytes second, and the rows go in the order
+    /// the foreign keys demand: the metadata operations point at the
+    /// bindings, and the bindings and the uploads point at the media of the
+    /// library without a cascade.
+    ///
+    /// Returns the number of removed cloud photos.
+    pub fn clear_cloud_state(&self) -> Result<usize, String> {
+        let library = self.library_id.clone();
+        let root = self.root.clone();
+        let removed = self.execute(move |c| {
+            let tx = c.transaction().map_err(error)?;
+            let accounts: Vec<String> = {
+                let mut statement = tx
+                    .prepare("SELECT account_id FROM cloud_accounts")
+                    .map_err(error)?;
+                statement
+                    .query_map([], |r| r.get(0))
+                    .map_err(error)?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+                    .map_err(error)?
+            };
+            // The cloud rows of the account. The metadata operations point at
+            // the bindings, so they have to go before them.
+            for account_id in &accounts {
+                for table in [
+                    "cloud_metadata_operations",
+                    "cloud_bindings",
+                    "cloud_uploads",
+                    "cloud_account_scope",
+                    "cloud_sync_state",
+                    "cloud_records",
+                ] {
+                    tx.execute(
+                        &format!("DELETE FROM {table} WHERE account_id=?1"),
+                        params![account_id],
+                    )
+                    .map_err(error)?;
+                }
+                tx.execute(
+                    "DELETE FROM cloud_accounts WHERE account_id=?1",
+                    params![account_id],
+                )
+                .map_err(error)?;
+            }
+            // The photos that came from the cloud, identified by their source.
+            let media: Vec<String> = {
+                let mut statement = tx
+                    .prepare(
+                        "SELECT media_id FROM media WHERE library_id=?1 AND source_id IN \
+                         (SELECT source_id FROM sources WHERE library_id=?1 AND source_kind='managed')",
+                    )
+                    .map_err(error)?;
+                statement
+                    .query_map([&library], |r| r.get(0))
+                    .map_err(error)?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+                    .map_err(error)?
+            };
+            for media_id in &media {
+                tx.execute(
+                    "DELETE FROM file_publications WHERE library_id=?1 AND operation_id IN \
+                     (SELECT operation_id FROM file_operations WHERE library_id=?1 AND media_id=?2)",
+                    params![library, media_id],
+                )
+                .map_err(error)?;
+                for table in [
+                    "thumbnails",
+                    "album_members",
+                    "file_operations",
+                    "edit_projects",
+                    "library_memberships",
+                ] {
+                    if table == "edit_projects" {
+                        tx.execute(
+                            "DELETE FROM edit_steps WHERE library_id=?1 AND edit_id IN \
+                             (SELECT edit_id FROM edit_projects WHERE library_id=?1 AND media_id=?2)",
+                            params![library, media_id],
+                        )
+                        .map_err(error)?;
+                    }
+                    tx.execute(
+                        &format!("DELETE FROM {table} WHERE library_id=?1 AND media_id=?2"),
+                        params![library, media_id],
+                    )
+                    .map_err(error)?;
+                }
+                tx.execute(
+                    "DELETE FROM media WHERE library_id=?1 AND media_id=?2",
+                    params![library, media_id],
+                )
+                .map_err(error)?;
+            }
+            // The pending cloud work of the photos the user owns is meaningless
+            // now: the queue and the bindings are gone, so a stale marker would
+            // swallow the next edit instead of sending it up.
+            tx.execute(
+                "DELETE FROM media_sync_state WHERE library_id=?1",
+                params![library],
+            )
+            .map_err(error)?;
+            // The scans of the managed source point at it, so they go first.
+            tx.execute(
+                "DELETE FROM scan_runs WHERE library_id=?1 AND source_id IN \
+                 (SELECT source_id FROM sources WHERE library_id=?1 AND source_kind='managed')",
+                params![library],
+            )
+            .map_err(error)?;
+            tx.execute(
+                "DELETE FROM sources WHERE library_id=?1 AND source_kind='managed'",
+                params![library],
+            )
+            .map_err(error)?;
+            super::tools::recount(&tx, &library)?;
+            tx.commit().map_err(error)?;
+            Ok(media.len())
+        })?;
+        // The bytes: the downloaded media and the session token.
+        let cloud = root.join("cloud");
+        if cloud.is_dir() {
+            fs::remove_dir_all(&cloud).map_err(error)?;
+        }
+        Ok(removed)
+    }
+
+    /// Put the bound photos into the album of their cloud path.
+    ///
+    /// A photo that was downloaded before the album mapping existed still sits
+    /// in the flat cloud album. This moves it into the album of its path
+    /// without touching its bytes, so an existing library is reorganised
+    /// instead of downloaded again.
+    pub(crate) fn cloud_reparent_media(
+        &self,
+        account_id: String,
+        albums: Vec<(String, String)>,
+    ) -> Result<usize, String> {
+        let library = self.library_id.clone();
+        self.execute(move |c| {
+            let albums: std::collections::HashMap<&str, &str> = albums
+                .iter()
+                .map(|(path, parent)| (path.as_str(), parent.as_str()))
+                .collect();
+            let rows: Vec<(String, String)> = {
+                let mut statement = c
+                    .prepare(
+                        "SELECT media_id,relative_path FROM cloud_bindings WHERE account_id=?1",
+                    )
+                    .map_err(error)?;
+                statement
+                    .query_map([&account_id], |r| {
+                        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                    })
+                    .map_err(error)?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+                    .map_err(error)?
+            };
+            let mut moved = 0;
+            for (media_id, relative_path) in rows {
+                let Some(parent) = albums.get(relative_path.as_str()) else {
+                    continue;
+                };
+                moved += c
+                    .execute(
+                        "UPDATE media SET parent_uri=?3 WHERE library_id=?1 AND media_id=?2 AND parent_uri<>?3",
+                        params![library, media_id, parent],
+                    )
+                    .map_err(error)?;
+            }
+            Ok(moved)
+        })
+    }
+
+    /// The album of a local photo relative to the root of its source.
+    ///
+    /// The cloud record carries this path, so the photo keeps its album when
+    /// it is downloaded again. `None` means the album cannot be expressed
+    /// relative to the source, and the upload falls back to a flat path.
+    pub(crate) fn cloud_album_relative_path(
+        &self,
+        media_id: &str,
+    ) -> Result<Option<String>, String> {
+        let library = self.library_id.clone();
+        let media = media_id.to_owned();
+        self.execute(move |c| {
+            c.query_row(
+                "SELECT m.parent_uri, s.root_uri FROM media m \
+                 JOIN sources s ON s.library_id=m.library_id AND s.source_id=m.source_id \
+                 WHERE m.library_id=?1 AND m.media_id=?2",
+                params![library, media],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map(|row| {
+                row.and_then(|(parent, root)| {
+                    let relative = Path::new(&parent)
+                        .strip_prefix(&root)
+                        .ok()
+                        .map(|path| path.to_string_lossy().replace('\\', "/"))?;
+                    if relative.is_empty() {
+                        None
+                    } else {
+                        Some(relative)
+                    }
+                })
+            })
+            .map_err(error)
+        })
+    }
 }
 
 fn insert_records(
@@ -1624,6 +1855,64 @@ mod tests {
                 .total,
             2
         );
+    }
+
+    fn count_rows(library: &LocalLibrary, table: &str) -> i64 {
+        let table = table.to_owned();
+        library
+            .execute(move |c| {
+                c.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                    .map_err(error)
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn clearing_the_cloud_state_removes_the_downloads_and_the_catalog() {
+        let (root, library, _source, media_ids) = path_binding_fixture();
+        // The downloaded media and the session token live under the cloud
+        // folder; the user never has to find it by hand.
+        let cloud = root.path().join("cloud").join(ACCOUNT);
+        fs::create_dir_all(cloud.join("media")).unwrap();
+        fs::write(cloud.join("session.token"), b"token").unwrap();
+        assert_eq!(library.cloud_bindings(ACCOUNT.into()).unwrap().len(), 2);
+        assert_eq!(library.cloud_bound_media_ids().unwrap().len(), 2);
+        assert!(count_rows(&library, "cloud_accounts") > 0);
+
+        let removed = library.clear_cloud_state().unwrap();
+        assert_eq!(removed, 2, "the downloaded photos were not removed");
+        // The bytes and the session are gone.
+        assert!(!cloud.exists(), "the cloud folder survived the cleanup");
+        // The catalog rows are gone with them.
+        assert!(library.cloud_bindings(ACCOUNT.into()).unwrap().is_empty());
+        assert!(library.cloud_bound_media_ids().unwrap().is_empty());
+        for table in [
+            "cloud_accounts",
+            "cloud_bindings",
+            "cloud_uploads",
+            "cloud_records",
+            "cloud_sync_state",
+            "cloud_account_scope",
+            "cloud_metadata_operations",
+        ] {
+            assert_eq!(
+                count_rows(&library, table),
+                0,
+                "{table} survived the cleanup"
+            );
+        }
+        // The photos the cloud brought in are gone from the library itself.
+        assert_eq!(
+            library
+                .query(PhotoFilter::default(), None, 10)
+                .unwrap()
+                .total,
+            0
+        );
+        // The photos the user owns are untouched.
+        assert!(root.path().join("one.jpg").is_file());
+        assert!(root.path().join("two.jpg").is_file());
+        assert_eq!(media_ids.len(), 2);
     }
 
     #[test]

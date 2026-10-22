@@ -341,7 +341,12 @@ impl CloudEngine {
             let generation = Uuid::new_v4().to_string();
             let photo_id = Uuid::new_v4().to_string();
             let master_id = Uuid::new_v4().to_string();
+            // The album travels with the photo: the cloud path mirrors the
+            // local album, so a download lands in the same album again.
+            let album =
+                store(self.library.cloud_album_relative_path(&photo.id))?.unwrap_or_default();
             let relative_path = paths::upload_relative_path(
+                &album,
                 &photo.name,
                 &photo.id,
                 &generation,

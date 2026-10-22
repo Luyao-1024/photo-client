@@ -66,6 +66,11 @@ class _CloudSyncSettingsPageState extends ConsumerState<CloudSyncSettingsPage> {
     final report = await ref.read(cloudSyncProvider.notifier).syncNow();
     if (report == null || !mounted || report.failed > 0) return;
     final strings = AppStrings.of(context);
+    // A full-width toast sits over the sidebar's bottom rows and swallows the
+    // clicks on the settings entry for the seconds it lives. Keep it in the
+    // middle of the window and off the side navigation.
+    final width = MediaQuery.sizeOf(context).width;
+    final side = width < 392 ? 16.0 : (width - 360) / 2;
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
@@ -78,6 +83,9 @@ class _CloudSyncSettingsPageState extends ConsumerState<CloudSyncSettingsPage> {
             ),
           ),
           behavior: SnackBarBehavior.floating,
+          persist: false,
+          margin: EdgeInsets.fromLTRB(side, 8, side, 84),
+          duration: const Duration(seconds: 3),
         ),
       );
   }
@@ -143,6 +151,19 @@ class _CloudSyncSettingsPageState extends ConsumerState<CloudSyncSettingsPage> {
               '${cloud.status.pendingFavorites}',
             ),
             _row(strings.cloudBoundCount, '${cloud.status.boundCount}'),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              key: const ValueKey('cloud-auto-sync'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(strings.cloudAutoSync),
+              subtitle: Text(strings.cloudAutoSyncHint),
+              value: cloud.autoSync,
+              onChanged: busy
+                  ? null
+                  : (value) => unawaited(
+                      ref.read(cloudSyncProvider.notifier).setAutoSync(value),
+                    ),
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,

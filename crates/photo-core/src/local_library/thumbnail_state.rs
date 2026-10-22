@@ -33,6 +33,22 @@ impl LocalLibrary {
             tx.commit().map_err(error)
         })
     }
+    /// Forget the cached thumbnails of the library.
+    ///
+    /// The rows and the files are one cache: a row that still says "ready"
+    /// while its file is gone keeps the candidate query from asking for a
+    /// new thumbnail, and the photo stays empty until its content changes.
+    pub fn clear_thumbnail_rows(&self) -> Result<(), String> {
+        let library = self.library_id.clone();
+        self.execute(move |c| {
+            c.execute(
+                "DELETE FROM thumbnails WHERE library_id=?1",
+                params![library],
+            )
+            .map_err(error)?;
+            Ok(())
+        })
+    }
     /// Cache bookkeeping never replaces the foreground query's narrow index.
     pub(crate) fn thumbnail_reconcile_window(
         &self,

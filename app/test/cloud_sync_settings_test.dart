@@ -86,6 +86,33 @@ void main() {
     expect(find.text('alice'), findsOneWidget);
     expect(find.text('http://127.0.0.1:8790'), findsOneWidget);
     expect(find.text('correct horse'), findsNothing);
+    // Signing in establishes the session and nothing else: it must not start
+    // a download behind the user's back.
+    expect(gateway.cloudSyncCalls, 0);
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('the auto sync switch is off by default and stays a choice', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image)
+      ..cloudState = const CloudStatus(
+        loggedIn: true,
+        endpoint: 'http://127.0.0.1:8790',
+        username: 'alice',
+      );
+    await mount(tester, gateway);
+    await openCloudSettings(tester);
+
+    final toggle = find.byKey(const ValueKey('cloud-auto-sync'));
+    expect(toggle, findsOneWidget);
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    // A signed-in account does not sweep on its own at startup.
+    expect(gateway.cloudSyncCalls, 0);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
     await disposeApp(tester, gateway);
   });
 
@@ -127,7 +154,8 @@ void main() {
       )
       ..cloudBoundIds = {'p0'};
     await mount(tester, gateway);
-    expect(gateway.cloudSyncCalls, 1);
+    // Startup does not sweep unless auto sync was turned on.
+    expect(gateway.cloudSyncCalls, 0);
 
     await openCloudSettings(tester);
     expect(find.byKey(const ValueKey('cloud-account')), findsOneWidget);
@@ -137,7 +165,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('cloud-sync-now')));
     await tester.pumpAndSettle();
-    expect(gateway.cloudSyncCalls, 2);
+    expect(gateway.cloudSyncCalls, 1);
     expect(
       find.text('Synced: 2 downloaded, 1 uploaded, 1 favorites'),
       findsOneWidget,
