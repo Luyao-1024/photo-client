@@ -17,7 +17,6 @@ pub(crate) struct CloudAccount {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CloudSyncState {
-    pub zone_name: Option<String>,
     pub sync_token: Option<String>,
     pub snapshot_token: Option<String>,
     pub status: String,
@@ -34,23 +33,18 @@ pub(crate) struct StoredCloudRecord {
     pub record_json: Option<String>,
 }
 
+/// A cloud binding as the sync engine consumes it. Columns that only the
+/// persistence layer needs (account, master, library, remote path, favorite
+/// flag, zone, asset date, thumbnail cache) stay in the database and are read
+/// through their own queries.
 #[derive(Debug, Clone)]
 pub(crate) struct CloudBinding {
-    pub account_id: String,
     pub photo_id: String,
-    pub master_id: String,
     pub content_generation: String,
-    pub library_id: String,
     pub media_id: String,
-    pub relative_path: String,
-    pub cloud_favorite: bool,
-    pub dirty: u8,
-    pub asset_date_ms: Option<i64>,
     pub is_hidden: bool,
     pub is_trashed: bool,
     pub content_stale: bool,
-    pub thumbnail_path: Option<String>,
-    pub thumbnail_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,7 +80,6 @@ pub(crate) struct CloudBindingMedia {
     pub media_id: String,
     pub path: String,
     pub state: String,
-    pub error_code: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +104,8 @@ pub(crate) struct CloudUploadIntent {
     pub modified_ns: i64,
 }
 
+/// A queued upload as the uplink consumes it. The upload state machine
+/// (state, attempt counter and last error code) stays in `cloud_uploads`.
 #[derive(Debug, Clone)]
 pub(crate) struct CloudUpload {
     pub media_id: String,
@@ -122,9 +117,6 @@ pub(crate) struct CloudUpload {
     pub content_version: u64,
     pub size_bytes: u64,
     pub modified_ns: i64,
-    pub state: String,
-    pub attempt: u32,
-    pub error_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -157,25 +149,17 @@ fn account_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudAccount> {
 
 fn binding_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudBinding> {
     Ok(CloudBinding {
-        account_id: row.get(0)?,
-        photo_id: row.get(1)?,
-        master_id: row.get(2)?,
-        content_generation: row.get(3)?,
-        library_id: row.get(4)?,
-        media_id: row.get(5)?,
-        relative_path: row.get(6)?,
-        cloud_favorite: row.get(7)?,
-        dirty: row.get(8)?,
-        asset_date_ms: row.get(9)?,
-        is_hidden: row.get(10)?,
-        is_trashed: row.get(11)?,
-        content_stale: row.get(12)?,
-        thumbnail_path: row.get(13)?,
-        thumbnail_sha256: row.get(14)?,
+        photo_id: row.get(0)?,
+        content_generation: row.get(1)?,
+        media_id: row.get(2)?,
+        is_hidden: row.get(3)?,
+        is_trashed: row.get(4)?,
+        content_stale: row.get(5)?,
     })
 }
 
-const BINDING_COLUMNS: &str = "account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,COALESCE((SELECT dirty FROM media_sync_state s WHERE s.library_id=cloud_bindings.library_id AND s.media_id=cloud_bindings.media_id),0),asset_date_ms,is_hidden,is_trashed,content_stale,thumbnail_path,thumbnail_sha256";
+const BINDING_COLUMNS: &str =
+    "photo_id,content_generation,media_id,is_hidden,is_trashed,content_stale";
 
 /// Whether a media row belongs to any cloud account. File-mutating catalog
 /// operations call this inside their transaction before touching the file.
@@ -234,16 +218,15 @@ impl LocalLibrary {
     ) -> Result<Option<CloudSyncState>, String> {
         self.execute(move |c| {
             c.query_row(
-                "SELECT zone_name,sync_token,snapshot_token,status,error_code,last_sync_ms FROM cloud_sync_state WHERE account_id=?1",
+                "SELECT sync_token,snapshot_token,status,error_code,last_sync_ms FROM cloud_sync_state WHERE account_id=?1",
                 [&account_id],
                 |r| {
                     Ok(CloudSyncState {
-                        zone_name: r.get(0)?,
-                        sync_token: r.get(1)?,
-                        snapshot_token: r.get(2)?,
-                        status: r.get(3)?,
-                        error_code: r.get(4)?,
-                        last_sync_ms: r.get(5)?,
+                        sync_token: r.get(0)?,
+                        snapshot_token: r.get(1)?,
+                        status: r.get(2)?,
+                        error_code: r.get(3)?,
+                        last_sync_ms: r.get(4)?,
                     })
                 },
             )
@@ -395,7 +378,7 @@ impl LocalLibrary {
     ) -> Result<Vec<CloudBindingMedia>, String> {
         self.execute(move |c| {
             let mut statement = c
-                .prepare("SELECT b.media_id,m.source_uri,m.state,m.error_code FROM cloud_bindings b JOIN media m ON m.library_id=b.library_id AND m.media_id=b.media_id WHERE b.account_id=?1")
+                .prepare("SELECT b.media_id,m.source_uri,m.state FROM cloud_bindings b JOIN media m ON m.library_id=b.library_id AND m.media_id=b.media_id WHERE b.account_id=?1")
                 .map_err(error)?;
             statement
                 .query_map([&account_id], |r| {
@@ -403,7 +386,6 @@ impl LocalLibrary {
                         media_id: r.get(0)?,
                         path: r.get(1)?,
                         state: r.get(2)?,
-                        error_code: r.get(3)?,
                     })
                 })
                 .map_err(error)?
@@ -781,7 +763,7 @@ impl LocalLibrary {
     ) -> Result<Vec<CloudUpload>, String> {
         self.execute(move |c| {
             let mut statement = c
-                .prepare("SELECT media_id,content_generation,photo_id,master_id,relative_path,operation_id,content_version,size_bytes,modified_ns,state,attempt,error_code FROM cloud_uploads WHERE account_id=?1 AND state IN ('pending','publishing') ORDER BY created_at_ms")
+                .prepare("SELECT media_id,content_generation,photo_id,master_id,relative_path,operation_id,content_version,size_bytes,modified_ns FROM cloud_uploads WHERE account_id=?1 AND state IN ('pending','publishing') ORDER BY created_at_ms")
                 .map_err(error)?;
             statement
                 .query_map([&account_id], |r| {
@@ -795,9 +777,6 @@ impl LocalLibrary {
                         content_version: sql_u64(r, 6)?,
                         size_bytes: sql_u64(r, 7)?,
                         modified_ns: r.get(8)?,
-                        state: r.get(9)?,
-                        attempt: r.get(10)?,
-                        error_code: r.get(11)?,
                     })
                 })
                 .map_err(error)?
@@ -1006,6 +985,38 @@ mod tests {
             })
             .unwrap();
         (root, library)
+    }
+
+    /// The pending-operation state of a binding lives in `media_sync_state`;
+    /// the binding projection only carries what the sync engine consumes.
+    fn binding_dirty(library: &LocalLibrary, photo_id: &str) -> u8 {
+        let photo_id = photo_id.to_owned();
+        library
+            .execute(move |c| {
+                c.query_row(
+                    "SELECT COALESCE((SELECT s.dirty FROM media_sync_state s JOIN cloud_bindings b ON b.library_id=s.library_id AND b.media_id=s.media_id WHERE b.photo_id=?1),0)",
+                    params![photo_id],
+                    |r| r.get(0),
+                )
+                .map_err(error)
+            })
+            .unwrap()
+    }
+
+    /// The remote path of a binding stays in `cloud_bindings`; the binding
+    /// projection only carries what the sync engine consumes.
+    fn binding_path(library: &LocalLibrary, photo_id: &str) -> String {
+        let photo_id = photo_id.to_owned();
+        library
+            .execute(move |c| {
+                c.query_row(
+                    "SELECT relative_path FROM cloud_bindings WHERE photo_id=?1",
+                    params![photo_id],
+                    |r| r.get(0),
+                )
+                .map_err(error)
+            })
+            .unwrap()
     }
 
     fn seed_photo(library: &LocalLibrary, folder: &Path, name: &str) -> (String, String) {
@@ -1338,7 +1349,7 @@ mod tests {
                 .cloud_confirm_metadata(ACCOUNT.into(), issued.clone(), wrong)
                 .is_err()
         );
-        assert_eq!(library.cloud_bindings(ACCOUNT.into()).unwrap()[0].dirty, 2);
+        assert_eq!(binding_dirty(&library, "photo-1"), 2);
         assert!(
             !library
                 .cloud_confirm_metadata(ACCOUNT.into(), issued.clone(), confirmed_metadata(&issued))
@@ -1376,7 +1387,7 @@ mod tests {
                 .cloud_confirm_metadata(ACCOUNT.into(), issued.clone(), confirmed_metadata(&issued))
                 .unwrap()
         );
-        assert_eq!(library.cloud_bindings(ACCOUNT.into()).unwrap()[0].dirty, 2);
+        assert_eq!(binding_dirty(&library, "photo-1"), 2);
         let library_id = library.library_id.clone();
         let versions=library.execute(move|c|c.query_row("SELECT metadata_version,acked_metadata_version FROM media_sync_state WHERE library_id=?1 AND media_id=?2",params![library_id,media],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?))).map_err(error)).unwrap();
         assert_eq!(versions, (3, 1));
@@ -1418,7 +1429,7 @@ mod tests {
                 .unwrap()
         );
         assert!(!library.photo(media).unwrap().favorite);
-        assert_eq!(library.cloud_bindings(ACCOUNT.into()).unwrap()[0].dirty, 0);
+        assert_eq!(binding_dirty(&library, "photo-1"), 0);
     }
 
     #[test]
@@ -1459,7 +1470,7 @@ mod tests {
                 .unwrap();
             assert_eq!(library.photo(media).unwrap().favorite, keep_local);
             assert_eq!(
-                library.cloud_bindings(ACCOUNT.into()).unwrap()[0].dirty,
+                binding_dirty(&library, "photo-1"),
                 if keep_local { 2 } else { 0 }
             );
             if keep_local && local_time.is_none() {
@@ -1602,8 +1613,8 @@ mod tests {
             )
             .unwrap();
         let bindings = library.cloud_bindings(ACCOUNT.into()).unwrap();
-        assert_eq!(bindings[0].relative_path, "two.jpg");
-        assert_eq!(bindings[1].relative_path, "one.jpg");
+        assert_eq!(binding_path(&library, "one"), "two.jpg");
+        assert_eq!(binding_path(&library, "two"), "one.jpg");
         assert_eq!(bindings[0].media_id, media_ids[0]);
         assert_eq!(bindings[1].media_id, media_ids[1]);
         assert_eq!(
@@ -1640,7 +1651,7 @@ mod tests {
             .unwrap();
         let bindings = library.cloud_bindings(ACCOUNT.into()).unwrap();
         let orphan = bindings.iter().find(|b| b.photo_id == "one").unwrap();
-        assert!(orphan.relative_path.starts_with('/'));
+        assert!(binding_path(&library, "one").starts_with('/'));
         assert_eq!(orphan.media_id, media_ids[0]);
         assert_eq!(library.cloud_bound_media_ids().unwrap().len(), 3);
         assert!(root.path().join("one.jpg").is_file());
@@ -1660,7 +1671,7 @@ mod tests {
             .into_iter()
             .find(|b| b.photo_id == "one")
             .unwrap();
-        assert_eq!(restored.relative_path, "restored.jpg");
+        assert_eq!(binding_path(&library, "one"), "restored.jpg");
         assert_eq!(restored.media_id, media_ids[0]);
     }
 
@@ -1678,9 +1689,8 @@ mod tests {
                 )
                 .is_err()
         );
-        let bindings = library.cloud_bindings(ACCOUNT.into()).unwrap();
-        assert_eq!(bindings[0].relative_path, "one.jpg");
-        assert_eq!(bindings[1].relative_path, "two.jpg");
+        assert_eq!(binding_path(&library, "one"), "one.jpg");
+        assert_eq!(binding_path(&library, "two"), "two.jpg");
     }
     #[test]
     fn cloud_scope_pin_rejects_changed_namespace_or_database_generation() {

@@ -4,9 +4,11 @@
 //! SDK. This crate exists so the application depends on one stable boundary and
 //! can add app-specific error classification without reimplementing transport.
 
-mod metadata;
+// The module is named `metadata_ops` so it does not shadow the public
+// `sync_client::metadata` module re-exported by the glob below.
+mod metadata_ops;
 
-pub use metadata::{
+pub use metadata_ops::{
     MetadataMutation, metadata_receipt, update_metadata, validate_metadata_confirmation,
 };
 pub use sync_client::*;
