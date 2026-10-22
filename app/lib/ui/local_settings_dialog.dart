@@ -14,8 +14,8 @@ import 'presentation_preferences.dart';
 import 'strings.dart';
 
 class LocalSettingsDialog extends ConsumerStatefulWidget {
-  const LocalSettingsDialog({super.key, required this.onShortcuts});
-  final VoidCallback onShortcuts;
+  const LocalSettingsDialog({super.key, this.onShortcuts});
+  final VoidCallback? onShortcuts;
   @override
   ConsumerState<LocalSettingsDialog> createState() =>
       _LocalSettingsDialogState();
@@ -213,16 +213,17 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               ],
             ),
           ]),
-          section(strings.keyboardShortcuts, [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              key: const ValueKey('settings-shortcuts'),
-              leading: const Icon(Icons.keyboard_outlined),
-              title: Text(strings.keyboardShortcuts),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: widget.onShortcuts,
-            ),
-          ]),
+          if (widget.onShortcuts != null)
+            section(strings.keyboardShortcuts, [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                key: const ValueKey('settings-shortcuts'),
+                leading: const Icon(Icons.keyboard_outlined),
+                title: Text(strings.keyboardShortcuts),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: widget.onShortcuts,
+              ),
+            ]),
           section(strings.theme, [
             Wrap(
               spacing: 8,

@@ -16,6 +16,8 @@ import 'local_album_actions.dart';
 import 'local_library_controller.dart';
 import 'local_library_pane.dart';
 import 'local_settings_dialog.dart';
+import 'library_layout.dart';
+import 'mobile_library_shell.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
 
@@ -111,6 +113,9 @@ class _LibraryShellState extends ConsumerState<LibraryShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(libraryLayoutProvider) == LibraryLayout.mobile) {
+      return const MobileLibraryShell();
+    }
     final library = ref.watch(localLibraryProvider);
     return CallbackShortcuts(
       bindings: {

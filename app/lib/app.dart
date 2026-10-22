@@ -16,6 +16,7 @@ import 'ui/glass_dialog.dart';
 import 'ui/library_backdrop.dart';
 import 'ui/library_shell.dart';
 import 'ui/local_library_controller.dart';
+import 'ui/library_layout.dart';
 import 'ui/photo_theme.dart';
 import 'ui/presentation_preferences.dart';
 import 'ui/runtime_controller.dart';
@@ -23,15 +24,25 @@ import 'ui/strings.dart';
 import 'ui/window_frame.dart';
 
 class PhotoClientApp extends StatelessWidget {
-  const PhotoClientApp({super.key, required this.gateway, this.sourcePicker});
+  const PhotoClientApp({
+    super.key,
+    required this.gateway,
+    this.sourcePicker,
+    this.layout,
+  });
 
   final CoreGateway gateway;
   final LocalSourcePicker? sourcePicker;
+
+  /// Tests pin the shell; production resolves the platform in
+  /// [libraryLayoutProvider].
+  final LibraryLayout? layout;
 
   @override
   Widget build(BuildContext context) => ProviderScope(
     overrides: [
       coreGatewayProvider.overrideWithValue(gateway),
+      if (layout != null) libraryLayoutProvider.overrideWithValue(layout!),
       sourcePickerProvider.overrideWith(
         (ref) =>
             sourcePicker ??

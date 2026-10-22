@@ -36,6 +36,10 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
     this.searchMode = false,
     this.searchDetail = false,
     this.onCloseSearch,
+    this.mobile = false,
+    this.searchRequest = 0,
+    this.closeSearchRequest = 0,
+    this.onSearchVisibilityChanged,
   });
 
   /// Supplied by the shell once Settings owns source management; null keeps
@@ -50,13 +54,23 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
   final bool searchDetail;
   final VoidCallback? onCloseSearch;
 
+  /// Phones draw edge to edge under a floating bottom bar instead of the
+  /// desktop workspace; only presentation changes, the query is shared.
+  final bool mobile;
+
+  /// Monotonic counters let the mobile shell open or close the inline search
+  /// without exposing the pane's private state.
+  final int searchRequest;
+  final int closeSearchRequest;
+  final ValueChanged<bool>? onSearchVisibilityChanged;
+
   @override
   ConsumerState<LocalLibraryPane> createState() => _LocalLibraryPaneState();
 }
 
 class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   double get _headerExtent =>
-      _libraryHeaderHeight(context) +
+      _libraryHeaderHeight(context, mobile: widget.mobile) +
       ((_selectionMode || widget.trashMode) ? 52 : 0) +
       ((_searchOpen || widget.searchMode)
           ? _librarySearchHeight(context, widget.trashMode)
@@ -370,6 +384,16 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
         if (mounted) _searchFocus.requestFocus();
       });
     }
+    if (widget.closeSearchRequest != oldWidget.closeSearchRequest) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _closeSearch();
+      });
+    }
+    if (widget.searchRequest != oldWidget.searchRequest) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_searchOpen) _openSearch();
+      });
+    }
   }
 
   KeyEventResult _onSearchKey(FocusNode node, KeyEvent event) {
@@ -391,6 +415,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       _searchOpen = true;
       _searchFocus.requestFocus();
     });
+    widget.onSearchVisibilityChanged?.call(true);
   }
 
   void _closeSearch() {
@@ -401,7 +426,8 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       widget.onCloseSearch?.call();
       return;
     }
-    setState(() => _searchOpen = false);
+    if (_searchOpen) setState(() => _searchOpen = false);
+    widget.onSearchVisibilityChanged?.call(false);
   }
 
   void _exitSelection() {
@@ -1129,7 +1155,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       children: [
         Positioned.fill(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: EdgeInsets.symmetric(horizontal: widget.mobile ? 0 : 20),
             child: _body(strings, state, controller, gateway, preferences),
           ),
         ),
@@ -1165,6 +1191,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
         _Header(
           title: title,
           itemCount: state.loading ? null : state.extent,
+          mobile: widget.mobile,
           trashMode: widget.trashMode,
           searchMode: widget.searchMode,
           scope: state.searchScope,
@@ -1205,7 +1232,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           emptyTrashEnabled: state.extent > 0 || state.hasNext,
           strings: strings,
         ),
-        if (hasContent && !widget.searchMode)
+        if (hasContent && !widget.searchMode && !widget.mobile)
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
@@ -1308,7 +1335,9 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 1.0,
                 double.infinity,
               );
-              final columns = _mode == GroupMode.day && !widget.searchMode
+              final columns = widget.mobile
+                  ? (available >= 600 ? 5 : 3)
+                  : _mode == GroupMode.day && !widget.searchMode
                   ? preferences.dayColumns
                   : (available /
                             gridMaxCrossAxisExtent(
@@ -1419,7 +1448,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 });
               }
               return SliverPadding(
-                padding: const EdgeInsets.only(bottom: 90),
+                padding: EdgeInsets.only(bottom: widget.mobile ? 118 : 90),
                 sliver: SliverVariedExtentList.builder(
                   itemCount: rows,
                   itemExtentBuilder: (row, _) =>
@@ -1428,7 +1457,12 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                     final (section, localRow) = resolve(row);
                     if (localRow < 0) {
                       return Padding(
-                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+                        padding: EdgeInsets.fromLTRB(
+                          widget.mobile ? 16 : 4,
+                          8,
+                          widget.mobile ? 16 : 4,
+                          8,
+                        ),
                         child: Row(
                           children: [
                             Expanded(
@@ -1546,6 +1580,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       key: ValueKey('photo-${item.photo.id}'),
       photo: item.photo,
       gateway: gateway,
+      radius: widget.mobile ? 4 : GlassTheme.photoRadius,
       selected: _selected.contains(item.photo.id),
       multiSelect: _selectionMode,
       cloudBound: cloudBound,
@@ -1844,8 +1879,12 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 double _librarySearchHeight(BuildContext context, bool trashMode) =>
     MediaQuery.sizeOf(context).width < 1000 && !trashMode ? 100 : 52;
 
-double _libraryHeaderHeight(BuildContext context) {
+double _libraryHeaderHeight(BuildContext context, {bool mobile = false}) {
   final scale = MediaQuery.textScalerOf(context);
+  if (mobile) {
+    return math.max(104, scale.scale(32) * 1.2 + scale.scale(13) * 1.4 + 38) +
+        MediaQuery.paddingOf(context).top;
+  }
   return math.max(92, scale.scale(24) * 1.2 + scale.scale(12) * 1.4 + 35);
 }
 
@@ -1853,6 +1892,7 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.title,
     required this.itemCount,
+    required this.mobile,
     required this.trashMode,
     required this.searchMode,
     required this.scope,
@@ -1890,6 +1930,7 @@ class _Header extends StatelessWidget {
 
   final String title;
   final int? itemCount;
+  final bool mobile;
   final bool trashMode;
   final bool searchMode;
   final SearchScope scope;
@@ -1925,10 +1966,88 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final mainHeight = _libraryHeaderHeight(context) - 16;
+    final topInset = mobile ? MediaQuery.paddingOf(context).top : 0.0;
+    final mainHeight =
+        _libraryHeaderHeight(context, mobile: mobile) - 16 - topInset;
+    final countText = itemCount == null
+        ? null
+        : strings.pick(
+            '${MaterialLocalizations.of(context).formatDecimal(itemCount!)} 项',
+            '${MaterialLocalizations.of(context).formatDecimal(itemCount!)} items',
+          );
+    final subtitle = choosingCover
+        ? strings.pick('选择一张照片作为相册封面', 'Choose a photo for the album cover')
+        : mobile && !searchMode && countText != null
+        ? '${MaterialLocalizations.of(context).formatFullDate(DateTime.now())} · $countText'
+        : countText;
+    final leading = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontSize: mobile ? 32 : 24,
+            height: mobile ? 1.15 : 1.2,
+            fontWeight: mobile ? FontWeight.w700 : FontWeight.w600,
+            letterSpacing: mobile ? -.8 : -.5,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            subtitle,
+            key: const ValueKey('library-header-count'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+    final actions = <Widget>[
+      if (_showField)
+        _PageIconSurface(
+          child: IconButton(
+            key: const ValueKey('library-search-close'),
+            tooltip: strings.close,
+            onPressed: onCloseSearch,
+            icon: const Icon(Icons.close),
+            style: IconButton.styleFrom(
+              fixedSize: const Size(48, 48),
+              shape: const CircleBorder(),
+            ),
+          ),
+        )
+      else
+        _RoundSearchButton(onPressed: onOpenSearch, tooltip: strings.search),
+      if (choosingCover) ...[
+        const SizedBox(width: 8),
+        TextButton(
+          key: const ValueKey('cancel-cover-selection'),
+          onPressed: onCancelCover,
+          child: Text(strings.cancel),
+        ),
+      ] else ...[
+        const SizedBox(width: 8),
+        _PageMenuButton(
+          onChooseCover: onChooseCover,
+          onSort: onSort,
+          onStartSelection: hasContent && !selectionMode
+              ? onStartSelection
+              : null,
+        ),
+      ],
+    ];
     return Padding(
       key: const ValueKey('library-header'),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: mobile
+          ? EdgeInsets.fromLTRB(20, topInset + 8, 12, 8)
+          : const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: SizedBox(
         height:
             mainHeight +
@@ -1941,95 +2060,24 @@ class _Header extends StatelessWidget {
               height: mainHeight,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final showActivity = constraints.maxWidth >= 480;
+                  final showActivity = !mobile && constraints.maxWidth >= 480;
                   return Row(
                     children: [
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontSize: 24,
-                                height: 1.2,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -.5,
-                              ),
-                            ),
-                            if (choosingCover || itemCount != null) ...[
-                              const SizedBox(height: 3),
-                              Text(
-                                choosingCover
-                                    ? strings.pick(
-                                        '选择一张照片作为相册封面',
-                                        'Choose a photo for the album cover',
-                                      )
-                                    : strings.pick(
-                                        '${MaterialLocalizations.of(context).formatDecimal(itemCount!)} 项',
-                                        '${MaterialLocalizations.of(context).formatDecimal(itemCount!)} items',
-                                      ),
-                                key: const ValueKey('library-header-count'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
+                      Expanded(child: leading),
                       if (showActivity)
                         Expanded(
                           child: Center(child: const LibraryActivityProgress()),
                         ),
-                      Expanded(
-                        flex: 1,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            if (_showField)
-                              _PageIconSurface(
-                                child: IconButton(
-                                  key: const ValueKey('library-search-close'),
-                                  tooltip: strings.close,
-                                  onPressed: onCloseSearch,
-                                  icon: const Icon(Icons.close),
-                                  style: IconButton.styleFrom(
-                                    fixedSize: const Size(48, 48),
-                                    shape: const CircleBorder(),
-                                  ),
-                                ),
-                              )
-                            else
-                              _RoundSearchButton(
-                                onPressed: onOpenSearch,
-                                tooltip: strings.search,
-                              ),
-                            if (choosingCover) ...[
-                              const SizedBox(width: 8),
-                              TextButton(
-                                key: const ValueKey('cancel-cover-selection'),
-                                onPressed: onCancelCover,
-                                child: Text(strings.cancel),
-                              ),
-                            ] else ...[
-                              const SizedBox(width: 8),
-                              _PageMenuButton(
-                                onChooseCover: onChooseCover,
-                                onSort: onSort,
-                                onStartSelection: hasContent && !selectionMode
-                                    ? onStartSelection
-                                    : null,
-                              ),
-                            ],
-                          ],
+                      if (mobile)
+                        ...actions
+                      else
+                        Expanded(
+                          flex: 1,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: actions,
+                          ),
                         ),
-                      ),
                     ],
                   );
                 },
@@ -2116,6 +2164,7 @@ class _Header extends StatelessWidget {
     onChanged: onSearchChanged,
     onClose: null,
     strings: strings,
+    expand: mobile,
   );
 
   bool get _hasTrailing => (selectionMode && selectionCount > 0) || trashMode;
@@ -2645,6 +2694,7 @@ class _SearchField extends StatelessWidget {
     required this.onChanged,
     required this.onClose,
     required this.strings,
+    this.expand = false,
   });
 
   final SearchScope scope;
@@ -2653,6 +2703,7 @@ class _SearchField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final VoidCallback? onClose;
   final AppStrings strings;
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
@@ -2660,10 +2711,12 @@ class _SearchField extends StatelessWidget {
       key: const ValueKey('library-search'),
       radius: GlassTheme.controlRadius,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 280),
+        constraints: expand
+            ? const BoxConstraints()
+            : const BoxConstraints(maxWidth: 280),
         child: SizedBox(
           height: 40,
-          width: 280,
+          width: expand ? double.infinity : 280,
           child: Row(
             children: [
               const SizedBox(width: 12),

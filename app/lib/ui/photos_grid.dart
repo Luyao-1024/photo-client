@@ -116,6 +116,7 @@ class PhotoTile extends StatefulWidget {
     this.onSetCover,
     this.onRestore,
     this.onPurge,
+    this.radius = GlassTheme.photoRadius,
   });
 
   final LocalPhoto photo;
@@ -137,6 +138,9 @@ class PhotoTile extends StatefulWidget {
   final VoidCallback? onMoveToAlbum;
   final VoidCallback? onExport, onSetCover;
   final VoidCallback? onRestore, onPurge;
+
+  /// Mobile grids run edge to edge with a much softer corner than panels.
+  final double radius;
 
   @override
   State<PhotoTile> createState() => _PhotoTileState();
@@ -393,7 +397,7 @@ class _PhotoTileState extends State<PhotoTile> {
           onSecondaryTapUp: (details) => _openMenu(details.globalPosition),
           onLongPressStart: (details) => _openMenu(details.globalPosition),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(GlassTheme.photoRadius),
+            borderRadius: BorderRadius.circular(widget.radius),
             child: Stack(
               fit: StackFit.expand,
               children: [
