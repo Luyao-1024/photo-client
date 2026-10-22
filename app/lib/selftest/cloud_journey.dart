@@ -430,12 +430,7 @@ extension CloudJourney on LocalJourney {
     if (_elementByKey(const ValueKey('viewer-edit')) == null) {
       throw JourneyFailure('a bound photo does not offer the editor');
     }
-    for (final key in const [
-      'viewer-edit',
-      'viewer-trash',
-      'viewer-rotate-left',
-      'viewer-rotate-right',
-    ]) {
+    for (final key in const ['viewer-edit', 'viewer-trash']) {
       if (_controlDisabled(key)) {
         throw JourneyFailure('$key is disabled for a cloud photo');
       }

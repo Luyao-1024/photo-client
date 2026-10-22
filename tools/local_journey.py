@@ -324,7 +324,17 @@ class X11InputHelper:
             return f"scroll button {button}"
         if kind == "key":
             _focus(window, self.display)
-            _run_x11(["xdotool", "key", "--clearmodifiers", str(payload["key"])], self.display)
+            result = _run_x11(
+                ["xdotool", "key", "--clearmodifiers", str(payload["key"])],
+                self.display,
+            )
+            # xdotool exits 0 after ignoring an unknown keysym, which used to
+            # turn a typo such as "escape" into a silent, falsely ACKed step.
+            if result.returncode != 0 or "No such key name" in result.stderr:
+                raise ProfileError(
+                    f"input: xdotool rejected key {payload['key']!r}: "
+                    f"{result.stderr.strip() or result.returncode}"
+                )
             return f"key {payload['key']}"
         if kind == "text":
             _focus(window, self.display)

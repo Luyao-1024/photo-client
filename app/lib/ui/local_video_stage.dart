@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import 'strings.dart';
+import 'hover_video_controls.dart';
 import '../services/window_controller.dart';
+import '../services/video_playback_lifecycle.dart';
 
 /// Playback readiness is explicit so the viewer never substitutes an unpaintable
 /// video texture for its static image. The factory also permits codec-free tests.
@@ -17,6 +20,8 @@ abstract interface class VideoPlaybackSession {
   Future<void> toggle();
   Future<void> dispose();
   Stream<String> get errors;
+  Stream<bool> get completed;
+  Stream<bool> get playback;
   bool get playing;
   Duration get position;
   Widget buildVideo(GlobalKey<VideoState> key);
@@ -24,9 +29,15 @@ abstract interface class VideoPlaybackSession {
 
 typedef VideoSessionFactory = VideoPlaybackSession Function();
 
+final videoSessionFactoryProvider = Provider<VideoSessionFactory>(
+  (ref) => _NativeVideoSession.new,
+);
+
 class _NativeVideoSession implements VideoPlaybackSession {
   _NativeVideoSession() {
-    MediaKit.ensureInitialized(libmpv: Platform.isLinux ? 'libmpv.so.2' : null);
+    MediaKit.ensureInitialized(
+      libmpv: Platform.isLinux ? linuxMpvLibraryPath() : null,
+    );
     player = Player(
       configuration: const PlayerConfiguration(title: 'PhotoViewer'),
     );
@@ -81,6 +92,10 @@ class _NativeVideoSession implements VideoPlaybackSession {
   @override
   Stream<String> get errors => player.stream.error;
   @override
+  Stream<bool> get completed => player.stream.completed;
+  @override
+  Stream<bool> get playback => player.stream.playing;
+  @override
   bool get playing => player.state.playing;
   @override
   Duration get position => player.state.position;
@@ -89,33 +104,66 @@ class _NativeVideoSession implements VideoPlaybackSession {
     key: key,
     controller: controller,
     fit: BoxFit.contain,
+    // media_kit caches its controls subtree. Update only that subtree when
+    // immersive mode changes the inset, keeping the video texture mounted.
+    controls: (state) => Builder(
+      builder: (context) {
+        final theme = MaterialDesktopVideoControlsTheme.of(context);
+        final style = isFullscreen(context) ? theme.fullscreen : theme.normal;
+        final bottomInset = style.padding?.bottom ?? 0.0;
+        return KeyedSubtree(
+          key: ValueKey((bottomInset, theme.normal.seekBarPositionColor)),
+          child: HoverVideoControls(
+            bottomInset: bottomInset,
+            buttonBarHeight: style.bottomButtonBar.isEmpty
+                ? 0
+                : style.buttonBarHeight,
+            seekBarHeight: style.seekBarContainerHeight,
+            seekBarOffset: style.bottomButtonBar.isEmpty ? 0 : 16,
+            horizontalMargin: style.seekBarMargin,
+            child: MaterialDesktopVideoControls(state),
+          ),
+        );
+      },
+    ),
     onEnterFullscreen: () => WindowController.instance.setFullscreen(true),
     onExitFullscreen: () => WindowController.instance.setFullscreen(false),
   );
 }
 
-class LocalVideoStage extends StatefulWidget {
+class LocalVideoStage extends ConsumerStatefulWidget {
   const LocalVideoStage({
     super.key,
     required this.path,
     this.bottomInset = 0,
     this.placeholder = const SizedBox.shrink(),
     this.sessionFactory,
+    this.onCompleted,
+    this.onPlaybackActiveChanged,
   });
   final String path;
+
+  /// Keep playback controls above the viewer filmstrip without shrinking the
+  /// video surface or changing its fit relative to the still placeholder.
   final double bottomInset;
   final Widget placeholder;
   final VideoSessionFactory? sessionFactory;
+  final VoidCallback? onCompleted;
+  final ValueChanged<bool>? onPlaybackActiveChanged;
   @override
-  State<LocalVideoStage> createState() => LocalVideoStageState();
+  ConsumerState<LocalVideoStage> createState() => LocalVideoStageState();
 }
 
-class LocalVideoStageState extends State<LocalVideoStage> {
+class LocalVideoStageState extends ConsumerState<LocalVideoStage> {
+  late final VideoPlaybackLifecycle _lifecycle;
   final _view = GlobalKey<VideoState>();
   VideoPlaybackSession? _session;
   StreamSubscription<String>? _errors;
+  StreamSubscription<bool>? _completion;
+  StreamSubscription<bool>? _playback;
   String? _error;
   bool _ready = false;
+  bool _completionHandled = false;
   int _generation = 0;
   String? get error => _error;
   bool get firstFrameReady => _ready;
@@ -126,6 +174,7 @@ class LocalVideoStageState extends State<LocalVideoStage> {
   @override
   void initState() {
     super.initState();
+    _lifecycle = ref.read(videoPlaybackLifecycleProvider);
     _open();
   }
 
@@ -144,17 +193,63 @@ class LocalVideoStageState extends State<LocalVideoStage> {
   void _open() {
     final generation = ++_generation;
     _ready = false;
+    _completionHandled = false;
     _error = null;
     try {
-      final session = (widget.sessionFactory ?? _NativeVideoSession.new)();
+      if (!_lifecycle.acceptingSessions) return;
+      final factory =
+          widget.sessionFactory ??
+          ref.read<VideoSessionFactory>(videoSessionFactoryProvider);
+      final session = factory();
       _session = session;
+      _lifecycle.register(session, () async {
+        if (identical(session, _session)) {
+          _generation++;
+          _session = null;
+          await _errors?.cancel();
+          await _completion?.cancel();
+          await _playback?.cancel();
+          _errors = null;
+          _completion = null;
+          _playback = null;
+        }
+        await session.dispose();
+      });
       _errors = session.errors.listen((_) {
-        if (_current(generation, session)) setState(() => _error = 'playback');
+        if (_current(generation, session)) {
+          setState(() => _error = 'playback');
+          widget.onPlaybackActiveChanged?.call(false);
+        }
+      });
+      _playback = session.playback.listen((playing) {
+        if (playing && _current(generation, session)) {
+          widget.onPlaybackActiveChanged?.call(true);
+        }
+      });
+      _completion = session.completed.listen((completed) {
+        if (!completed) _completionHandled = false;
+        if (completed &&
+            _current(generation, session) &&
+            _ready &&
+            _error == null &&
+            !_completionHandled) {
+          _completionHandled = true;
+          unawaited(_finish(session, generation));
+        }
       });
       unawaited(_prepare(session, generation, widget.path));
     } catch (_) {
       _error = 'unavailable';
     }
+  }
+
+  Future<void> _finish(VideoPlaybackSession session, int generation) async {
+    widget.onPlaybackActiveChanged?.call(false);
+    final view = _view.currentState;
+    if (widget.onCompleted != null && view != null && view.isFullscreen()) {
+      await view.exitFullscreen();
+    }
+    if (_current(generation, session)) widget.onCompleted?.call();
   }
 
   Future<void> _prepare(
@@ -184,9 +279,13 @@ class LocalVideoStageState extends State<LocalVideoStage> {
     _generation++;
     unawaited(_errors?.cancel() ?? Future.value());
     _errors = null;
+    unawaited(_completion?.cancel() ?? Future.value());
+    _completion = null;
+    unawaited(_playback?.cancel() ?? Future.value());
+    _playback = null;
     final old = _session;
     _session = null;
-    unawaited(old?.dispose() ?? Future.value());
+    if (old != null) unawaited(_lifecycle.release(old));
   }
 
   @override
@@ -198,12 +297,35 @@ class LocalVideoStageState extends State<LocalVideoStage> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    MaterialDesktopVideoControlsThemeData controls({double? bottomInset}) =>
+        MaterialDesktopVideoControlsThemeData(
+          padding: bottomInset == null
+              ? null
+              : EdgeInsets.only(bottom: bottomInset),
+          bottomButtonBar: const [
+            MaterialDesktopSkipPreviousButton(),
+            MaterialDesktopPlayOrPauseButton(),
+            MaterialDesktopSkipNextButton(),
+            MaterialDesktopVolumeButton(),
+            MaterialDesktopPositionIndicator(),
+            Spacer(),
+          ],
+          seekBarPositionColor: scheme.primary,
+          seekBarThumbColor: scheme.primary,
+          seekBarColor: scheme.onSurface.withValues(alpha: .20),
+          seekBarHoverColor: scheme.onSurface.withValues(alpha: .28),
+          seekBarBufferColor: scheme.onSurface.withValues(alpha: .38),
+          volumeBarActiveColor: scheme.primary,
+          volumeBarThumbColor: scheme.primary,
+        );
     return Stack(
       fit: StackFit.expand,
       children: [
         if (_session != null)
-          Padding(
-            padding: EdgeInsets.only(bottom: widget.bottomInset),
+          MaterialDesktopVideoControlsTheme(
+            normal: controls(bottomInset: widget.bottomInset),
+            fullscreen: controls(),
             child: _session!.buildVideo(_view),
           ),
         if (!_ready || _error != null) widget.placeholder,

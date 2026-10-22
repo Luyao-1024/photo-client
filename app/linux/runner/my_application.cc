@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <stdio.h>
+#include <dlfcn.h>
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
@@ -185,9 +186,15 @@ static gboolean my_application_local_command_line(GApplication* application,
 
 // Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  // MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application startup.
+  // media_kit_video's decoder query initializes NativeLibrary a second time.
+  // Pin that default lookup to the mpv instance already linked into the video
+  // plugin; otherwise a dev LD_LIBRARY_PATH can load another copy and pass
+  // player handles between two independent libmpv global configurations.
+  Dl_info mpv_library = {};
+  void* mpv_create = dlsym(RTLD_DEFAULT, "mpv_create");
+  if (mpv_create && dladdr(mpv_create, &mpv_library) && mpv_library.dli_fname) {
+    g_setenv("LIBMPV_LIBRARY_PATH", mpv_library.dli_fname, TRUE);
+  }
 
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }

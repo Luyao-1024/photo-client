@@ -178,6 +178,59 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
+  testWidgets('sidebar shows counts for photos and favorites', (tester) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 2);
+    gateway.photos[0] = gateway.photo(0, favorite: true);
+    await mount(tester, gateway);
+    await tester.pumpAndSettle();
+    Finder countIn(String key) => find.descendant(
+      of: find.byKey(ValueKey(key)),
+      matching: find.textContaining(RegExp(r'^[0-9]+$')),
+    );
+    expect(tester.widget<Text>(countIn('sidebar-photos')).data, '2');
+    expect(tester.widget<Text>(countIn('sidebar-favorites')).data, '1');
+
+    await containerOf(tester)
+        .read(localLibraryProvider.notifier)
+        .setFavorite(gateway.photos[1]);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(countIn('sidebar-favorites')).data, '2');
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('physical albums stay available and expandable in trash', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 1);
+    await mount(tester, gateway);
+    await tester.pumpAndSettle();
+    const album = ValueKey('sidebar-album-/local/photos');
+    expect(find.byKey(album), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('sidebar-trash')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Trash is empty'), findsOneWidget);
+    // Trash changes the photo query, not the sidebar's album list.
+    expect(find.byKey(album), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('sidebar-albums-header')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(album), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('sidebar-albums-header')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(album), findsOneWidget);
+
+    // Choosing an album leaves Trash and opens that folder.
+    await tester.tap(find.byKey(album));
+    await tester.pumpAndSettle();
+    final state = containerOf(tester).read(localLibraryProvider);
+    expect(state.trashed, isFalse);
+    expect(state.folder, '/local/photos');
+    expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
+    await disposeApp(tester, gateway);
+  });
+
   testWidgets('sidebar collapses to an icon rail under 700px and keeps flow', (
     tester,
   ) async {

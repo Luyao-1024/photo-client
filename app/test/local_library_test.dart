@@ -147,7 +147,9 @@ void main() {
         final picker = FakePicker();
         await mount(tester, gateway, picker: picker, width: 390);
         await openSettings(tester);
-        final target = find.byKey(ValueKey(directory ? 'add-folder' : 'add-files'));
+        final target = find.byKey(
+          ValueKey(directory ? 'add-folder' : 'add-files'),
+        );
         await tester.ensureVisible(target);
         await tester.pumpAndSettle();
         await tester.tap(target);
@@ -343,7 +345,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.text('Indexing…'), findsOneWidget);
       expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
-      expect(gateway.listCalls, 2);
+      // Cover and favorites-count queries are separate; the foreground catalog
+      // still refreshes exactly once for this burst of scan events.
+      expect(
+        [
+          for (var i = 0; i < gateway.requestedKinds.length; i++)
+            if (!gateway.requestedFavoritesOnly[i]) gateway.requestedKinds[i],
+        ].where((kind) => kind == null),
+        hasLength(2),
+      );
       gateway.pendingScan!.complete(
         const LocalScanResult(
           discovered: 1,

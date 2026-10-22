@@ -1148,7 +1148,7 @@ extension UxJourney on LocalJourney {
       final path = alpha.path;
       final before = await _uxFileFingerprint(path);
       final beforeSize = await _uxDecodeSize(path);
-      await _uxTapEnabled('viewer-rotate-right');
+      await _key('r');
       final rotated = await _uxWaitContentVersion(
         alpha.id,
         alpha.contentVersion,
@@ -1184,10 +1184,10 @@ extension UxJourney on LocalJourney {
       if (keyedSize != (beforeSize.$2, beforeSize.$1)) {
         throw JourneyFailure('R did not rotate the photo right');
       }
-      await _uxTapEnabled('viewer-rotate-left');
+      await _key('shift+r');
       await _uxWaitContentVersion(keyed.id, keyed.contentVersion);
       if (await _uxDecodeSize(path) != beforeSize) {
-        throw JourneyFailure('Rotate left did not restore the original axes');
+        throw JourneyFailure('Shift+R did not restore the original axes');
       }
     });
     await _step('ux-viewer-details-and-rename', () async {
@@ -1282,24 +1282,24 @@ extension UxJourney on LocalJourney {
     });
     await _step('ux-viewer-immersive', () async {
       await _key('f');
-      await _waitFor(
-        () => _elementByKey(const ValueKey('viewer-immersive-exit')) != null,
-        reason: 'F did not enable immersive mode',
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 2800));
+      // The chrome folds over its 220ms transition; pointer motion must then
+      // leave it folded until the user exits on purpose.
+      await Future<void>.delayed(const Duration(milliseconds: 320));
       await _settle();
       if (_elementByKey(const ValueKey('viewer-header')) != null) {
-        throw JourneyFailure('the chrome did not hide after the idle timeout');
+        throw JourneyFailure('F did not enable immersive mode');
       }
-      await _uxMoveTo(_viewSize.center(Offset.zero));
+      final centre = _viewSize.center(Offset.zero);
+      await _uxMoveTo(centre);
+      await _settle();
+      if (_elementByKey(const ValueKey('viewer-header')) != null) {
+        throw JourneyFailure('pointer movement revealed the chrome');
+      }
+      await _input!.tap(centre, _devicePixelRatio);
+      await _settle();
       await _waitForElement(
         'viewer-header',
-        reason: 'moving the pointer did not reveal the chrome',
-      );
-      await _key('Escape');
-      await _waitFor(
-        () => _elementByKey(const ValueKey('viewer-immersive-exit')) == null,
-        reason: 'Escape did not leave immersive mode',
+        reason: 'clicking the photo did not leave immersive mode',
       );
       _uxRecord('immersive', true);
     });
@@ -1309,10 +1309,38 @@ extension UxJourney on LocalJourney {
         'viewer-fullscreen',
         reason: 'Shift+F did not open the fullscreen preview',
       );
-      await _tapKey('viewer-fullscreen-close');
+      if (_elementByKey(const ValueKey('viewer-fullscreen-close')) != null) {
+        throw JourneyFailure(
+          'the fullscreen preview still shows an exit button',
+        );
+      }
+      await _input!.tap(_viewSize.center(Offset.zero), _devicePixelRatio);
+      await _settle();
       await _uxWaitGone(
         'viewer-fullscreen',
-        'the fullscreen preview did not close',
+        'clicking the fullscreen preview did not close it',
+      );
+
+      await _key('shift+f');
+      await _waitForElement(
+        'viewer-fullscreen',
+        reason: 'Shift+F did not reopen the fullscreen preview',
+      );
+      await _key('shift+f');
+      await _uxWaitGone(
+        'viewer-fullscreen',
+        'the Shift+F toggle did not close the fullscreen preview',
+      );
+
+      await _key('shift+f');
+      await _waitForElement(
+        'viewer-fullscreen',
+        reason: 'Shift+F did not reopen the fullscreen preview',
+      );
+      await _key('Escape');
+      await _uxWaitGone(
+        'viewer-fullscreen',
+        'Escape did not close the fullscreen preview',
       );
       _uxRecord('fullscreen_preview', true);
     });
@@ -1712,10 +1740,9 @@ extension UxJourney on LocalJourney {
         true,
         'the extracted motion video never played',
       );
-      await _tapKey('viewer-motion-toggle');
       await _uxWaitGone(
         'viewer-motion-video',
-        'Show photo did not return to the still image',
+        'the motion clip did not return to the still image after completion',
       );
       await _waitForElement(
         'viewer-image-${motion.id}-${motion.contentVersion}',
@@ -1762,10 +1789,9 @@ extension UxJourney on LocalJourney {
         true,
         'the auto-played motion clip never played',
       );
-      await _tapKey('viewer-motion-toggle');
       await _uxWaitGone(
         'viewer-motion-video',
-        'Show photo did not stop the auto-played motion clip',
+        'the auto-played motion clip did not return to the still image',
       );
       await _tapKey('viewer-close');
       await _uxWaitGone('viewer', 'the motion viewer did not close');
@@ -2024,7 +2050,9 @@ extension UxJourney on LocalJourney {
       // The cleanup asks first, because it also removes the downloaded cloud
       // data and the session.
       await _uxWaitUntil(
-        () => _elementByKey(const ValueKey('settings-clear-cache-confirm')) != null,
+        () =>
+            _elementByKey(const ValueKey('settings-clear-cache-confirm')) !=
+            null,
         reason: 'the cache cleanup did not ask for confirmation',
       );
       await _tapKey('settings-clear-cache-confirm');

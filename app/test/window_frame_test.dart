@@ -226,17 +226,56 @@ void main() {
 
       expect(find.byKey(const ValueKey('viewer-fullscreen')), findsOneWidget);
       expect(find.byKey(const ValueKey('window-titlebar')), findsNothing);
+      // The preview has no on-screen exit control.
+      expect(
+        find.byKey(const ValueKey('viewer-fullscreen-close')),
+        findsNothing,
+      );
       final enter = calls.where((call) => call.method == 'fullscreen').toList();
       expect(enter, isNotEmpty);
       expect(enter.last.arguments, isTrue);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-fullscreen-close')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('viewer-fullscreen')), findsNothing);
-      expect(find.byKey(const ValueKey('window-titlebar')), findsOneWidget);
+      Future<void> reopen() async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('viewer-fullscreen')), findsOneWidget);
+      }
+
+      Future<void> expectClosed() async {
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('viewer-fullscreen')), findsNothing);
+        expect(find.byKey(const ValueKey('window-titlebar')), findsOneWidget);
+        expect(
+          calls.where((call) => call.method == 'fullscreen').last.arguments,
+          isFalse,
+        );
+      }
+
+      // A click anywhere on the preview leaves it.
+      await tester.tapAt(
+        tester.getCenter(find.byKey(const ValueKey('viewer-fullscreen'))),
+      );
+      await expectClosed();
+
+      // The viewer shortcuts work inside the preview: Escape, F, and the
+      // Shift+F toggle that opened it all leave.
+      await reopen();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await expectClosed();
+
+      await reopen();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await expectClosed();
+
+      await reopen();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await expectClosed();
       final exit = calls.where((call) => call.method == 'fullscreen').toList();
       expect(exit.length, greaterThan(enter.length));
-      expect(exit.last.arguments, isFalse);
       await disposeApp(tester, gateway);
     }),
   );

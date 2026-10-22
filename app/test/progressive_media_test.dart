@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:photo_client/ui/progressive_image.dart';
 import 'package:photo_client/ui/local_video_stage.dart';
@@ -22,6 +23,7 @@ class _Image extends ImageProvider<_Image> {
 class _Video implements VideoPlaybackSession {
   final opened = Completer<void>(), frame = Completer<void>();
   final failures = StreamController<String>.broadcast();
+  final completions = StreamController<bool>.broadcast();
   bool disposed = false;
   int plays = 0;
   @override
@@ -39,10 +41,15 @@ class _Video implements VideoPlaybackSession {
   Future<void> dispose() async {
     disposed = true;
     unawaited(failures.close());
+    unawaited(completions.close());
   }
 
   @override
   Stream<String> get errors => failures.stream;
+  @override
+  Stream<bool> get completed => completions.stream;
+  @override
+  Stream<bool> get playback => const Stream.empty();
   @override
   bool get playing => plays > 0;
   @override
@@ -59,8 +66,10 @@ ui.Image pixel() {
   return recorder.endRecording().toImageSync(2, 2);
 }
 
-Widget host(Widget child) => MaterialApp(
-  home: Scaffold(body: SizedBox.expand(child: child)),
+Widget host(Widget child) => ProviderScope(
+  child: MaterialApp(
+    home: Scaffold(body: SizedBox.expand(child: child)),
+  ),
 );
 void main() {
   testWidgets('thumbnail remains until the original has a decoded frame', (
@@ -134,28 +143,40 @@ void main() {
     },
   );
   testWidgets(
-    'video keeps the static image after open and plays only after its first frame',
+    'video and still share the full stage with filmstrip controls inset',
     (tester) async {
       final video = _Video();
       await tester.pumpWidget(
         host(
           LocalVideoStage(
             path: 'video.mp4',
+            bottomInset: 104,
             sessionFactory: () => video,
-            placeholder: const Text('static image'),
+            placeholder: const ColoredBox(
+              key: ValueKey('static image'),
+              color: Colors.red,
+            ),
           ),
         ),
       );
-      expect(find.text('static image'), findsOneWidget);
+      final stage = tester.getRect(find.byType(LocalVideoStage));
+      expect(tester.getRect(find.byKey(const ValueKey('static image'))), stage);
+      expect(tester.getRect(find.byKey(const ValueKey('video-frame'))), stage);
+      final controls = tester.widget<MaterialDesktopVideoControlsTheme>(
+        find.byType(MaterialDesktopVideoControlsTheme),
+      );
+      expect(controls.normal.padding, const EdgeInsets.only(bottom: 104));
+      expect(controls.fullscreen.padding, isNull);
       expect(video.plays, 0);
       video.opened.complete();
       await tester.pump();
-      expect(find.text('static image'), findsOneWidget);
+      expect(find.byKey(const ValueKey('static image')), findsOneWidget);
       expect(video.plays, 0);
       video.frame.complete();
       await tester.pump();
       await tester.pump();
-      expect(find.text('static image'), findsNothing);
+      expect(find.byKey(const ValueKey('static image')), findsNothing);
+      expect(tester.getRect(find.byKey(const ValueKey('video-frame'))), stage);
       expect(video.plays, 1);
       await tester.pumpWidget(const SizedBox());
       expect(video.disposed, isTrue);

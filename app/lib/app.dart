@@ -10,6 +10,7 @@ import 'services/app_navigation.dart';
 import 'services/core_gateway.dart';
 import 'services/local_library_gateway.dart';
 import 'services/window_controller.dart';
+import 'services/video_playback_lifecycle.dart';
 import 'ui/glass_dialog.dart';
 import 'ui/library_backdrop.dart';
 import 'ui/library_shell.dart';
@@ -103,6 +104,7 @@ class _ApplicationState extends ConsumerState<_Application>
           false;
     };
     WindowController.instance.prepareClose = () async {
+      await ref.read(videoPlaybackLifecycleProvider).shutdown();
       await ref.read(presentationProvider.notifier).flush();
       await ref.read(runtimeProvider.notifier).shutdown();
     };

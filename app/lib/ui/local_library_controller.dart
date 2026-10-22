@@ -450,9 +450,9 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         pageIndex = 0;
         page = await _queryPage(query, 0, groups: true);
       }
-      final albums = query.trashed
-          ? const <LocalAlbum>[]
-          : await _gateway.listAlbums();
+      // The sidebar keeps physical albums available in every destination,
+      // including Trash; listAlbums only counts active media either way.
+      final albums = await _gateway.listAlbums();
       if (_disposed || generation != _generation) return;
       if (page.revision < state.revision) {
         // A newer snapshot is already published; an older in-flight read must

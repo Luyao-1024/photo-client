@@ -1,0 +1,87 @@
+{
+  "command": [
+    "/home/luyao/workspace/Photo/photo-client/app/build/linux/x64/release/bundle/photo_client",
+    "--local-journey",
+    "--journey-phase=playback-hover",
+    "--data-root=/tmp/photo-filmstrip-hover-native/x11-verified/library",
+    "--evidence-dir=/tmp/photo-filmstrip-hover-native/x11-verified",
+    "--input=x11",
+    "--source=/tmp/photo-filmstrip-hover-native/fixtures"
+  ],
+  "cwd": "/tmp/photo-filmstrip-hover-native/x11-verified",
+  "log": "run.log",
+  "exit_code": 0,
+  "timed_out": false,
+  "elapsed_seconds": 8.435,
+  "record": {
+    "result": "PASS",
+    "phase": "playback-hover",
+    "input": "x11",
+    "started_at": "2026-10-22T16:43:42.357912Z",
+    "elapsed_ms": 7962,
+    "window": {
+      "width": 1280,
+      "height": 720,
+      "device_pixel_ratio": 1.0
+    },
+    "steps": [
+      {
+        "id": "runtime-ready",
+        "status": "PASS",
+        "ms": 52
+      },
+      {
+        "id": "library-open",
+        "status": "PASS",
+        "ms": 0
+      },
+      {
+        "id": "playback-fixtures",
+        "status": "PASS",
+        "ms": 101
+      },
+      {
+        "id": "native-hover-regions",
+        "status": "PASS",
+        "ms": 2041
+      },
+      {
+        "id": "native-video-cycle-0",
+        "status": "PASS",
+        "ms": 3737
+      },
+      {
+        "id": "native-motion-cycle-0",
+        "status": "PASS",
+        "ms": 3037
+      },
+      {
+        "id": "native-exit-during-playback",
+        "status": "PASS",
+        "ms": 902
+      }
+    ],
+    "facts": {
+      "profile_id": "linux-x86_64",
+      "profile_digest": "7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280",
+      "session_id": "062c1513-b9ed-4ebb-9ba7-daa7cd04c56d",
+      "library_id": "c4e9aeac-cf3d-4921-a97b-b0cd97976337",
+      "opened_count": 0,
+      "opened_revision": 0,
+      "hover_strip_decoded_frames": 6,
+      "hover_regions_independent": true,
+      "mpv_libraries": [
+        "/home/luyao/workspace/Photo/photo-client/app/build/linux/x64/release/bundle/lib/libmpv.so.2.5.0"
+      ],
+      "video_cycles": 1,
+      "motion_cycles": 1,
+      "native_exit_during_playback": true
+    },
+    "screenshots": []
+  },
+  "ready": null,
+  "input_actions": 10,
+  "desktop_backend": "X11 (Xvfb)",
+  "rendering": "software GL",
+  "fixture_library": true
+}

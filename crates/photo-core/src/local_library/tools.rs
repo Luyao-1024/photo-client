@@ -643,6 +643,74 @@ mod browse_performance_tests {
         }
     }
     #[test]
+    fn motion_album_cover_query_preserves_foreground_index() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let library = LocalLibrary::open(root.path()).unwrap();
+        let source = library.add_source(folder.path()).unwrap();
+        library
+            .upsert_batch(
+                source,
+                vec![
+                    input(folder.path(), "still.jpg"),
+                    input(folder.path(), "motion.jpg"),
+                    input(folder.path(), "zero.jpg"),
+                ],
+            )
+            .unwrap();
+        library
+            .record_details(vec![
+                (
+                    folder.path().join("motion.jpg").to_string_lossy().into(),
+                    crate::media::details::MediaDetails {
+                        motion_offset: Some(12),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    folder.path().join("zero.jpg").to_string_lossy().into(),
+                    crate::media::details::MediaDetails {
+                        motion_offset: Some(0),
+                        ..Default::default()
+                    },
+                ),
+            ])
+            .unwrap();
+        library
+            .query_window(PhotoFilter::default(), 0, 100)
+            .unwrap();
+        let before = library
+            .browse_index
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .ids
+            .as_ptr();
+        let filter = PhotoFilter {
+            media_kind: Some("motion".into()),
+            ..Default::default()
+        };
+        let page = library.query(filter.clone(), None, 1).unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].name, "motion.jpg");
+        assert_eq!(
+            library
+                .browse_index
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .ids
+                .as_ptr(),
+            before
+        );
+        library.trash_media(vec![page.items[0].id.clone()]).unwrap();
+        assert_eq!(library.query(filter, None, 1).unwrap().total, 0);
+    }
+
+    #[test]
     fn favorite_changes_reuse_unfiltered_ranks_but_refresh_filtered_membership() {
         let root = tempfile::tempdir().unwrap();
         let folder = tempfile::tempdir().unwrap();

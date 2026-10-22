@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,11 +68,30 @@ void main() {
       await mount(tester, gateway);
       await openViewer(tester, 'p0');
 
-      // The chrome exposes an explicit zoom toolbar and percentage readout.
+      // The chrome exposes an explicit zoom toolbar and percentage readout in
+      // the stage's top-right corner, below the header. Rotation now lives on
+      // the keyboard only.
       expect(find.byKey(const ValueKey('viewer-zoom-in')), findsOneWidget);
       expect(find.byKey(const ValueKey('viewer-zoom-out')), findsOneWidget);
       expect(find.byKey(const ValueKey('viewer-zoom-reset')), findsOneWidget);
+      expect(find.byKey(const ValueKey('viewer-rotate-left')), findsNothing);
+      expect(find.byKey(const ValueKey('viewer-rotate-right')), findsNothing);
       expect(find.text('100%'), findsOneWidget);
+      final header = tester.getRect(
+        find.byKey(const ValueKey('viewer-header')),
+      );
+      final viewer = tester.getRect(find.byKey(const ValueKey('viewer')));
+      for (final key in [
+        'viewer-zoom-out',
+        'viewer-zoom-in',
+        'viewer-zoom-reset',
+      ]) {
+        final control = tester.getRect(find.byKey(ValueKey(key)));
+        // Below the header, right of centre, still in the stage's top half.
+        expect(control.top, greaterThanOrEqualTo(header.bottom));
+        expect(control.left, greaterThan(viewer.center.dx));
+        expect(control.top, lessThan(viewer.height / 2));
+      }
 
       // At fit scale the stage rests at 1.0.
       expect(stageScale(tester), closeTo(1, 1e-6));
@@ -127,6 +147,33 @@ void main() {
     },
   );
 
+  testWidgets('wheel zoom updates the percentage readout', (tester) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 2);
+    await mount(tester, gateway);
+    await openViewer(tester, 'p0');
+    expect(find.text('100%'), findsOneWidget);
+
+    final stage = find.byType(InteractiveViewer);
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(pointer.hover(tester.getCenter(stage)));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, -120)));
+    await tester.pump();
+
+    final zoomed = stageScale(tester);
+    expect(zoomed, greaterThan(1));
+    final percent = (zoomed * 100).round();
+    expect(percent, greaterThan(100));
+    expect(find.text('$percent%'), findsOneWidget);
+    expect(find.text('100%'), findsNothing);
+
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
+    await tester.pump();
+    expect(stageScale(tester), closeTo(1, 1e-3));
+    expect(find.text('100%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester, gateway);
+  });
+
   testWidgets('immersive toggles with the button and F; I opens details', (
     tester,
   ) async {
@@ -136,14 +183,12 @@ void main() {
     expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
     expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
     expect(find.byKey(const ValueKey('viewer-filmstrip')), findsOneWidget);
-    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsNothing);
 
     // Enter immersive via the header button: header, filmstrip, and the
-    // bottom-right nav pair fold away; only the exit control remains.
+    // bottom-right nav pair fold away, leaving no exit control on screen.
     await tester.tap(find.byKey(const ValueKey('viewer-immersive')));
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
     expect(find.byKey(const ValueKey('viewer-close')), findsNothing);
     expect(find.byKey(const ValueKey('viewer-name')), findsNothing);
     expect(find.byKey(const ValueKey('viewer-filmstrip')), findsNothing);
@@ -158,14 +203,16 @@ void main() {
     expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
     expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
     expect(find.byKey(const ValueKey('viewer-filmstrip')), findsOneWidget);
-    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsNothing);
 
-    // Enter with the F key, exit with the dedicated button.
+    // Enter with the F key and leave by clicking the stage.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('viewer-immersive-exit')));
+    expect(find.byKey(const ValueKey('viewer-close')), findsNothing);
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const ValueKey('viewer'))) +
+          const Offset(0, 40),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
     expect(find.byKey(const ValueKey('viewer-name')), findsOneWidget);
@@ -175,7 +222,6 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer-details-panel')), findsOneWidget);
-    expect(find.byKey(const ValueKey('viewer-immersive-exit')), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer-details-panel')), findsNothing);
@@ -192,6 +238,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer')), findsNothing);
 
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('immersive ignores pointer movement and a stage click exits', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 2);
+    await mount(tester, gateway);
+    await openViewer(tester, 'p0');
+    final centre = tester.getCenter(find.byKey(const ValueKey('viewer')));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('viewer-header')), findsNothing);
+    expect(find.byKey(const ValueKey('viewer-close')), findsNothing);
+
+    // Moving the pointer must not leave immersive browsing or reveal chrome.
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(pointer.hover(centre));
+    for (var i = 1; i <= 6; i++) {
+      await tester.sendEventToBinding(
+        pointer.hover(centre + Offset(24.0 * i, 8)),
+      );
+      await tester.pump(const Duration(milliseconds: 450));
+    }
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-header')), findsNothing);
+
+    // A click anywhere on the stage leaves immersive browsing.
+    await tester.tapAt(centre + const Offset(0, 40));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-header')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-close')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await disposeApp(tester, gateway);
   });

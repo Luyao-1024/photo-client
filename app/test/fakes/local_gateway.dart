@@ -37,6 +37,7 @@ class FakeLocalGateway extends FakeGateway
   final requestedSearches = <String>[];
   final requestedScopes = <SearchScope>[];
   final requestedKinds = <String?>[];
+  final requestedFavoritesOnly = <bool>[];
   final requestedFolders = <String?>[];
   final requestedTrashed = <bool>[];
   final requestedAdds = <(List<String>, String, bool)>[];
@@ -65,6 +66,9 @@ class FakeLocalGateway extends FakeGateway
     String mediaKind = 'image',
     String mimeType = 'image/jpeg',
     int? captureTimeMs,
+    int? motionOffset,
+    int? width,
+    int? height,
   }) => LocalPhoto(
     id: 'p$index',
     path: imagePath,
@@ -73,14 +77,15 @@ class FakeLocalGateway extends FakeGateway
     sizeBytes: 68,
     modifiedMs: 1700000000000,
     contentVersion: 1,
-    width: 1,
-    height: 1,
+    width: width ?? 1,
+    height: height ?? 1,
     favorite: favorite,
     mediaKind: mediaKind,
     mimeType: mimeType,
     captureTimeMs: captureTimeMs,
     sortTimeMs: captureTimeMs ?? 1700000000000,
     state: state,
+    motionOffset: motionOffset,
   );
 
   @override
@@ -89,7 +94,7 @@ class FakeLocalGateway extends FakeGateway
     if (failOpen) throw StateError('PRIVATE database path');
     return LocalLibraryInfo(
       libraryId: 'local-test-library',
-      count: photos.length,
+      count: photos.where((photo) => photo.state == 'active').length,
       revision: revision,
     );
   }
@@ -110,6 +115,7 @@ class FakeLocalGateway extends FakeGateway
     requestedSearches.add(search);
     requestedScopes.add(searchScope);
     requestedKinds.add(mediaKind);
+    requestedFavoritesOnly.add(favoritesOnly);
     requestedFolders.add(folder);
     requestedTrashed.add(trashed);
     if (failList) throw StateError('PRIVATE SQL');
@@ -121,7 +127,10 @@ class FakeLocalGateway extends FakeGateway
           (photo) =>
               (trashed ? photo.state == 'trashed' : photo.state == 'active') &&
               (!favoritesOnly || photo.favorite) &&
-              (mediaKind == null || photo.mediaKind == mediaKind) &&
+              (mediaKind == null ||
+                  (mediaKind == 'motion'
+                      ? (photo.motionOffset ?? 0) > 0
+                      : photo.mediaKind == mediaKind)) &&
               (folder == null || photo.parent == folder) &&
               (needle.isEmpty ||
                   (searchScope == SearchScope.date
@@ -549,6 +558,8 @@ class FakeLocalGateway extends FakeGateway
     sortTimeMs: photo.sortTimeMs,
     state: state ?? photo.state,
     trashedAtMs: photo.trashedAtMs,
+    durationMs: photo.durationMs,
+    motionOffset: photo.motionOffset,
   );
 
   @override

@@ -136,7 +136,8 @@ class EffectVerificationTests(unittest.TestCase):
             "theme": '"dark"', "glassMode": '"auto"', "locale": '"en"',
             "backgroundBlur": "0.75", "followScroll": "true",
             "reduceMotion": "true", "dayColumns": "8",
-            "thumbnailWorkers": "4", "logLevel": '"debug"',
+            "thumbnailWorkers": str(ux_journey.fastest_worker_count()),
+            "logLevel": '"debug"',
             "order": '"date_desc"',
         }.items():
             connection.execute("INSERT INTO local_preferences VALUES(?,?)", (key, value))
@@ -219,7 +220,8 @@ class EffectVerificationTests(unittest.TestCase):
                          {key: value["reason"] for key, value in checks.items()
                           if value["status"] != "PASS"})
         self.assertEqual(evidence["media_count"], 0)
-        self.assertEqual(evidence["preferences"]["thumbnailWorkers"], 4)
+        self.assertEqual(evidence["preferences"]["thumbnailWorkers"],
+                         ux_journey.fastest_worker_count())
 
     def test_fixed_material_and_follow_setting_are_required(self):
         self.facts["material"] = "reduced"

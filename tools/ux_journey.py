@@ -77,6 +77,29 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def fastest_worker_count() -> int:
+    """Mirror the core's Fastest tier: physical cores within the CPU affinity."""
+    try:
+        available = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        available = os.cpu_count() or 2
+    try:
+        text = Path("/proc/cpuinfo").read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    cores = set()
+    for block in text.split("\n\n"):
+        fields = {}
+        for line in block.splitlines():
+            key, separator, value = line.partition(":")
+            if separator:
+                fields[key.strip()] = value.strip()
+        if "core id" in fields:
+            cores.add((fields.get("physical id", "0"), fields["core id"]))
+    count = min(len(cores), available) if cores else available
+    return max(1, min(count, 32))
+
+
 def _run_logged(command: list[str], *, cwd: Path, log_path: Path, timeout: int,
                 env: dict[str, str] | None = None) -> dict:
     started = time.monotonic()
@@ -502,7 +525,7 @@ def verify_effects(record: dict, manifest: dict, initial_facts: dict,
                 "locale": "en",
                 "reduceMotion": True,
                 "dayColumns": day_columns,
-                "thumbnailWorkers": 4,
+                "thumbnailWorkers": fastest_worker_count(),
                 "logLevel": "debug",
                 "order": "date_desc",
             }

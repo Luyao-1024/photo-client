@@ -98,7 +98,6 @@ class AppStrings {
   String get zoomOut => pick('缩小', 'Zoom out');
   String get zoomReset => pick('恢复缩放', 'Reset zoom');
   String get immersive => pick('沉浸浏览', 'Immersive view');
-  String get exitImmersive => pick('退出沉浸浏览', 'Exit immersive view');
   String get close => pick('关闭', 'Close');
   String get filePath => pick('文件路径', 'File path');
   String get fileSize => pick('文件大小', 'File size');
@@ -128,6 +127,7 @@ class AppStrings {
   String get mediaTypes => pick('媒体类型', 'Media types');
   String get images => pick('图片', 'Images');
   String get videos => pick('视频', 'Videos');
+  String get motionPhotos => pick('动态照片', 'Motion photos');
   String get keyboardShortcuts => pick('键盘快捷键', 'Keyboard shortcuts');
   String get shortcutBrowse => pick('浏览', 'Browsing');
   String get shortcutViewer => pick('查看器', 'Viewer');

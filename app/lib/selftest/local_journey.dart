@@ -12,6 +12,8 @@ import '../app.dart';
 import '../platform/file_selector_source_picker.dart';
 import '../services/core_gateway.dart';
 import '../services/local_library_gateway.dart';
+import '../services/video_playback_lifecycle.dart';
+import '../services/window_controller.dart';
 import '../ui/cloud_sync_controller.dart';
 import '../ui/library_shell.dart';
 import '../ui/local_library_controller.dart';
@@ -24,6 +26,7 @@ import 'launch_options.dart';
 
 part 'ux_journey.dart';
 part 'cloud_journey.dart';
+part 'playback_journey.dart';
 
 const String _recordPrefix = 'PHOTO_CLIENT_LOCAL ';
 const String _readyPrefix = 'PHOTO_CLIENT_LOCAL_READY ';
@@ -94,6 +97,10 @@ final class LocalJourney {
           await _uxJourney();
         case 'ux-media':
           await _uxMediaJourney();
+        case 'playback-lifecycle':
+          await _playbackLifecycleJourney();
+        case 'playback-hover':
+          await _playbackLifecycleJourney(cycles: 1, hoverChecks: true);
         case 'cloud-upload':
           await _cloudUploadJourney();
         case 'cloud-download':
@@ -144,6 +151,13 @@ final class LocalJourney {
     _trace('record', 'WRITTEN');
     await stdout.flush();
     _trace('record', 'FLUSHED');
+    if (result == 'PASS' &&
+        (options.journeyPhase == 'playback-lifecycle' ||
+            options.journeyPhase == 'playback-hover')) {
+      // Exercise actual GTK/Flutter teardown after the native disposal barrier.
+      await WindowController.instance.close();
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
     return result == 'PASS' ? 0 : 1;
   }
 
@@ -220,6 +234,7 @@ final class LocalJourney {
   }
 
   Future<void> _shutdown() async {
+    await _container?.read(videoPlaybackLifecycleProvider).shutdown();
     _trace('shutdown-input', 'START');
     try {
       await _input?.dispose();

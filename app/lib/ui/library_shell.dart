@@ -19,6 +19,31 @@ import 'local_settings_dialog.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
 
+// These covers describe the whole media category, independently of the active
+// folder/search/favorites query. Refresh only when the library itself changes.
+final _mediaTypeAlbumProvider = FutureProvider.autoDispose
+    .family<LocalPhotoPage?, String>((ref, kind) async {
+      final identity = ref.watch(
+        localLibraryProvider.select(
+          (state) => (state.info?.libraryId, state.revision),
+        ),
+      );
+      if (identity.$1 == null) return null;
+      final gateway = ref.watch(coreGatewayProvider) as LocalLibraryGateway;
+      return gateway.listPhotos(mediaKind: kind, limit: 1);
+    });
+
+final _favoriteCountProvider = FutureProvider.autoDispose<int?>((ref) async {
+  final identity = ref.watch(
+    localLibraryProvider.select(
+      (state) => (state.info?.libraryId, state.revision),
+    ),
+  );
+  if (identity.$1 == null) return null;
+  final gateway = ref.watch(coreGatewayProvider) as LocalLibraryGateway;
+  return (await gateway.listPhotos(favoritesOnly: true, limit: 1)).total;
+});
+
 class LibraryShell extends ConsumerStatefulWidget {
   const LibraryShell({super.key});
 
@@ -222,6 +247,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
     final strings = AppStrings.of(context);
     final library = widget.library;
     final compact = widget.compact;
+    final favoriteCount = ref.watch(_favoriteCountProvider).asData?.value;
     Widget albumRow(int index) => _AlbumSidebarRow(
       album: library.albums[index],
       selected: library.folder == library.albums[index].path,
@@ -242,6 +268,23 @@ class _SidebarState extends ConsumerState<_Sidebar> {
       },
     );
     final albumCount = _albumsExpanded ? library.albums.length : 0;
+    final mediaTypes = [
+      (kind: 'image', key: 'images', label: strings.images),
+      (kind: 'video', key: 'videos', label: strings.videos),
+      (kind: 'motion', key: 'motion', label: strings.motionPhotos),
+    ];
+    Widget mediaTypeRow(int index) {
+      final type = mediaTypes[index];
+      return _MediaTypeSidebarRow(
+        key: ValueKey('sidebar-media-${type.key}'),
+        kind: type.kind,
+        label: type.label,
+        selected: library.mediaKind == type.kind,
+        onTap: () => widget.onMediaType(type.kind),
+        compact: compact,
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -250,6 +293,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
           key: const ValueKey('sidebar-photos'),
           icon: Icons.photo_library_outlined,
           label: strings.library,
+          count: library.info?.count,
           selected:
               widget.destination == _Destination.photos &&
               !library.favoritesOnly &&
@@ -263,6 +307,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
           key: const ValueKey('sidebar-favorites'),
           icon: Icons.favorite_border,
           label: strings.albumFavorites,
+          count: favoriteCount,
           selected: widget.destination == _Destination.favorites,
           onTap: widget.onFavorites,
           compact: compact,
@@ -298,30 +343,18 @@ class _SidebarState extends ConsumerState<_Sidebar> {
               ),
             ),
           ),
-        if (compact) ...[
-          _NavRow(
-            key: const ValueKey('sidebar-media-images'),
-            icon: Icons.image_outlined,
-            label: strings.images,
-            selected: library.mediaKind == 'image',
-            compact: true,
-            onTap: () => widget.onMediaType('image'),
-          ),
-          _NavRow(
-            key: const ValueKey('sidebar-media-videos'),
-            icon: Icons.videocam_outlined,
-            label: strings.videos,
-            selected: library.mediaKind == 'video',
-            compact: true,
-            onTap: () => widget.onMediaType('video'),
-          ),
-        ],
+        if (compact)
+          for (var index = 0; index < mediaTypes.length; index++)
+            mediaTypeRow(index),
         Expanded(
           child: compact
               ? const SizedBox.shrink()
               : ListView.builder(
                   padding: EdgeInsets.zero,
-                  itemCount: albumCount + 2 + (_mediaTypesExpanded ? 2 : 0),
+                  itemCount:
+                      albumCount +
+                      2 +
+                      (_mediaTypesExpanded ? mediaTypes.length : 0),
                   itemBuilder: (context, index) {
                     if (index == 0) {
                       return _SectionHeader(
@@ -344,22 +377,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
                         ),
                       );
                     }
-                    final video = index == albumCount + 3;
-                    return _NavRow(
-                      key: ValueKey(
-                        video ? 'sidebar-media-videos' : 'sidebar-media-images',
-                      ),
-                      icon: video
-                          ? Icons.videocam_outlined
-                          : Icons.image_outlined,
-                      label: video ? strings.videos : strings.images,
-                      selected:
-                          library.mediaKind == (video ? 'video' : 'image'),
-                      onTap: () =>
-                          widget.onMediaType(video ? 'video' : 'image'),
-                      compact: false,
-                      indent: true,
-                    );
+                    return mediaTypeRow(index - albumCount - 2);
                   },
                 ),
         ),
@@ -403,34 +421,6 @@ class _AlbumSidebarRow extends ConsumerStatefulWidget {
 }
 
 class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
-  MediaThumbnailHandle? _cover;
-  @override
-  void dispose() {
-    _cover?.release();
-    super.dispose();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(_AlbumSidebarRow old) {
-    super.didUpdateWidget(old);
-    if (old.album.coverMediaId != widget.album.coverMediaId) _load();
-  }
-
-  void _load() {
-    final id = widget.album.coverMediaId;
-    final gateway = ref.read(coreGatewayProvider);
-    _cover?.release();
-    _cover = id != null && gateway is LocalLibraryGateway
-        ? MediaThumbnailHandle(gateway as LocalLibraryGateway, id, 256)
-        : null;
-  }
-
   Future<void> _menu(TapUpDetails details) async {
     final strings = AppStrings.of(context);
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -536,55 +526,13 @@ class _AlbumSidebarRowState extends ConsumerState<_AlbumSidebarRow> {
 
   @override
   Widget build(BuildContext context) {
-    final row = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: _NavigationSurface(
-        selected: widget.selected,
-        child: InkWell(
-          key: ValueKey('sidebar-album-${widget.album.path}'),
-          borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
-          onTap: widget.onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(GlassTheme.photoRadius),
-                  child: SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: FutureBuilder<String>(
-                      future: _cover?.future,
-                      initialData: _cover?.path,
-                      builder: (context, snapshot) => snapshot.hasData
-                          ? Image(
-                              image: FileImage(File(snapshot.data!)),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, error, stack) =>
-                                  const Icon(Icons.photo_album_outlined),
-                            )
-                          : const Icon(Icons.photo_album_outlined),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.album.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${widget.album.count}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    final row = _AlbumNavigationRow(
+      key: ValueKey('sidebar-album-${widget.album.path}'),
+      label: widget.album.name,
+      count: widget.album.count,
+      coverMediaId: widget.album.coverMediaId,
+      selected: widget.selected,
+      onTap: widget.onTap,
     );
     return GestureDetector(
       onSecondaryTapUp: (details) => unawaited(_menu(details)),
@@ -657,6 +605,167 @@ class _SectionHeader extends StatelessWidget {
   );
 }
 
+class _MediaTypeSidebarRow extends ConsumerWidget {
+  const _MediaTypeSidebarRow({
+    super.key,
+    required this.kind,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.compact,
+  });
+  final String kind, label;
+  final bool selected, compact;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final page = ref.watch(_mediaTypeAlbumProvider(kind)).asData?.value;
+    return _AlbumNavigationRow(
+      label: label,
+      count: page?.total,
+      coverMediaId: page?.items.firstOrNull?.id,
+      selected: selected,
+      onTap: onTap,
+      compact: compact,
+    );
+  }
+}
+
+/// Physical and logical albums use the same cover, spacing and selection ink.
+class _AlbumNavigationRow extends ConsumerWidget {
+  const _AlbumNavigationRow({
+    super.key,
+    required this.label,
+    required this.count,
+    required this.coverMediaId,
+    required this.selected,
+    required this.onTap,
+    this.compact = false,
+  });
+  final String label;
+  final int? count;
+  final String? coverMediaId;
+  final bool selected, compact;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final revision = ref.watch(
+      localLibraryProvider.select((state) => state.revision),
+    );
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: _NavigationSurface(
+        selected: selected,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(GlassTheme.controlRadius),
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.all(compact ? 4 : 8),
+            child: Row(
+              mainAxisAlignment: compact
+                  ? MainAxisAlignment.center
+                  : MainAxisAlignment.start,
+              children: [
+                _SidebarAlbumCover(mediaId: coverMediaId, revision: revision),
+                if (!compact) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (count != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '$count',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    return compact ? Tooltip(message: label, child: row) : row;
+  }
+}
+
+class _SidebarAlbumCover extends ConsumerStatefulWidget {
+  const _SidebarAlbumCover({required this.mediaId, required this.revision});
+  final String? mediaId;
+  final int revision;
+
+  @override
+  ConsumerState<_SidebarAlbumCover> createState() => _SidebarAlbumCoverState();
+}
+
+class _SidebarAlbumCoverState extends ConsumerState<_SidebarAlbumCover> {
+  MediaThumbnailHandle? _cover;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_SidebarAlbumCover oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mediaId != widget.mediaId ||
+        oldWidget.revision != widget.revision) {
+      _load();
+    }
+  }
+
+  void _load() {
+    _cover?.release();
+    final gateway = ref.read(coreGatewayProvider);
+    final id = widget.mediaId;
+    _cover = id != null && gateway is LocalLibraryGateway
+        ? MediaThumbnailHandle(gateway as LocalLibraryGateway, id, 256)
+        : null;
+  }
+
+  @override
+  void dispose() {
+    _cover?.release();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(GlassTheme.photoRadius),
+      child: SizedBox(
+        width: 32,
+        height: 32,
+        child: FutureBuilder<String>(
+          key: ValueKey((widget.mediaId, widget.revision)),
+          future: _cover?.future,
+          initialData: _cover?.path,
+          builder: (context, snapshot) => snapshot.hasData
+              ? Image(
+                  key: ValueKey('sidebar-cover-${widget.mediaId}'),
+                  image: FileImage(File(snapshot.data!)),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, error, stack) => placeholder,
+                )
+              : placeholder,
+        ),
+      ),
+    );
+  }
+}
+
 class _NavRow extends StatelessWidget {
   const _NavRow({
     super.key,
@@ -665,21 +774,21 @@ class _NavRow extends StatelessWidget {
     required this.selected,
     required this.onTap,
     required this.compact,
-    this.indent = false,
+    this.count,
   });
 
   final IconData icon;
   final String label;
+  final int? count;
   final bool selected;
   final VoidCallback onTap;
   final bool compact;
-  final bool indent;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final row = Padding(
-      padding: EdgeInsets.fromLTRB(indent ? 12 : 8, 2, 8, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: _NavigationSurface(
         selected: selected,
         child: InkWell(
@@ -708,6 +817,13 @@ class _NavRow extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (count != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '$count',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ],
               ],
             ),

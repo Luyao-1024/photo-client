@@ -554,7 +554,7 @@ impl LocalLibrary {
         if filter
             .media_kind
             .as_deref()
-            .is_some_and(|kind| !matches!(kind, "image" | "video"))
+            .is_some_and(|kind| !matches!(kind, "image" | "video" | "motion"))
         {
             return Err("InvalidMediaKind".into());
         }

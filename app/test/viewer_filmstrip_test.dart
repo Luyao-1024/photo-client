@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/app.dart';
 
 import 'fakes/local_gateway.dart';
+import 'helpers/filmstrip_frames.dart';
 
 void main() {
   late Directory fixtures;
@@ -82,6 +83,8 @@ void main() {
     expectCentered(tester, 'p5');
 
     // Selecting a thumbnail from the strip keeps the same invariant.
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('viewer-strip-p0')));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 420));
@@ -105,6 +108,8 @@ void main() {
     }
     expectCentered(tester, 'p15');
 
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('viewer-strip-p18')));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 420));

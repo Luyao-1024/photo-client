@@ -1,0 +1,112 @@
+{
+  "result": "PASS",
+  "phase": "playback-lifecycle",
+  "input": "framework",
+  "started_at": "2026-10-22T16:16:26.662614Z",
+  "elapsed_ms": 20216,
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "device_pixel_ratio": 1.0
+  },
+  "steps": [
+    {
+      "id": "runtime-ready",
+      "status": "PASS",
+      "ms": 53
+    },
+    {
+      "id": "library-open",
+      "status": "PASS",
+      "ms": 0
+    },
+    {
+      "id": "playback-fixtures",
+      "status": "PASS",
+      "ms": 89
+    },
+    {
+      "id": "native-video-cycle-0",
+      "status": "PASS",
+      "ms": 940
+    },
+    {
+      "id": "native-motion-cycle-0",
+      "status": "PASS",
+      "ms": 2183
+    },
+    {
+      "id": "native-video-cycle-1",
+      "status": "PASS",
+      "ms": 934
+    },
+    {
+      "id": "native-motion-cycle-1",
+      "status": "PASS",
+      "ms": 2376
+    },
+    {
+      "id": "native-video-cycle-2",
+      "status": "PASS",
+      "ms": 938
+    },
+    {
+      "id": "native-motion-cycle-2",
+      "status": "PASS",
+      "ms": 2316
+    },
+    {
+      "id": "native-video-cycle-3",
+      "status": "PASS",
+      "ms": 933
+    },
+    {
+      "id": "native-motion-cycle-3",
+      "status": "PASS",
+      "ms": 2316
+    },
+    {
+      "id": "native-video-cycle-4",
+      "status": "PASS",
+      "ms": 933
+    },
+    {
+      "id": "native-motion-cycle-4",
+      "status": "PASS",
+      "ms": 2394
+    },
+    {
+      "id": "native-video-cycle-5",
+      "status": "PASS",
+      "ms": 938
+    },
+    {
+      "id": "native-motion-cycle-5",
+      "status": "PASS",
+      "ms": 2315
+    },
+    {
+      "id": "native-exit-during-playback",
+      "status": "PASS",
+      "ms": 453
+    }
+  ],
+  "facts": {
+    "profile_id": "linux-x86_64",
+    "profile_digest": "7d53d9326d3afebc855e822b4b243c29f6e3482c9445fb44cb284f5087801280",
+    "session_id": "3dded29a-a50e-4038-8810-b32c7de89b7d",
+    "library_id": "44fae104-f015-49ef-b428-40ff9e2427d9",
+    "opened_count": 0,
+    "opened_revision": 0,
+    "mpv_libraries": [
+      "/home/luyao/workspace/Photo/photo-client/app/build/linux/x64/release/bundle/lib/libmpv.so.2.5.0"
+    ],
+    "video_cycles": 6,
+    "motion_cycles": 6,
+    "native_exit_during_playback": true
+  },
+  "screenshots": [],
+  "process_exit_code": 0,
+  "desktop_backend": "Wayland",
+  "fixture_library": true
+}

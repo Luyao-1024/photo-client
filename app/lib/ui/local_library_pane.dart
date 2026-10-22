@@ -1122,6 +1122,8 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
         ? strings.images
         : state.mediaKind == 'video'
         ? strings.videos
+        : state.mediaKind == 'motion'
+        ? strings.motionPhotos
         : strings.library;
     return Stack(
       children: [
