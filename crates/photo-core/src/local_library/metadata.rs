@@ -113,7 +113,7 @@ impl LocalLibrary {
             let event=&operation.mutation.event;
             tx.execute("UPDATE media_sync_state SET acked_metadata_version=MAX(acked_metadata_version,?3),remote_edited_at_ms=?4,remote_source=?5,remote_event_id=?6 WHERE library_id=?1 AND media_id=?2", params![operation.library_id,operation.media_id,operation.metadata_version,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
             tx.execute("UPDATE media_sync_state SET dirty=CASE WHEN local_version<>?3 OR metadata_version>acked_metadata_version THEN 2 ELSE 0 END WHERE library_id=?1 AND media_id=?2", params![operation.library_id,operation.media_id,operation.local_version]).map_err(error)?;
-            tx.execute("UPDATE cloud_bindings SET cloud_favorite=?3,updated_at_ms=?4 WHERE account_id=?1 AND photo_id=?2 AND library_id=?5 AND media_id=?6", params![account,operation.mutation.photo_id,operation.mutation.metadata.is_favorite,now_ms(),operation.library_id,operation.media_id]).map_err(error)?;
+            tx.execute("UPDATE cloud_bindings SET cloud_favorite=?3,remote_edited_at_ms=?7,remote_source=?8,remote_event_id=?9,updated_at_ms=?4 WHERE account_id=?1 AND photo_id=?2 AND library_id=?5 AND media_id=?6", params![account,operation.mutation.photo_id,operation.mutation.metadata.is_favorite,now_ms(),operation.library_id,operation.media_id,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
             tx.execute("DELETE FROM cloud_metadata_operations WHERE account_id=?1 AND photo_id=?2 AND operation_id=?3", params![account,operation.mutation.photo_id,operation.mutation.operation_id]).map_err(error)?;
             let dirty=tx.query_row("SELECT dirty<>0 FROM media_sync_state WHERE library_id=?1 AND media_id=?2",params![operation.library_id,operation.media_id],|r|r.get(0)).map_err(error)?;
             tx.commit().map_err(error)?;
@@ -231,8 +231,9 @@ fn apply_remote_metadata(
     favorite: bool,
     event: Option<sdk::EditEvent>,
 ) -> Result<Option<String>, String> {
-    let row=tx.query_row("SELECT library_id,media_id,cloud_favorite FROM cloud_bindings WHERE account_id=?1 AND photo_id=?2", params![account,photo], |r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,bool>(2)?))).optional().map_err(error)?;
-    let Some((library, media, cloud_favorite)) = row else {
+    let row=tx.query_row("SELECT library_id,media_id,cloud_favorite,remote_edited_at_ms,remote_source,remote_event_id FROM cloud_bindings WHERE account_id=?1 AND photo_id=?2", params![account,photo], |r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,bool>(2)?,r.get::<_,Option<i64>>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<String>>(5)?))).optional().map_err(error)?;
+    let Some((library, media, cloud_favorite, remote_time, remote_source, remote_event)) = row
+    else {
         return Ok(None);
     };
     tx.execute(
@@ -240,7 +241,7 @@ fn apply_remote_metadata(
         params![library, media],
     )
     .map_err(error)?;
-    let (dirty,local_time,local_source,local_event,acked,remote_time,remote_source,remote_event):(u8,Option<i64>,Option<String>,Option<String>,i64,Option<i64>,Option<String>,Option<String>)=tx.query_row("SELECT dirty,edited_at_ms,source,event_id,acked_metadata_version,remote_edited_at_ms,remote_source,remote_event_id FROM media_sync_state WHERE library_id=?1 AND media_id=?2", params![library,media], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?))).map_err(error)?;
+    let (dirty,local_time,local_source,local_event,acked):(u8,Option<i64>,Option<String>,Option<String>,i64)=tx.query_row("SELECT dirty,edited_at_ms,source,event_id,acked_metadata_version FROM media_sync_state WHERE library_id=?1 AND media_id=?2", params![library,media], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(error)?;
     let current_favorite: bool = tx
         .query_row(
             "SELECT favorite FROM media WHERE library_id=?1 AND media_id=?2",
@@ -248,12 +249,11 @@ fn apply_remote_metadata(
             |r| r.get(0),
         )
         .map_err(error)?;
-    let known = event.as_ref().is_none_or(|event| {
-        remote_time == Some(event.edited_at_ms)
-            && remote_source.as_deref() == Some(event.source.as_str())
-            && remote_event.as_deref() == Some(event.event_id.as_str())
-    });
-    if dirty == 0 && cloud_favorite == favorite && current_favorite == favorite && known {
+    if dirty == 0 && cloud_favorite == favorite && current_favorite == favorite {
+        if let Some(event) = &event {
+            tx.execute("UPDATE cloud_bindings SET remote_edited_at_ms=?3,remote_source=?4,remote_event_id=?5 WHERE account_id=?1 AND photo_id=?2",params![account,photo,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
+            tx.execute("UPDATE media_sync_state SET remote_edited_at_ms=?3,remote_source=?4,remote_event_id=?5 WHERE library_id=?1 AND media_id=?2",params![library,media,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
+        }
         return Ok(None);
     }
     let pending = issued(&tx, &account, &photo)?.is_some();
@@ -277,7 +277,25 @@ fn apply_remote_metadata(
         later && !known && !(own_create && acked == 0 && remote.source == "server")
     });
     if let Some(event) = &event {
+        tx.execute("UPDATE cloud_bindings SET remote_edited_at_ms=?3,remote_source=?4,remote_event_id=?5 WHERE account_id=?1 AND photo_id=?2",params![account,photo,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
         tx.execute("UPDATE media_sync_state SET remote_edited_at_ms=?3,remote_source=?4,remote_event_id=?5 WHERE library_id=?1 AND media_id=?2",params![library,media,event.edited_at_ms,event.source,event.event_id]).map_err(error)?;
+    }
+    // A local edit confirmed by another account has no per-account operation
+    // yet. Keep the local value and open a metadata obligation for this
+    // account instead of letting its older remote value overwrite the edit.
+    let local_later = local_time.is_some()
+        && (
+            remote_time.unwrap_or(0),
+            remote_source.as_deref().unwrap_or(""),
+            remote_event.as_deref().unwrap_or(""),
+        ) < (
+            local_time.unwrap_or(0),
+            local_source.as_deref().unwrap_or(""),
+            local_event.as_deref().unwrap_or(""),
+        );
+    if dirty == 0 && !remote_wins && local_later {
+        tx.execute("UPDATE media_sync_state SET dirty=2,metadata_version=metadata_version+1 WHERE library_id=?1 AND media_id=?2",params![library,media]).map_err(error)?;
+        return Ok(None);
     }
     if dirty != 0 && !remote_wins {
         return Ok(None);

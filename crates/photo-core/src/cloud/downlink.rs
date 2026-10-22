@@ -237,6 +237,8 @@ impl CloudEngine {
                 .cloud_deactivate_orphan_bindings(account_id.clone(), remote_ids),
         )?;
         report.skipped += skipped + orphans;
+        report.download_total = downloads.len() as u32;
+        self.notify("receiving", report);
 
         let metadata: Vec<_> = graph
             .photos
@@ -259,6 +261,7 @@ impl CloudEngine {
                         .collect(),
                 ),
             )?;
+            self.notify("receiving", report);
             self.admitted(false);
         }
 
@@ -275,6 +278,7 @@ impl CloudEngine {
                     report.skipped += 1;
                 }
             }
+            self.notify("receiving", report);
         }
 
         let token = sync_token.ok_or("NotCurrent")?;

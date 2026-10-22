@@ -283,8 +283,35 @@ void main() {
     );
     await tester.pumpWidget(host(1));
     await tester.pumpAndSettle();
-    expect(find.text('Thumbnails 1/3'), findsOneWidget);
+    expect(find.text('Indexing 1/3'), findsOneWidget);
     await tester.pumpWidget(host(3));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('thumbnail-generation-progress')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('validating an already cached library stays invisible', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          thumbnailProgressProvider.overrideWith(
+            (ref) => Stream.value({
+              'total': 1957,
+              'ready': 1841,
+              'failed': 0,
+              'reconciling': true,
+            }),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: ThumbnailProgress(alwaysShow: true)),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('thumbnail-generation-progress')),

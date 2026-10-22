@@ -98,29 +98,35 @@ class ThumbnailProgress extends ConsumerWidget {
     final total = data['total'] as int? ?? 0;
     final ready = data['ready'] as int? ?? 0;
     final failed = data['failed'] as int? ?? 0;
-    if (total == 0 || (!alwaysShow && ready >= total)) {
+    // The startup reconciliation only verifies cached files. It is background
+    // bookkeeping and must not look like visible indexing work.
+    final reconciling = data['reconciling'] == true;
+    final complete = ready + failed >= total;
+    if (total == 0 || reconciling || (!alwaysShow && complete)) {
       return const SizedBox.shrink();
     }
     final strings = AppStrings.of(context);
     final limited = data['cache_limit_reached'] == true;
+    final base = complete
+        ? strings.indexedProgress(ready, total)
+        : strings.indexingProgress(ready, total);
     final text = limited
-        ? strings.pick(
-            '缩略图 $ready/$total · 缓存已达上限',
-            'Thumbnails $ready/$total · cache limit reached',
-          )
+        ? '$base · ${strings.indexingLimited}'
         : failed == 0
-        ? strings.pick('缩略图 $ready/$total', 'Thumbnails $ready/$total')
-        : strings.pick(
-            '缩略图 $ready/$total · $failed 项暂时不可用',
-            'Thumbnails $ready/$total · $failed unavailable',
-          );
+        ? base
+        : '$base · ${strings.indexingUnavailable(failed)}';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-      child: Text(
-        text,
-        key: const ValueKey('thumbnail-generation-progress'),
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodySmall,
+      child: Tooltip(
+        message: strings.indexingHint,
+        child: Text(
+          text,
+          key: const ValueKey('thumbnail-generation-progress'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
       ),
     );
   }

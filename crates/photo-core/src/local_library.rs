@@ -16,7 +16,8 @@ const SCHEMA: &str = include_str!("storage/local-schema.sql");
 const EXTENSIONS: &str = include_str!("storage/local-v3.sql");
 const CLOUD_SCHEMA: &str = include_str!("storage/local-v4.sql");
 const METADATA_SCHEMA: &str = include_str!("storage/local-v5.sql");
-const SCHEMA_VERSION: i64 = 5;
+const ACCOUNT_SCHEMA: &str = include_str!("storage/local-v6.sql");
+const SCHEMA_VERSION: i64 = 6;
 mod cloud_store;
 mod metadata;
 pub(crate) use cloud_store::{
@@ -68,6 +69,8 @@ pub struct AlbumInfo {
     pub name: String,
     pub count: u64,
     pub cover_media_id: Option<String>,
+    /// Albums that hold downloaded cloud photos; they are not upload sources.
+    pub managed: bool,
 }
 #[derive(Debug, Clone)]
 pub struct LocalPage {
@@ -185,6 +188,7 @@ impl LocalLibrary {
             transaction.execute_batch(EXTENSIONS).map_err(error)?;
             transaction.execute_batch(CLOUD_SCHEMA).map_err(error)?;
             transaction.execute_batch(METADATA_SCHEMA).map_err(error)?;
+            transaction.execute_batch(ACCOUNT_SCHEMA).map_err(error)?;
             let installation_id = Uuid::new_v4().to_string();
             let library_id = Uuid::new_v4().to_string();
             transaction
@@ -208,9 +212,15 @@ impl LocalLibrary {
                         format!(
                             "{:x}",
                             Sha256::digest(
-                                [SCHEMA, EXTENSIONS, CLOUD_SCHEMA, METADATA_SCHEMA]
-                                    .concat()
-                                    .as_bytes()
+                                [
+                                    SCHEMA,
+                                    EXTENSIONS,
+                                    CLOUD_SCHEMA,
+                                    METADATA_SCHEMA,
+                                    ACCOUNT_SCHEMA
+                                ]
+                                .concat()
+                                .as_bytes()
                             )
                         ),
                         now_ms()
@@ -459,8 +469,9 @@ impl LocalLibrary {
                           AND m2.state='active'
                         ORDER BY m2.sort_time_ms DESC, m2.media_id DESC LIMIT 1
                      )),
-                     COALESCE((SELECT position FROM album_preferences ap WHERE ap.library_id=m.library_id AND ap.folder=m.parent_uri),2147483647)
-                     FROM media m
+                     COALESCE((SELECT position FROM album_preferences ap WHERE ap.library_id=m.library_id AND ap.folder=m.parent_uri),2147483647),
+                     MIN(CASE s.source_kind WHEN 'managed' THEN 1 ELSE 0 END)
+                     FROM media m JOIN sources s ON s.library_id=m.library_id AND s.source_id=m.source_id
                      WHERE m.library_id=?1 AND m.state='active' AND m.parent_uri<>''
                      GROUP BY m.parent_uri
                      ORDER BY 4, MAX(m.sort_time_ms) DESC, m.parent_uri ASC",
@@ -479,6 +490,7 @@ impl LocalLibrary {
                         name,
                         count: sql_u64(r, 1)?,
                         cover_media_id: r.get(2)?,
+                        managed: r.get::<_, i64>(4)? != 0,
                     }))
                 })
                 .map_err(error)?
@@ -508,6 +520,7 @@ impl LocalLibrary {
                     path: folder,
                     count: 0,
                     cover_media_id: None,
+                    managed: false,
                 });
             }
             Ok(albums)

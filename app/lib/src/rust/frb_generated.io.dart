@@ -53,6 +53,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
 
   @protected
+  CloudAccountView dco_decode_cloud_account_view(dynamic raw);
+
+  @protected
+  CloudActivityView dco_decode_cloud_activity_view(dynamic raw);
+
+  @protected
   CloudQueueResultView dco_decode_cloud_queue_result_view(dynamic raw);
 
   @protected
@@ -72,6 +78,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<CloudAccountView> dco_decode_list_cloud_account_view(dynamic raw);
 
   @protected
   List<LocalAlbum> dco_decode_list_local_album(dynamic raw);
@@ -154,6 +163,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
+  CloudAccountView sse_decode_cloud_account_view(SseDeserializer deserializer);
+
+  @protected
+  CloudActivityView sse_decode_cloud_activity_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   CloudQueueResultView sse_decode_cloud_queue_result_view(
     SseDeserializer deserializer,
   );
@@ -177,6 +194,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<CloudAccountView> sse_decode_list_cloud_account_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<LocalAlbum> sse_decode_list_local_album(SseDeserializer deserializer);
@@ -272,6 +294,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_cloud_account_view(
+    CloudAccountView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_cloud_activity_view(
+    CloudActivityView self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_cloud_queue_result_view(
     CloudQueueResultView self,
     SseSerializer serializer,
@@ -300,6 +334,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_cloud_account_view(
+    List<CloudAccountView> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_local_album(

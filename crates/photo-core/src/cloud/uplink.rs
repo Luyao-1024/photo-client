@@ -28,9 +28,13 @@ impl CloudEngine {
         let pending = store(self.library.cloud_pending_uploads(account_id.clone()))?;
         let dirty: Vec<CloudBinding> =
             store(self.library.cloud_dirty_bindings(account_id.clone()))?;
+        report.upload_total = pending.len() as u32;
+        report.favorite_total = dirty.len() as u32;
         if pending.is_empty() && dirty.is_empty() {
+            self.notify("uploading", report);
             return Ok(());
         }
+        self.notify("uploading", report);
         let lease = match sdk::UploadLease::acquire(
             &session.connection,
             &session.account.device_id,
@@ -92,6 +96,7 @@ impl CloudEngine {
                         "partial"
                     }
                 );
+                self.notify("uploading", report);
                 tokio::task::yield_now().await;
             }
             if !lease.is_held() {
@@ -122,6 +127,7 @@ impl CloudEngine {
                         "complete"
                     }
                 );
+                self.notify("uploading", report);
                 tokio::task::yield_now().await;
             }
         }

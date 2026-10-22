@@ -45,6 +45,7 @@ pub struct LocalAlbum {
     pub name: String,
     pub count: u64,
     pub cover_media_id: Option<String>,
+    pub managed: bool,
 }
 pub struct LocalPhotoPage {
     pub items: Vec<LocalPhoto>,
@@ -360,6 +361,7 @@ pub async fn list_albums() -> Result<Vec<LocalAlbum>, String> {
                 name: album.name,
                 count: album.count,
                 cover_media_id: album.cover_media_id,
+                managed: album.managed,
             })
             .collect())
     })

@@ -1,6 +1,5 @@
 import 'thumbnail_image.dart';
 import '../services/thumbnail_pipeline.dart';
-import 'thumbnail_progress.dart';
 
 import 'dart:async';
 import 'dart:io';
@@ -16,6 +15,7 @@ import 'cloud_sync_controller.dart';
 import 'glass_dialog.dart';
 import 'glass_surface.dart';
 import 'glass_theme.dart';
+import 'library_activity_progress.dart';
 import 'local_album_actions.dart';
 import 'local_library_controller.dart';
 import 'local_photo_viewer.dart';
@@ -742,7 +742,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     if (ids.isEmpty) return;
     final strings = AppStrings.of(context);
     final cloud = ref.read(cloudSyncProvider);
-    if (ids.any(cloud.isBound)) {
+    if (ids.any(cloud.isProtected)) {
       _notify(strings.cloudReadOnly);
       return;
     }
@@ -779,7 +779,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     if (ids.isEmpty) return;
     final strings = AppStrings.of(context);
     final cloud = ref.read(cloudSyncProvider);
-    if (ids.any(cloud.isBound)) {
+    if (ids.any(cloud.isProtected)) {
       _notify(strings.cloudReadOnly);
       return;
     }
@@ -816,7 +816,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     final ids = _selectedIds(state);
     if (ids.isEmpty) return;
     final strings = AppStrings.of(context);
-    if (move && ids.any(ref.read(cloudSyncProvider).isBound)) {
+    if (move && ids.any(ref.read(cloudSyncProvider).isProtected)) {
       _notify(strings.cloudReadOnly);
       return;
     }
@@ -842,7 +842,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   Future<void> _trashOne(LocalPhoto photo) async {
     final strings = AppStrings.of(context);
-    if (ref.read(cloudSyncProvider).isBound(photo.id)) {
+    if (ref.read(cloudSyncProvider).isProtected(photo.id)) {
       _notify(strings.cloudReadOnly);
       return;
     }
@@ -870,7 +870,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   Future<void> _addOneToAlbum(LocalPhoto photo, {required bool move}) async {
     final strings = AppStrings.of(context);
-    if (move && ref.read(cloudSyncProvider).isBound(photo.id)) {
+    if (move && ref.read(cloudSyncProvider).isProtected(photo.id)) {
       _notify(strings.cloudReadOnly);
       return;
     }
@@ -1030,7 +1030,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 
   Future<void> _renamePhoto(LocalPhoto photo) async {
     final strings = AppStrings.of(context);
-    if (ref.read(cloudSyncProvider).isBound(photo.id)) {
+    if (ref.read(cloudSyncProvider).isProtected(photo.id)) {
       _notify(strings.cloudReadOnly);
       return;
     }
@@ -1224,32 +1224,11 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           onBatchPurge: _batchPurge,
           onBatchAddToAlbum: (move) => _addToAlbum(move: move),
           onBatchUploadCloud: _batchUploadCloud,
-          cloudBoundIds: cloud.boundIds,
+          cloudBoundIds: cloud.protectedIds,
           onEmptyTrash: _emptyTrash,
           emptyTrashEnabled: state.extent > 0 || state.hasNext,
           strings: strings,
         ),
-        if (hasContent &&
-            !widget.searchMode &&
-            !widget.trashMode &&
-            _mode == GroupMode.day)
-          Positioned(
-            bottom: 80,
-            left: 20,
-            right: 20,
-            child: IgnorePointer(
-              child: Center(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).scaffoldBackgroundColor
-                        .withValues(alpha: .85),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const ThumbnailProgress(),
-                ),
-              ),
-            ),
-          ),
         if (hasContent && !widget.searchMode)
           Align(
             alignment: Alignment.bottomCenter,
@@ -1587,6 +1566,9 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     }
     final item = SectionItem(photo, rank);
     final cloudBound = ref.watch(cloudSyncProvider).isBound(item.photo.id);
+    final cloudProtected = ref
+        .watch(cloudSyncProvider)
+        .isProtected(item.photo.id);
     return PhotoTile(
       key: ValueKey('photo-${item.photo.id}'),
       photo: item.photo,
@@ -1610,20 +1592,20 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       onEnterSelection: () => _enterSelection(item.photo.id),
       onToggleFavorite: () => unawaited(controller.setFavorite(item.photo)),
       onShowDetails: () => showPhotoDetails(context, item.photo),
-      onRename: widget.trashMode || cloudBound
+      onRename: widget.trashMode || cloudProtected
           ? null
           : () => _renamePhoto(item.photo),
       onRestore: widget.trashMode
           ? () => unawaited(_restoreOne(item.photo))
           : null,
       onPurge: widget.trashMode ? () => unawaited(_purgeOne(item.photo)) : null,
-      onMoveToTrash: widget.trashMode || cloudBound
+      onMoveToTrash: widget.trashMode || cloudProtected
           ? null
           : () => _trashOne(item.photo),
       onCopyToAlbum: widget.trashMode
           ? null
           : () => _addOneToAlbum(item.photo, move: false),
-      onMoveToAlbum: widget.trashMode || cloudBound
+      onMoveToAlbum: widget.trashMode || cloudProtected
           ? null
           : () => _addOneToAlbum(item.photo, move: true),
     );
@@ -1990,91 +1972,100 @@ class _Header extends StatelessWidget {
           children: [
             SizedBox(
               height: mainHeight,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontSize: 24,
-                            height: 1.2,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -.5,
-                          ),
-                        ),
-                        if (choosingCover || itemCount != null) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            choosingCover
-                                ? strings.pick(
-                                    '选择一张照片作为相册封面',
-                                    'Choose a photo for the album cover',
-                                  )
-                                : strings.pick(
-                                    '${MaterialLocalizations.of(context).formatDecimal(itemCount!)} 项',
-                                    '${MaterialLocalizations.of(context).formatDecimal(itemCount!)} items',
-                                  ),
-                            key: const ValueKey('library-header-count'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (_showField)
-                          _PageIconSurface(
-                            child: IconButton(
-                              key: const ValueKey('library-search-close'),
-                              tooltip: strings.close,
-                              onPressed: onCloseSearch,
-                              icon: const Icon(Icons.close),
-                              style: IconButton.styleFrom(
-                                fixedSize: const Size(48, 48),
-                                shape: const CircleBorder(),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final showActivity = constraints.maxWidth >= 480;
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontSize: 24,
+                                height: 1.2,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -.5,
                               ),
                             ),
-                          )
-                        else
-                          _RoundSearchButton(
-                            onPressed: onOpenSearch,
-                            tooltip: strings.search,
-                          ),
-                        if (choosingCover) ...[
-                          const SizedBox(width: 8),
-                          TextButton(
-                            key: const ValueKey('cancel-cover-selection'),
-                            onPressed: onCancelCover,
-                            child: Text(strings.cancel),
-                          ),
-                        ] else ...[
-                          const SizedBox(width: 8),
-                          _PageMenuButton(
-                            onChooseCover: onChooseCover,
-                            onSort: onSort,
-                            onStartSelection: hasContent && !selectionMode
-                                ? onStartSelection
-                                : null,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
+                            if (choosingCover || itemCount != null) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                choosingCover
+                                    ? strings.pick(
+                                        '选择一张照片作为相册封面',
+                                        'Choose a photo for the album cover',
+                                      )
+                                    : strings.pick(
+                                        '${MaterialLocalizations.of(context).formatDecimal(itemCount!)} 项',
+                                        '${MaterialLocalizations.of(context).formatDecimal(itemCount!)} items',
+                                      ),
+                                key: const ValueKey('library-header-count'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (showActivity)
+                        Expanded(
+                          child: Center(child: const LibraryActivityProgress()),
+                        ),
+                      Expanded(
+                        flex: 1,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (_showField)
+                              _PageIconSurface(
+                                child: IconButton(
+                                  key: const ValueKey('library-search-close'),
+                                  tooltip: strings.close,
+                                  onPressed: onCloseSearch,
+                                  icon: const Icon(Icons.close),
+                                  style: IconButton.styleFrom(
+                                    fixedSize: const Size(48, 48),
+                                    shape: const CircleBorder(),
+                                  ),
+                                ),
+                              )
+                            else
+                              _RoundSearchButton(
+                                onPressed: onOpenSearch,
+                                tooltip: strings.search,
+                              ),
+                            if (choosingCover) ...[
+                              const SizedBox(width: 8),
+                              TextButton(
+                                key: const ValueKey('cancel-cover-selection'),
+                                onPressed: onCancelCover,
+                                child: Text(strings.cancel),
+                              ),
+                            ] else ...[
+                              const SizedBox(width: 8),
+                              _PageMenuButton(
+                                onChooseCover: onChooseCover,
+                                onSort: onSort,
+                                onStartSelection: hasContent && !selectionMode
+                                    ? onStartSelection
+                                    : null,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             if (_showField)

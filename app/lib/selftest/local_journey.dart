@@ -108,6 +108,8 @@ final class LocalJourney {
           await _cloudClearJourney();
         case 'cache-clear':
           await _cacheClearJourney();
+        case 'cloud-downlink':
+          await _cloudDownlinkJourney();
         default:
           throw JourneyFailure(
             'Unsupported journey phase: ${options.journeyPhase}',

@@ -42,12 +42,17 @@ class FakeLocalGateway extends FakeGateway
   final requestedRenames = <(String, String)>[];
   CloudStatus cloudState = const CloudStatus();
   Set<String> cloudBoundIds = {};
+  Set<String>? cloudProtectedIds;
   CloudSyncReport cloudReport = const CloudSyncReport();
   bool failCloudLogin = false;
   bool failCloudSync = false;
   int cloudLoginCalls = 0;
   int cloudLogoutCalls = 0;
   int cloudSyncCalls = 0;
+  int cloudSwitchCalls = 0;
+  int cloudRemoveCalls = 0;
+  int cloudScopeCalls = 0;
+  (String, List<String>)? lastCloudScope;
   final cloudUploadCalls = <List<String>>[];
   final cloudSeenPasswords = <String>[];
 
@@ -153,13 +158,38 @@ class FakeLocalGateway extends FakeGateway
     cloudLoginCalls++;
     cloudSeenPasswords.add(password);
     if (failCloudLogin) throw StateError('AuthFailed');
+    final accounts = [
+      for (final account in cloudState.accounts)
+        if (account.endpoint != endpoint || account.username != username)
+          CloudAccount(
+            accountId: account.accountId,
+            endpoint: account.endpoint,
+            username: account.username,
+            userId: account.userId,
+            active: false,
+            signedIn: account.signedIn,
+            lastSyncMs: account.lastSyncMs,
+          ),
+      CloudAccount(
+        accountId: 'account-${cloudState.accounts.length + 1}',
+        endpoint: endpoint,
+        username: username,
+        active: true,
+        signedIn: true,
+      ),
+    ];
+    final active = accounts.last;
     cloudState = CloudStatus(
       loggedIn: true,
+      accountId: active.accountId,
       endpoint: endpoint,
       username: username,
       state: 'idle',
       pendingUploads: cloudState.pendingUploads,
       boundCount: cloudBoundIds.length,
+      uploadScope: cloudState.uploadScope,
+      uploadAlbums: cloudState.uploadAlbums,
+      accounts: accounts,
     );
     return cloudState;
   }
@@ -168,10 +198,25 @@ class FakeLocalGateway extends FakeGateway
   Future<CloudStatus> cloudLogout() async {
     cloudLogoutCalls++;
     cloudState = CloudStatus(
+      accountId: cloudState.accountId,
       username: cloudState.username,
       endpoint: cloudState.endpoint,
       state: 'logged_out',
       boundCount: cloudBoundIds.length,
+      uploadScope: cloudState.uploadScope,
+      uploadAlbums: cloudState.uploadAlbums,
+      accounts: [
+        for (final account in cloudState.accounts)
+          CloudAccount(
+            accountId: account.accountId,
+            endpoint: account.endpoint,
+            username: account.username,
+            userId: account.userId,
+            active: account.active,
+            signedIn: account.active ? false : account.signedIn,
+            lastSyncMs: account.lastSyncMs,
+          ),
+      ],
     );
     return cloudState;
   }
@@ -185,6 +230,7 @@ class FakeLocalGateway extends FakeGateway
     if (failCloudSync) throw StateError('Network');
     cloudState = CloudStatus(
       loggedIn: cloudState.loggedIn,
+      accountId: cloudState.accountId,
       endpoint: cloudState.endpoint,
       username: cloudState.username,
       state: cloudReport.errorCode == null ? 'idle' : 'error',
@@ -193,8 +239,114 @@ class FakeLocalGateway extends FakeGateway
       pendingUploads: 0,
       pendingFavorites: 0,
       boundCount: cloudBoundIds.length,
+      uploadScope: cloudState.uploadScope,
+      uploadAlbums: cloudState.uploadAlbums,
+      activity: CloudActivity(
+        phase: cloudReport.errorCode == null ? 'idle' : 'error',
+        downloaded: cloudReport.downloaded,
+        downloadTotal: cloudReport.downloadTotal,
+        uploaded: cloudReport.uploaded,
+        uploadTotal: cloudReport.uploadTotal,
+        favoritesApplied: cloudReport.favoritesApplied,
+        favoritesUploaded: cloudReport.favoritesUploaded,
+        favoriteTotal: cloudReport.favoriteTotal,
+        skipped: cloudReport.skipped,
+        failed: cloudReport.failed,
+        errorCode: cloudReport.errorCode,
+      ),
+      accounts: cloudState.accounts,
     );
     return cloudReport;
+  }
+
+  @override
+  Future<CloudStatus> cloudSwitchAccount(String accountId) async {
+    cloudSwitchCalls++;
+    CloudAccount? target;
+    for (final account in cloudState.accounts) {
+      if (account.accountId == accountId) {
+        target = account;
+        break;
+      }
+    }
+    if (target == null) throw StateError('AccountNotFound');
+    final accounts = [
+      for (final account in cloudState.accounts)
+        CloudAccount(
+          accountId: account.accountId,
+          endpoint: account.endpoint,
+          username: account.username,
+          userId: account.userId,
+          active: account.accountId == accountId,
+          signedIn: account.signedIn,
+          lastSyncMs: account.lastSyncMs,
+        ),
+    ];
+    cloudState = CloudStatus(
+      loggedIn: target.signedIn,
+      accountId: target.accountId,
+      endpoint: target.endpoint,
+      username: target.username,
+      state: target.signedIn ? 'idle' : 'logged_out',
+      pendingUploads: cloudState.pendingUploads,
+      pendingFavorites: cloudState.pendingFavorites,
+      boundCount: cloudBoundIds.length,
+      uploadScope: cloudState.uploadScope,
+      uploadAlbums: cloudState.uploadAlbums,
+      accounts: accounts,
+    );
+    return cloudState;
+  }
+
+  @override
+  Future<CloudStatus> cloudRemoveAccount(String accountId) async {
+    cloudRemoveCalls++;
+    final accounts = [
+      for (final account in cloudState.accounts)
+        if (account.accountId != accountId) account,
+    ];
+    final removedActive = cloudState.accountId == accountId;
+    cloudState = CloudStatus(
+      loggedIn: removedActive ? false : cloudState.loggedIn,
+      accountId: removedActive ? null : cloudState.accountId,
+      endpoint: removedActive ? null : cloudState.endpoint,
+      username: removedActive ? null : cloudState.username,
+      state: removedActive ? 'logged_out' : cloudState.state,
+      pendingUploads: cloudState.pendingUploads,
+      pendingFavorites: cloudState.pendingFavorites,
+      boundCount: cloudBoundIds.length,
+      uploadScope: removedActive ? 'none' : cloudState.uploadScope,
+      uploadAlbums: removedActive ? const [] : cloudState.uploadAlbums,
+      accounts: accounts,
+    );
+    return cloudState;
+  }
+
+  @override
+  Future<CloudStatus> cloudSetUploadScope(
+    String mode,
+    List<String> albums,
+  ) async {
+    cloudScopeCalls++;
+    lastCloudScope = (mode, List<String>.of(albums));
+    cloudState = CloudStatus(
+      loggedIn: cloudState.loggedIn,
+      accountId: cloudState.accountId,
+      endpoint: cloudState.endpoint,
+      username: cloudState.username,
+      state: cloudState.state,
+      errorCode: cloudState.errorCode,
+      lastSyncMs: cloudState.lastSyncMs,
+      pendingUploads: cloudState.pendingUploads,
+      pendingFavorites: cloudState.pendingFavorites,
+      boundCount: cloudState.boundCount,
+      uploadScope: mode,
+      uploadAlbums: albums,
+      syncing: cloudState.syncing,
+      activity: cloudState.activity,
+      accounts: cloudState.accounts,
+    );
+    return cloudState;
   }
 
   @override
@@ -209,6 +361,10 @@ class FakeLocalGateway extends FakeGateway
 
   @override
   Future<List<String>> cloudBoundMediaIds() async => cloudBoundIds.toList();
+
+  @override
+  Future<List<String>> cloudProtectedMediaIds() async =>
+      (cloudProtectedIds ?? cloudBoundIds).toList();
 
   @override
   Future<List<LocalAlbum>> listAlbums() async {

@@ -224,8 +224,8 @@ class AppStrings {
   // --- Cloud sync -------------------------------------------------------
   String get cloudSync => pick('云同步', 'Cloud Sync');
   String get cloudSyncBody => pick(
-    '登录后自动下载云端照片，并在本机与云端之间同步收藏。上传仅在你明确选择照片后发生。',
-    'Sign in to download cloud photos and keep favorites in sync. Uploads only happen for photos you explicitly select.',
+    '登录后下载云端照片并同步收藏。可在“上传范围”选择要自动上传的相册，也可在照片页手动上传。',
+    'Sign in to download cloud photos and sync favorites. Choose albums under "Upload scope" for automatic uploads, or upload individual photos from the library.',
   );
   String get cloudEndpoint => pick('服务器地址', 'Server endpoint');
   String get cloudEndpointHint => 'http://127.0.0.1:8790';
@@ -238,20 +238,88 @@ class AppStrings {
   String get cloudSyncNow => pick('立即同步', 'Sync now');
   String get cloudAutoSync => pick('自动同步', 'Auto sync');
   String get cloudAutoSyncHint => pick(
-    '登录只建立连接，不会自动下载。打开后应用启动时自动同步一次；关闭时只在你点击“立即同步”时同步。',
-    'Signing in only connects; it never downloads. When on, the app syncs once at startup; when off, syncing only happens when you press "Sync now".',
+    '打开后立即同步一次，并在之后应用启动时自动同步；关闭时只在你点击“立即同步”时同步。',
+    'Turning this on syncs once right away and again at each app start; when off, syncing only happens when you press "Sync now".',
   );
+  String get cloudAutoSyncNeedsSignIn =>
+      pick('登录后可开启自动同步。', 'Sign in to enable auto sync.');
   String get syncing => pick('同步中…', 'Syncing…');
+  String get cloudSyncLive => pick('正在同步中…', 'Syncing…');
+  String get cloudUploadLive => pick('正在上传中…', 'Uploading…');
+  String cloudSyncLiveProgress(int done, int total) =>
+      pick('正在同步中，已同步 $done/$total', 'Syncing… $done/$total synced');
+  String cloudUploadLiveProgress(int done, int total) =>
+      pick('正在上传中，已上传 $done/$total', 'Uploading… $done/$total uploaded');
+  String cloudFavoriteLiveProgress(int done, int total) =>
+      pick('正在同步收藏，已同步 $done/$total', 'Syncing favorites… $done/$total');
+  String indexingProgress(int done, int total) =>
+      pick('正在索引中 $done/$total', 'Indexing $done/$total');
+  String indexedProgress(int done, int total) =>
+      pick('已索引 $done/$total', 'Indexed $done/$total');
+  String get indexingHint => pick(
+    '正在读取本地照片并准备缩略图，完成后滚动浏览会更流畅。',
+    'Preparing local photo thumbnails so browsing stays smooth.',
+  );
+  String indexingUnavailable(int count) =>
+      pick('$count 项暂时不可用', '$count unavailable');
+  String get indexingLimited => pick('部分项目暂时不可用', 'Some items unavailable');
+  String get cloudSyncPreparing => pick('正在准备同步…', 'Preparing sync…');
+  String get cloudSyncChecking => pick('正在检查云端更新…', 'Checking the cloud…');
+  String get cloudSyncReceiving => pick('正在接收云端照片…', 'Receiving cloud photos…');
+  String get cloudSyncUploading => pick('正在上传本地照片…', 'Uploading local photos…');
+  String get cloudSyncFinalizing => pick('正在完成同步…', 'Finishing sync…');
+  String get cloudSyncReady => pick('云同步已就绪', 'Cloud sync is ready');
+  String get cloudSyncNeedsAttention => pick('需要处理', 'Needs attention');
+  String cloudSyncPendingSummary(int uploads, int favorites) => pick(
+    '待上传 $uploads 张照片，待同步收藏 $favorites 项',
+    '$uploads photos wait to upload, $favorites favorites wait to sync',
+  );
+  String cloudSyncReceivingProgress(int done, int total) =>
+      pick('已下载 $done / $total 张照片', 'Downloaded $done / $total photos');
+  String cloudSyncUploadingProgress(int done, int total) =>
+      pick('已上传 $done / $total 张照片', 'Uploaded $done / $total photos');
+  String cloudSyncFavoriteProgress(int done, int total) =>
+      pick('已同步收藏 $done / $total 项', 'Favorites $done / $total');
+  String cloudUploadFailedCount(int count) => pick(
+    '有 $count 张照片上传失败，可在照片页重新上传。',
+    '$count photos failed to upload. Upload them again from the library.',
+  );
+  String cloudSyncSkipped(int count) => pick(
+    '另有 $count 项已跳过，可在下次同步时重试。',
+    '$count items were skipped and will be retried on the next sync.',
+  );
+  String cloudSyncIdleDetail(
+    String lastSync,
+    int uploads,
+    int favorites,
+  ) => pick(
+    '上次同步：$lastSync · 待上传 $uploads 张 · 待同步收藏 $favorites 项',
+    'Last sync: $lastSync · $uploads pending uploads · $favorites pending favorites',
+  );
+  String cloudSyncReadyDetail(int uploads, int favorites) => pick(
+    '尚未同步 · 待上传 $uploads 张 · 待同步收藏 $favorites 项',
+    'Not synced yet · $uploads pending uploads · $favorites pending favorites',
+  );
+  String cloudSyncFailedCounts(
+    int downloaded,
+    int uploaded,
+    int failed,
+    String reason,
+  ) => pick(
+    '同步未完成：下载 $downloaded，上传 $uploaded，失败 $failed。$reason',
+    'Sync incomplete: $downloaded downloaded, $uploaded uploaded, $failed failed. $reason',
+  );
   String get cloudLastSync => pick('上次同步', 'Last sync');
   String get cloudNeverSynced => pick('尚未同步', 'Not synced yet');
   String get cloudPendingUploads => pick('待上传', 'Pending uploads');
   String get cloudPendingFavorites => pick('待同步收藏', 'Pending favorites');
   String get cloudBoundCount => pick('云端照片', 'Cloud photos');
   String get cloudDataUsage => pick('云端数据', 'Cloud data');
-  String get clearCacheTitle => pick('清理缓存与云端数据？', 'Clear cache and cloud data?');
+  String get clearCacheTitle =>
+      pick('清理缓存与云端数据？', 'Clear cache and cloud data?');
   String get clearCacheBody => pick(
     '将删除缩略图缓存、已下载的云端照片、云端会话与同步记录。\n'
-    '你的本机照片不会被删除；云端照片之后可以重新下载。',
+        '你的本机照片不会被删除；云端照片之后可以重新下载。',
     'This removes the thumbnail cache, the downloaded cloud photos, the '
         'cloud session and the sync records.\n'
         'Your own photos are kept; the cloud photos can be downloaded again.',
@@ -269,6 +337,49 @@ class AppStrings {
   String get cloudUpload => pick('上传到云端', 'Upload to cloud');
   String get cloudUploadQueued => pick('已加入上传队列', 'Added to the upload queue');
   String get cloudUploadNone => pick('没有可上传的照片', 'No photos to upload');
+  String get cloudAccounts => pick('同步账号', 'Sync accounts');
+  String get cloudCurrentAccount => pick('当前账号', 'Current account');
+  String get cloudSwitchAccount => pick('切换账号', 'Switch account');
+  String get cloudLoginOtherAccount =>
+      pick('登录其他账号', 'Sign in to another account');
+  String get cloudRemoveAccount => pick('移除账号', 'Remove account');
+  String get cloudRemoveAccountTitle =>
+      pick('移除这个同步账号？', 'Remove this sync account?');
+  String cloudRemoveAccountBody(String username) => pick(
+    '将移除 $username 的本地会话和同步记录，并保留本机照片与云端照片。',
+    'This removes the local session and sync records of $username. Local and cloud photos are kept.',
+  );
+  String get cloudAccountSignedIn => pick('已登录', 'Signed in');
+  String get cloudAccountNeedsLogin => pick('需要重新登录', 'Sign-in required');
+  String get cloudNotSignedIn => pick('未登录', 'Not signed in');
+  String get cloudSignInToSync =>
+      pick('登录后开始同步云端照片。', 'Sign in to sync cloud photos.');
+  String get cloudAccountRemoved => pick('账号已移除', 'Account removed');
+  String get cloudAccountSingleHint => pick(
+    '同一时间只同步一个账号。切换后各账号的配置与同步进度分别保留。',
+    'Only one account syncs at a time. Each account keeps its own settings and progress.',
+  );
+  String get cloudUploadScope => pick('上传范围', 'Upload scope');
+  String get cloudUploadScopeNone => pick('仅接收云端照片', 'Receive only');
+  String get cloudUploadScopeAll => pick('上传所有相册', 'Upload all albums');
+  String cloudUploadScopeSelected(int count) =>
+      pick('已选择 $count 个相册上传', '$count albums selected for upload');
+  String get cloudUploadScopeHint => pick(
+    '每次同步会自动上传所选相册中尚未同步的照片；空选择表示只接收。照片页的手动上传始终可用。',
+    'Each sync uploads unsynced photos in the selected albums; an empty selection means receive only. Manual upload from the library stays available.',
+  );
+  String get cloudChooseAlbums => pick('选择相册', 'Choose albums');
+  String get cloudUploadScopeTitle => pick('选择上传相册', 'Choose upload albums');
+  String get cloudUploadScopeReceiveOnly =>
+      pick('仅接收（不上传）', 'Receive only (no uploads)');
+  String get cloudUploadScopeSelectedOption => pick('指定相册', 'Selected albums');
+  String get cloudUploadScopeAllOption => pick('全部相册', 'All albums');
+  String get cloudUploadScopeEmpty =>
+      pick('没有可选择的本地相册。', 'There are no local albums to choose.');
+  String get cloudUploadScopeApplied => pick(
+    '上传范围已保存，下次同步生效。',
+    'Upload scope saved. It applies on the next sync.',
+  );
   String cloudUploadResult(int queued, int skipped, int rejected) => pick(
     '已加入 $queued 张，跳过 $skipped 张，无法上传 $rejected 张',
     '$queued queued, $skipped skipped, $rejected rejected',
@@ -277,6 +388,28 @@ class AppStrings {
     '同步完成：下载 $downloaded，上传 $uploaded，收藏 $favorites',
     'Synced: $downloaded downloaded, $uploaded uploaded, $favorites favorites',
   );
+
+  /// A short state title; [cloudError] remains the explanatory sentence.
+  String cloudErrorHeadline(String code) => switch (code) {
+    'AuthFailed' || 'TokenExpired' => pick('云同步登录已失效', 'Cloud sign-in expired'),
+    'Network' => pick('网络不可用', 'Network unavailable'),
+    'EndpointRejected' => pick('服务器地址无效', 'Invalid server address'),
+    'AccountExists' => pick('账号身份不一致', 'Account identity changed'),
+    'AccountNotFound' => pick('账号不存在', 'Account not found'),
+    'CloudScopeChanged' => pick('云端图库身份已变化', 'Cloud library identity changed'),
+    'AdminAccountUnsupported' => pick('不支持管理员账号', 'Administrator account'),
+    'LeaseBusy' => pick('另一台设备正在同步', 'Another device is syncing'),
+    'LeaseLost' => pick('同步写入权已失效', 'Sync lease lost'),
+    'NotCurrent' => pick('云端数据已变化', 'Cloud data changed'),
+    'QuotaExceeded' => pick('云端空间不足', 'Cloud storage is full'),
+    'SourceChanged' => pick('照片已发生变化', 'A photo changed'),
+    'ThumbnailFailed' => pick('缩略图处理失败', 'Thumbnail failed'),
+    'UnsupportedMedia' => pick('存在不支持的媒体格式', 'Unsupported media'),
+    'GraphInvalid' ||
+    'ChangeFailed' => pick('云端数据不完整', 'Cloud data is incomplete'),
+    _ => pick('云同步失败', 'Cloud sync failed'),
+  };
+
   String cloudError(String code) => switch (code) {
     'AuthFailed' => pick(
       '登录失败，请检查服务器地址、用户名和密码。',
@@ -295,8 +428,16 @@ class AppStrings {
       'Invalid endpoint. Use a full address such as http://127.0.0.1:8790, not localhost.',
     ),
     'AccountExists' => pick(
-      '此图库已登录其他账号。更换账号需要新的数据目录。',
-      'This library is signed in to another account. A new account needs a fresh data directory.',
+      '服务器返回的账号身份与已保存的账号不一致，请检查服务器地址与用户名。',
+      'The server returned a different account identity. Check the endpoint and username.',
+    ),
+    'AccountNotFound' => pick(
+      '该账号已不存在，请选择其他账号或重新登录。',
+      'That account no longer exists. Choose another account or sign in again.',
+    ),
+    'InvalidUploadScope' => pick(
+      '上传范围无效，请重新选择相册。',
+      'The upload scope is invalid. Choose the albums again.',
     ),
     'CloudScopeChanged' => pick(
       '云端图库身份已变化，已停止同步以保护现有照片。',

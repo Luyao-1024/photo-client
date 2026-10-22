@@ -7,6 +7,17 @@ use syncserver_client as sdk;
 use super::*;
 use crate::local_library::CloudAccount;
 
+#[derive(Clone, Debug, Default)]
+pub struct CloudAccountState {
+    pub account_id: String,
+    pub endpoint: String,
+    pub username: String,
+    pub user_id: Option<String>,
+    pub is_active: bool,
+    pub signed_in: bool,
+    pub last_sync_ms: Option<i64>,
+}
+
 pub(crate) struct CloudSession {
     pub(super) account: CloudAccount,
     pub(super) connection: sdk::Connection,
@@ -29,12 +40,10 @@ impl CloudEngine {
         }
         let endpoint = sdk::Endpoint::parse(endpoint).map_err(|error| sdk_code(&error))?;
         let canonical = endpoint.as_str().to_owned();
-        let existing = store(self.library.cloud_account())?;
-        if let Some(account) = &existing
-            && (account.endpoint != canonical || account.username != username)
-        {
-            return Err("AccountExists".into());
-        }
+        let existing = store(
+            self.library
+                .cloud_account_by_identity(canonical.clone(), username.to_owned()),
+        )?;
 
         let client = sdk::Client::from_endpoint(endpoint)
             .build()
@@ -87,12 +96,18 @@ impl CloudEngine {
                 .as_ref()
                 .map(|account| account.created_at_ms)
                 .unwrap_or_else(now_ms),
-            last_sync_ms: existing.and_then(|account| account.last_sync_ms),
+            last_sync_ms: existing.as_ref().and_then(|account| account.last_sync_ms),
+            upload_scope: existing
+                .as_ref()
+                .map(|account| account.upload_scope.clone())
+                .unwrap_or_else(|| "none".into()),
+            is_active: existing.as_ref().is_some_and(|account| account.is_active),
         };
         if let Err(error) = store(self.library.cloud_upsert_account(account)) {
             let _ = fs::remove_file(&path);
             return Err(error);
         }
+        store(self.library.cloud_set_active_account(account_id.clone()))?;
         self.verify_scope(&account_id, &connection)?;
         store(
             self.library
@@ -129,6 +144,66 @@ impl CloudEngine {
             let _ = fs::remove_file(path);
         }
         store(self.library.cloud_mark_logged_out(account.account_id))?;
+        self.status()
+    }
+
+    pub fn accounts(&self) -> Result<Vec<CloudAccountState>, String> {
+        if self.library.is_closed() {
+            return Err("LibraryClosed".into());
+        }
+        let accounts = store(self.library.cloud_accounts())?;
+        let mut states = Vec::with_capacity(accounts.len());
+        for account in accounts {
+            let state = store(self.library.cloud_sync_state(account.account_id.clone()))?;
+            let sync_state = state.unwrap_or_default();
+            let token_present = token_path(&self.library.root, &account.account_id)
+                .map(|path| path.is_file())
+                .unwrap_or(false);
+            let expired = account
+                .token_expires_at_ms
+                .is_some_and(|expires| expires <= now_ms());
+            let auth_failed = sync_state.error_code.as_deref() == Some("AuthFailed");
+            states.push(CloudAccountState {
+                account_id: account.account_id,
+                endpoint: account.endpoint,
+                username: account.username,
+                user_id: account.user_id,
+                is_active: account.is_active,
+                signed_in: token_present
+                    && !expired
+                    && sync_state.status != "logged_out"
+                    && sync_state.status != "token_expired"
+                    && !auth_failed,
+                last_sync_ms: sync_state.last_sync_ms.or(account.last_sync_ms),
+            });
+        }
+        Ok(states)
+    }
+
+    pub fn switch_account(&self, account_id: &str) -> Result<CloudStatus, String> {
+        store(self.library.cloud_set_active_account(account_id.to_owned()))?;
+        self.status()
+    }
+
+    pub fn remove_account(&self, account_id: &str) -> Result<CloudStatus, String> {
+        if let Ok(path) = token_path(&self.library.root, account_id) {
+            let _ = fs::remove_file(path);
+        }
+        store(self.library.cloud_remove_account(account_id.to_owned()))?;
+        self.status()
+    }
+
+    pub fn set_upload_scope(&self, mode: &str, albums: Vec<String>) -> Result<CloudStatus, String> {
+        let account = store(self.library.cloud_account())?.ok_or("AuthFailed")?;
+        let mode = if mode == "selected" && albums.iter().all(|album| album.trim().is_empty()) {
+            "none"
+        } else {
+            mode
+        };
+        store(
+            self.library
+                .cloud_set_upload_scope(account.account_id, mode.to_owned(), albums),
+        )?;
         self.status()
     }
 

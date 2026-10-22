@@ -17,7 +17,8 @@ extension CloudJourney on LocalJourney {
 
   bool _cloudPageOpen() =>
       _elementByKey(const ValueKey('cloud-endpoint')) != null ||
-      _elementByKey(const ValueKey('cloud-account')) != null;
+      _elementByKey(const ValueKey('cloud-account')) != null ||
+      _elementByKey(const ValueKey('cloud-signed-out')) != null;
 
   Future<void> _openCloudSettings() async {
     if (!_cloudPageOpen()) {
@@ -46,6 +47,14 @@ extension CloudJourney on LocalJourney {
   }
 
   Future<void> _setCloudField(String key, String text) async {
+    if (_elementByKey(ValueKey(key)) == null) {
+      await _tapEnabled('cloud-login-toggle');
+      await _waitForElement(
+        key,
+        reason: 'the sign-in form did not expand for $key',
+      );
+    }
+    await _centerInScrollable(ValueKey(key), key);
     await _tapKey(key);
     await _key('ctrl+a');
     await _type(text);
@@ -60,6 +69,7 @@ extension CloudJourney on LocalJourney {
       if (widget is TextButton) return widget.onPressed != null;
       return false;
     }, reason: 'control $key was never enabled');
+    await _centerInScrollable(ValueKey(key), key);
     await _tapKey(key);
   }
 
@@ -1093,7 +1103,8 @@ extension CloudJourney on LocalJourney {
       // The cleanup is destructive, so it asks first.
       await _waitFor(
         () =>
-            _elementByKey(const ValueKey('settings-clear-cache-confirm')) != null,
+            _elementByKey(const ValueKey('settings-clear-cache-confirm')) !=
+            null,
         reason: 'the cleanup did not ask for confirmation',
       );
       await _tapKey('settings-clear-cache-confirm');
@@ -1151,6 +1162,59 @@ extension CloudJourney on LocalJourney {
     });
   }
 
+  /// Download the whole cloud library into the local one.
+  ///
+  /// The server holds a large and mixed library: photos of albums that still
+  /// exist locally and photos whose album is long gone. The point of this
+  /// phase is to see where they land and that the local photos stay untouched.
+  Future<void> _cloudDownlinkJourney() async {
+    await _waitCloud(
+      (state) => state.available && !state.loading,
+      reason: 'cloud state never loaded',
+    );
+    await _step('cloud-downlink-signs-in', () async {
+      await _openCloudSettings();
+      await _loginSuccessfully();
+      await _closeSettings();
+    });
+    await _step('cloud-downlink-downloads', () async {
+      await _openCloudSettings();
+      await _tapEnabled('cloud-sync-now');
+      // A large library takes a long time; the sweep must not be cut short.
+      await _waitCloud(
+        (state) => !state.busy,
+        reason: 'the manual sync did not finish',
+        timeout: const Duration(minutes: 90),
+      );
+      final error = _cloud.status.errorCode;
+      if (error != null) {
+        throw JourneyFailure('the manual sync failed with $error');
+      }
+      await _closeSettings();
+    });
+    await _step('cloud-downlink-lands-in-albums', () async {
+      await _waitFor(
+        () => _cloudAlbums().isNotEmpty,
+        reason: 'the downloaded cloud albums never appeared',
+        timeout: const Duration(minutes: 10),
+      );
+      final albums = _cloudAlbums();
+      final total = albums.fold<int>(0, (sum, album) => sum + album.count);
+      if (total != options.cloudExpectedPhotos) {
+        throw JourneyFailure(
+          'the cloud albums list $total photos, expected '
+          '${options.cloudExpectedPhotos}',
+        );
+      }
+      facts['cloud_downlink_albums'] = [
+        for (final album in albums)
+          {'name': album.name, 'path': album.path, 'count': album.count},
+      ];
+      facts['cloud_downlink_total'] = total;
+      await _screenshot('90-cloud-downloaded');
+    });
+  }
+
   /// The cleanup in the settings empties the thumbnail cache of a library
   /// that has no cloud data yet.
   ///
@@ -1160,7 +1224,9 @@ extension CloudJourney on LocalJourney {
   Future<void> _cacheClearJourney() async {
     await _step('cache-clear-asks-before-removing', () async {
       final root = options.dataRoot;
-      if (root == null) throw JourneyFailure('the cache journey needs --data-root');
+      if (root == null) {
+        throw JourneyFailure('the cache journey needs --data-root');
+      }
       final before = await _cloudCacheUsage();
       final photos = _state.pages[0]?.length ?? 0;
       await _openSettingsCategory(3);
@@ -1168,7 +1234,8 @@ extension CloudJourney on LocalJourney {
       await _tapKey('settings-clear-cache');
       await _waitFor(
         () =>
-            _elementByKey(const ValueKey('settings-clear-cache-confirm')) != null,
+            _elementByKey(const ValueKey('settings-clear-cache-confirm')) !=
+            null,
         reason: 'the cleanup did not ask for confirmation',
       );
       await _screenshot('81-cache-clear-confirm');

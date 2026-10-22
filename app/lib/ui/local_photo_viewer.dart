@@ -378,7 +378,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   }
 
   Future<void> _openEditor() async {
-    if (ref.read(cloudSyncProvider).isBound(_currentPhoto.id)) return;
+    if (ref.read(cloudSyncProvider).isProtected(_currentPhoto.id)) return;
     if (_editing) {
       await _editorKey.currentState?.requestClose();
       return;
@@ -442,7 +442,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   Future<void> _deleteCurrent() async {
     final library = ref.read(localLibraryProvider);
     final photo = _currentPhoto;
-    if (ref.read(cloudSyncProvider).isBound(photo.id)) {
+    if (ref.read(cloudSyncProvider).isProtected(photo.id)) {
       _toast(AppStrings.of(context).cloudReadOnly);
       return;
     }
@@ -505,7 +505,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   Future<void> _renameCurrent() async {
     final strings = AppStrings.of(context);
     final photo = _currentPhoto;
-    if (ref.read(cloudSyncProvider).isBound(photo.id)) {
+    if (ref.read(cloudSyncProvider).isProtected(photo.id)) {
       _toast(strings.cloudReadOnly);
       return;
     }
@@ -652,7 +652,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     _photo = photo;
     final controller = ref.read(localLibraryProvider.notifier);
     final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
-    final cloudBound = ref.watch(cloudSyncProvider).isBound(photo.id);
+    final cloudBound = ref.watch(cloudSyncProvider).isProtected(photo.id);
     final canPrevious = !_navigating && index != null && index > 0;
     final canNext = !_navigating && index != null && index + 1 < library.total;
 
@@ -973,7 +973,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
 
   Future<void> _rotateCurrent(int degrees) async {
     final photo = _currentPhoto;
-    if (ref.read(cloudSyncProvider).isBound(photo.id)) return;
+    if (ref.read(cloudSyncProvider).isProtected(photo.id)) return;
     if (photo.mediaKind != 'image' ||
         !['image/jpeg', 'image/png', 'image/webp'].contains(photo.mimeType)) {
       return;

@@ -199,6 +199,7 @@ final class NativeCoreGateway
           name: album.name,
           count: album.count.toInt(),
           coverMediaId: album.coverMediaId,
+          managed: album.managed,
         ),
     ];
   }
@@ -345,8 +346,37 @@ final class NativeCoreGateway
         .map((_) {});
   }
 
+  CloudAccount _cloudAccount(native_cloud.CloudAccountView account) =>
+      CloudAccount(
+        accountId: account.accountId,
+        endpoint: account.endpoint,
+        username: account.username,
+        userId: account.userId,
+        active: account.active,
+        signedIn: account.signedIn,
+        lastSyncMs: account.lastSyncMs?.toInt(),
+      );
+
+  CloudActivity _cloudActivity(native_cloud.CloudActivityView activity) =>
+      CloudActivity(
+        phase: activity.phase,
+        syncing: activity.syncing,
+        startedAtMs: activity.startedAtMs?.toInt(),
+        downloaded: activity.downloaded,
+        downloadTotal: activity.downloadTotal,
+        uploaded: activity.uploaded,
+        uploadTotal: activity.uploadTotal,
+        favoritesApplied: activity.favoritesApplied,
+        favoritesUploaded: activity.favoritesUploaded,
+        favoriteTotal: activity.favoriteTotal,
+        skipped: activity.skipped,
+        failed: activity.failed,
+        errorCode: activity.errorCode,
+      );
+
   CloudStatus _cloudStatus(native_cloud.CloudStatusView status) => CloudStatus(
     loggedIn: status.loggedIn,
+    accountId: status.accountId,
     endpoint: status.endpoint,
     username: status.username,
     userId: status.userId,
@@ -355,9 +385,14 @@ final class NativeCoreGateway
     state: status.state,
     errorCode: status.errorCode,
     pendingUploads: status.pendingUploads,
+    failedUploads: status.failedUploads,
     pendingFavorites: status.pendingFavorites,
     boundCount: status.boundCount,
+    uploadScope: status.uploadScope,
+    uploadAlbums: status.uploadAlbums,
     syncing: status.syncing,
+    activity: _cloudActivity(status.activity),
+    accounts: [for (final account in status.accounts) _cloudAccount(account)],
   );
 
   @override
@@ -386,9 +421,12 @@ final class NativeCoreGateway
     final report = await native_cloud.cloudSyncNow();
     return CloudSyncReport(
       downloaded: report.downloaded,
+      downloadTotal: report.downloadTotal,
       uploaded: report.uploaded,
+      uploadTotal: report.uploadTotal,
       favoritesApplied: report.favoritesApplied,
       favoritesUploaded: report.favoritesUploaded,
+      favoriteTotal: report.favoriteTotal,
       skipped: report.skipped,
       failed: report.failed,
       state: report.state,
@@ -409,4 +447,28 @@ final class NativeCoreGateway
   @override
   Future<List<String>> cloudBoundMediaIds() =>
       native_cloud.cloudBoundMediaIds();
+
+  @override
+  Future<List<String>> cloudProtectedMediaIds() =>
+      native_cloud.cloudProtectedMediaIds();
+
+  @override
+  Future<CloudStatus> cloudSwitchAccount(String accountId) async =>
+      _cloudStatus(
+        await native_cloud.cloudSwitchAccount(accountId: accountId),
+      );
+
+  @override
+  Future<CloudStatus> cloudRemoveAccount(String accountId) async =>
+      _cloudStatus(
+        await native_cloud.cloudRemoveAccount(accountId: accountId),
+      );
+
+  @override
+  Future<CloudStatus> cloudSetUploadScope(
+    String mode,
+    List<String> albums,
+  ) async => _cloudStatus(
+    await native_cloud.cloudSetUploadScope(mode: mode, albums: albums),
+  );
 }

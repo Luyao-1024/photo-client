@@ -13,6 +13,23 @@ pub(crate) struct CloudAccount {
     pub device_id: String,
     pub created_at_ms: i64,
     pub last_sync_ms: Option<i64>,
+    pub upload_scope: String,
+    pub is_active: bool,
+}
+
+/// A local photo that the active account's upload scope may still send.
+#[derive(Debug, Clone)]
+pub(crate) struct CloudScopeCandidate {
+    pub media_id: String,
+    pub path: String,
+    pub name: String,
+    pub mime_type: String,
+    pub content_version: u64,
+    pub size_bytes: u64,
+    pub modified_ns: i64,
+    pub sort_time_ms: i64,
+    pub parent: String,
+    pub root: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -129,9 +146,12 @@ pub(crate) struct CloudQueueCounts {
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct CloudCounts {
     pub pending_uploads: u32,
+    pub failed_uploads: u32,
     pub pending_favorites: u32,
     pub bound: u32,
 }
+
+const ACCOUNT_COLUMNS: &str = "account_id,endpoint,username,user_id,token_file,token_expires_at_ms,device_id,created_at_ms,last_sync_ms,upload_scope,is_active";
 
 fn account_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudAccount> {
     Ok(CloudAccount {
@@ -144,6 +164,8 @@ fn account_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudAccount> {
         device_id: row.get(6)?,
         created_at_ms: row.get(7)?,
         last_sync_ms: row.get(8)?,
+        upload_scope: row.get(9)?,
+        is_active: row.get(10)?,
     })
 }
 
@@ -176,7 +198,7 @@ impl LocalLibrary {
     pub(crate) fn cloud_account(&self) -> Result<Option<CloudAccount>, String> {
         self.execute(|c| {
             c.query_row(
-                "SELECT account_id,endpoint,username,user_id,token_file,token_expires_at_ms,device_id,created_at_ms,last_sync_ms FROM cloud_accounts ORDER BY created_at_ms LIMIT 1",
+                &format!("SELECT {ACCOUNT_COLUMNS} FROM cloud_accounts WHERE is_active=1 LIMIT 1"),
                 [],
                 account_row,
             )
@@ -185,11 +207,92 @@ impl LocalLibrary {
         })
     }
 
+    pub(crate) fn cloud_accounts(&self) -> Result<Vec<CloudAccount>, String> {
+        self.execute(|c| {
+            let mut statement = c
+                .prepare(&format!(
+                    "SELECT {ACCOUNT_COLUMNS} FROM cloud_accounts ORDER BY created_at_ms,account_id"
+                ))
+                .map_err(error)?;
+            statement
+                .query_map([], account_row)
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
+        })
+    }
+
+    pub(crate) fn cloud_account_by_identity(
+        &self,
+        endpoint: String,
+        username: String,
+    ) -> Result<Option<CloudAccount>, String> {
+        self.execute(move |c| {
+            c.query_row(
+                &format!(
+                    "SELECT {ACCOUNT_COLUMNS} FROM cloud_accounts WHERE endpoint=?1 AND username=?2"
+                ),
+                params![endpoint, username],
+                account_row,
+            )
+            .optional()
+            .map_err(error)
+        })
+    }
+
+    pub(crate) fn cloud_set_active_account(&self, account_id: String) -> Result<(), String> {
+        self.execute(move |c| {
+            let tx = c.transaction().map_err(error)?;
+            let exists: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM cloud_accounts WHERE account_id=?1)",
+                    [&account_id],
+                    |r| r.get(0),
+                )
+                .map_err(error)?;
+            if !exists {
+                return Err("AccountNotFound".into());
+            }
+            tx.execute(
+                "UPDATE cloud_accounts SET is_active=0 WHERE is_active=1",
+                [],
+            )
+            .map_err(error)?;
+            tx.execute(
+                "UPDATE cloud_accounts SET is_active=1 WHERE account_id=?1",
+                [&account_id],
+            )
+            .map_err(error)?;
+            tx.commit().map_err(error)
+        })
+    }
+
+    pub(crate) fn cloud_remove_account(&self, account_id: String) -> Result<(), String> {
+        self.execute(move |c| {
+            let tx = c.transaction().map_err(error)?;
+            tx.execute(
+                "DELETE FROM cloud_metadata_operations WHERE account_id=?1",
+                [&account_id],
+            )
+            .map_err(error)?;
+            let removed = tx
+                .execute(
+                    "DELETE FROM cloud_accounts WHERE account_id=?1",
+                    [&account_id],
+                )
+                .map_err(error)?;
+            if removed == 0 {
+                return Err("AccountNotFound".into());
+            }
+            tx.commit().map_err(error)
+        })
+    }
+
     pub(crate) fn cloud_upsert_account(&self, account: CloudAccount) -> Result<(), String> {
         self.execute(move |c| {
             let tx = c.transaction().map_err(error)?;
             tx.execute(
-                "INSERT INTO cloud_accounts(account_id,endpoint,username,user_id,token_file,token_expires_at_ms,device_id,created_at_ms,last_sync_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9) ON CONFLICT(account_id) DO UPDATE SET endpoint=excluded.endpoint,username=excluded.username,user_id=excluded.user_id,token_file=excluded.token_file,token_expires_at_ms=excluded.token_expires_at_ms,device_id=excluded.device_id,last_sync_ms=excluded.last_sync_ms",
+                "INSERT INTO cloud_accounts(account_id,endpoint,username,user_id,token_file,token_expires_at_ms,device_id,created_at_ms,last_sync_ms,upload_scope,is_active) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,0) ON CONFLICT(account_id) DO UPDATE SET endpoint=excluded.endpoint,username=excluded.username,user_id=excluded.user_id,token_file=excluded.token_file,token_expires_at_ms=excluded.token_expires_at_ms,device_id=excluded.device_id,last_sync_ms=excluded.last_sync_ms",
                 params![
                     account.account_id,
                     account.endpoint,
@@ -200,6 +303,7 @@ impl LocalLibrary {
                     account.device_id,
                     account.created_at_ms,
                     account.last_sync_ms,
+                    account.upload_scope,
                 ],
             )
             .map_err(error)?;
@@ -394,6 +498,25 @@ impl LocalLibrary {
         })
     }
 
+    pub(crate) fn cloud_account_bound_media_ids(
+        &self,
+        account_id: String,
+    ) -> Result<Vec<String>, String> {
+        self.execute(move |c| {
+            let mut statement = c
+                .prepare("SELECT DISTINCT media_id FROM cloud_bindings WHERE account_id=?1")
+                .map_err(error)?;
+            statement
+                .query_map([&account_id], |r| r.get(0))
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
+        })
+    }
+
+    /// Every downloaded cloud photo, regardless of which saved account owns it.
+    /// File-mutating actions use this set so switching accounts never makes a
+    /// managed cloud copy editable.
     pub(crate) fn cloud_bound_media_ids(&self) -> Result<Vec<String>, String> {
         self.execute(|c| {
             let mut statement = c
@@ -883,6 +1006,15 @@ impl LocalLibrary {
                     |r| r.get::<_, i64>(0),
                 )
                 .map_err(error)?;
+            let failed_uploads = c
+                .query_row(
+                    "SELECT COUNT(*) FROM cloud_uploads u WHERE u.account_id=?1 AND u.state='failed'
+                       AND NOT EXISTS(SELECT 1 FROM cloud_bindings b WHERE b.account_id=u.account_id AND b.media_id=u.media_id)
+                       AND NOT EXISTS(SELECT 1 FROM cloud_uploads newer WHERE newer.account_id=u.account_id AND newer.media_id=u.media_id AND newer.state IN ('pending','publishing','published'))",
+                    [&account_id],
+                    |r| r.get::<_, i64>(0),
+                )
+                .map_err(error)?;
             let pending_favorites = c
                 .query_row(
                     "SELECT COUNT(*) FROM cloud_bindings b JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id WHERE b.account_id=?1 AND s.dirty=2",
@@ -892,9 +1024,114 @@ impl LocalLibrary {
                 .map_err(error)?;
             Ok(CloudCounts {
                 pending_uploads: pending_uploads.max(0) as u32,
+                failed_uploads: failed_uploads.max(0) as u32,
                 pending_favorites: pending_favorites.max(0) as u32,
                 bound: bound.max(0) as u32,
             })
+        })
+    }
+
+    pub(crate) fn cloud_upload_albums(&self, account_id: String) -> Result<Vec<String>, String> {
+        self.execute(move |c| {
+            let mut statement = c
+                .prepare(
+                    "SELECT folder FROM cloud_upload_albums WHERE account_id=?1 ORDER BY folder",
+                )
+                .map_err(error)?;
+            statement
+                .query_map([&account_id], |r| r.get(0))
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
+        })
+    }
+
+    pub(crate) fn cloud_set_upload_scope(
+        &self,
+        account_id: String,
+        mode: String,
+        albums: Vec<String>,
+    ) -> Result<(), String> {
+        if !matches!(mode.as_str(), "none" | "selected" | "all") {
+            return Err("InvalidUploadScope".into());
+        }
+        self.execute(move |c| {
+            let tx = c.transaction().map_err(error)?;
+            let exists: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM cloud_accounts WHERE account_id=?1)",
+                    [&account_id],
+                    |r| r.get(0),
+                )
+                .map_err(error)?;
+            if !exists {
+                return Err("AccountNotFound".into());
+            }
+            tx.execute(
+                "UPDATE cloud_accounts SET upload_scope=?2 WHERE account_id=?1",
+                params![account_id, mode],
+            )
+            .map_err(error)?;
+            tx.execute(
+                "DELETE FROM cloud_upload_albums WHERE account_id=?1",
+                [&account_id],
+            )
+            .map_err(error)?;
+            let mut seen = std::collections::HashSet::new();
+            for folder in albums {
+                let folder = folder.trim().to_owned();
+                if folder.is_empty() || !seen.insert(folder.clone()) {
+                    continue;
+                }
+                tx.execute(
+                    "INSERT INTO cloud_upload_albums(account_id,folder) VALUES(?1,?2)",
+                    params![account_id, folder],
+                )
+                .map_err(error)?;
+            }
+            tx.commit().map_err(error)
+        })
+    }
+
+    /// Local photos the active account's explicit upload scope still owes.
+    /// Managed cloud sources are downloads, and a binding or an existing
+    /// upload row means this account has already seen the photo.
+    pub(crate) fn cloud_scope_candidates(
+        &self,
+        account_id: String,
+        all_albums: bool,
+    ) -> Result<Vec<CloudScopeCandidate>, String> {
+        let library = self.library_id.clone();
+        self.execute(move |c| {
+            let mut statement = c
+                .prepare(
+                    "SELECT m.media_id,m.source_uri,m.display_name,m.mime_type,m.content_version,m.size_bytes,m.modified_ns,m.sort_time_ms,m.parent_uri,s.root_uri
+                     FROM media m JOIN sources s ON s.library_id=m.library_id AND s.source_id=m.source_id
+                     WHERE m.library_id=?1 AND m.state='active' AND s.source_kind<>'managed'
+                       AND NOT EXISTS(SELECT 1 FROM cloud_bindings b WHERE b.account_id=?2 AND b.media_id=m.media_id)
+                       AND NOT EXISTS(SELECT 1 FROM cloud_uploads u WHERE u.account_id=?2 AND u.media_id=m.media_id)
+                       AND (?3=1 OR EXISTS(SELECT 1 FROM cloud_upload_albums a WHERE a.account_id=?2 AND a.folder=m.parent_uri))
+                     ORDER BY m.sort_time_ms,m.media_id",
+                )
+                .map_err(error)?;
+            statement
+                .query_map(params![library, account_id, all_albums], |r| {
+                    Ok(CloudScopeCandidate {
+                        media_id: r.get(0)?,
+                        path: r.get(1)?,
+                        name: r.get(2)?,
+                        mime_type: r.get(3)?,
+                        content_version: sql_u64(r, 4)?,
+                        size_bytes: sql_u64(r, 5)?,
+                        modified_ns: r.get(6)?,
+                        sort_time_ms: r.get(7)?,
+                        parent: r.get(8)?,
+                        root: r.get(9)?,
+                    })
+                })
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
         })
     }
 
@@ -1213,8 +1450,11 @@ mod tests {
                 device_id: "device-1".into(),
                 created_at_ms: 1,
                 last_sync_ms: None,
+                upload_scope: "none".into(),
+                is_active: true,
             })
             .unwrap();
+        library.cloud_set_active_account(ACCOUNT.into()).unwrap();
         (root, library)
     }
 
@@ -1493,6 +1733,64 @@ mod tests {
         assert_eq!(Path::new(&path), thumbnail);
         assert_eq!(loader.progress().unwrap().metrics.generated, 0);
         loader.close();
+    }
+
+    #[test]
+    fn a_favorite_confirmed_by_one_account_stays_pending_for_another() {
+        let (_root, library, media) = metadata_binding();
+        library.set_favorite(media.clone(), true).unwrap();
+        let zone = syncserver_client::ZoneId::new("PrimarySync");
+        let issued = library
+            .cloud_issue_metadata(ACCOUNT.into(), metadata_photo(), zone.clone())
+            .unwrap()
+            .unwrap();
+        library
+            .cloud_confirm_metadata(ACCOUNT.into(), issued.clone(), confirmed_metadata(&issued))
+            .unwrap();
+        assert_eq!(binding_dirty(&library, "photo-1"), 0);
+
+        library
+            .cloud_upsert_account(CloudAccount {
+                account_id: "acct-2".into(),
+                endpoint: "http://127.0.0.1:8791".into(),
+                username: "bob".into(),
+                user_id: Some("user-2".into()),
+                token_file: "cloud/acct-2/session.token".into(),
+                token_expires_at_ms: None,
+                device_id: "device-2".into(),
+                created_at_ms: 2,
+                last_sync_ms: None,
+                upload_scope: "none".into(),
+                is_active: false,
+            })
+            .unwrap();
+        let photo = library.photo(media).unwrap();
+        let source = library.sources().unwrap()[0].id.clone();
+        library
+            .cloud_publish_remote_media(
+                "acct-2".into(),
+                remote_input(&source, "photo-1", "a.jpg", Path::new(&photo.path), false),
+            )
+            .unwrap();
+        library
+            .cloud_apply_remote_metadata("acct-2".into(), "photo-1".into(), false, None)
+            .unwrap();
+
+        assert!(library.photo(photo.id.clone()).unwrap().favorite);
+        assert_eq!(binding_dirty(&library, "photo-1"), 2);
+        let counts = library.cloud_counts("acct-2".into()).unwrap();
+        assert_eq!(counts.pending_favorites, 1);
+
+        let issued = library
+            .cloud_issue_metadata("acct-2".into(), metadata_photo(), zone)
+            .unwrap()
+            .unwrap();
+        assert!(issued.mutation.metadata.is_favorite);
+        library
+            .cloud_confirm_metadata("acct-2".into(), issued.clone(), confirmed_metadata(&issued))
+            .unwrap();
+        assert_eq!(binding_dirty(&library, "photo-1"), 0);
+        assert!(library.photo(photo.id).unwrap().favorite);
     }
 
     #[test]
@@ -2016,6 +2314,56 @@ mod tests {
             library
                 .cloud_pin_scope(ACCOUNT.into(), namespace, "generation-1".into())
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn account_switch_keeps_each_account_scope_and_removes_one_at_a_time() {
+        let (_root, library) = open_library();
+        library
+            .cloud_upsert_account(CloudAccount {
+                account_id: "acct-2".into(),
+                endpoint: "http://127.0.0.1:8791".into(),
+                username: "bob".into(),
+                user_id: Some("user-2".into()),
+                token_file: "cloud/acct-2/session.token".into(),
+                token_expires_at_ms: None,
+                device_id: "device-2".into(),
+                created_at_ms: 2,
+                last_sync_ms: None,
+                upload_scope: "none".into(),
+                is_active: false,
+            })
+            .unwrap();
+        library.cloud_set_active_account("acct-2".into()).unwrap();
+        assert_eq!(
+            library.cloud_account().unwrap().unwrap().account_id,
+            "acct-2"
+        );
+        library
+            .cloud_set_upload_scope(
+                "acct-2".into(),
+                "selected".into(),
+                vec!["/photos/A".into(), "/photos/A".into(), " ".into()],
+            )
+            .unwrap();
+        let active = library.cloud_account().unwrap().unwrap();
+        assert_eq!(active.upload_scope, "selected");
+        assert_eq!(
+            library.cloud_upload_albums("acct-2".into()).unwrap(),
+            vec!["/photos/A"]
+        );
+        let accounts = library.cloud_accounts().unwrap();
+        assert_eq!(accounts.len(), 2);
+        assert!(accounts.iter().filter(|account| account.is_active).count() == 1);
+
+        library.cloud_remove_account("acct-2".into()).unwrap();
+        assert!(library.cloud_account().unwrap().is_none());
+        assert_eq!(library.cloud_accounts().unwrap().len(), 1);
+        library.cloud_set_active_account(ACCOUNT.into()).unwrap();
+        assert_eq!(
+            library.cloud_account().unwrap().unwrap().account_id,
+            ACCOUNT
         );
     }
 }

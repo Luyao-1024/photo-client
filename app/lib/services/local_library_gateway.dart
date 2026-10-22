@@ -74,11 +74,15 @@ class LocalAlbum {
     required this.name,
     required this.count,
     this.coverMediaId,
+    this.managed = false,
   });
   final String path;
   final String name;
   final int count;
   final String? coverMediaId;
+
+  /// Holds downloaded cloud photos; never an upload scope source.
+  final bool managed;
 }
 
 /// A pixel crop rectangle in the rotated image's coordinate space.

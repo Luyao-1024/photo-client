@@ -16,9 +16,11 @@ class CloudSyncState {
     this.available = false,
     this.loading = true,
     this.busy = false,
+    this.syncRunning = false,
     this.autoSync = false,
     this.status = const CloudStatus(),
     this.boundIds = const <String>{},
+    this.protectedIds = const <String>{},
     this.errorCode,
     this.report,
   });
@@ -27,24 +29,35 @@ class CloudSyncState {
   final bool available;
   final bool loading, busy;
 
+  /// A sweep is in flight before the first polled status reports it.
+  final bool syncRunning;
+
   /// Whether the app syncs on its own at startup. Off by default: signing in
   /// establishes a session, it does not start a download.
   final bool autoSync;
   final CloudStatus status;
+
+  /// Bound photos of the active account.
   final Set<String> boundIds;
+
+  /// Bound photos of every saved account; they stay read-only.
+  final Set<String> protectedIds;
   final String? errorCode;
   final CloudSyncReport? report;
 
   bool get loggedIn => status.loggedIn;
   bool isBound(String mediaId) => boundIds.contains(mediaId);
+  bool isProtected(String mediaId) => protectedIds.contains(mediaId);
 
   CloudSyncState copyWith({
     bool? available,
     bool? loading,
     bool? busy,
+    bool? syncRunning,
     bool? autoSync,
     CloudStatus? status,
     Set<String>? boundIds,
+    Set<String>? protectedIds,
     String? errorCode,
     bool clearError = false,
     CloudSyncReport? report,
@@ -52,9 +65,11 @@ class CloudSyncState {
     available: available ?? this.available,
     loading: loading ?? this.loading,
     busy: busy ?? this.busy,
+    syncRunning: syncRunning ?? this.syncRunning,
     autoSync: autoSync ?? this.autoSync,
     status: status ?? this.status,
     boundIds: boundIds ?? this.boundIds,
+    protectedIds: protectedIds ?? this.protectedIds,
     errorCode: clearError ? null : errorCode ?? this.errorCode,
     report: report ?? this.report,
   );
@@ -133,12 +148,14 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     try {
       final status = await gateway.cloudStatus();
       final bound = await gateway.cloudBoundMediaIds();
+      final protected = await gateway.cloudProtectedMediaIds();
       final autoSync = await _readAutoSync();
       if (_disposed) return;
       state = state.copyWith(
         loading: false,
         status: status,
         boundIds: bound.toSet(),
+        protectedIds: protected.toSet(),
         autoSync: autoSync,
         clearError: true,
       );
@@ -164,11 +181,14 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     return false;
   }
 
-  /// Turn the automatic startup sweep on or off. Signing in never syncs on
-  /// its own; this switch only decides whether the app sweeps when it starts.
+  /// Turn automatic syncing on or off. Enabling it sweeps right away and at
+  /// each app start; disabling it leaves only explicit syncs.
   Future<void> setAutoSync(bool value) async {
     if (_disposed) return;
     state = state.copyWith(autoSync: value);
+    if (value && state.loggedIn && !state.busy) {
+      unawaited(syncNow());
+    }
     final gateway = ref.read(coreGatewayProvider);
     if (gateway is! LocalLibraryTools) return;
     try {
@@ -197,12 +217,14 @@ class CloudSyncController extends Notifier<CloudSyncState> {
         password: password,
       );
       final bound = await gateway.cloudBoundMediaIds();
+      final protected = await gateway.cloudProtectedMediaIds();
       if (_disposed) return null;
       state = state.copyWith(
         busy: false,
         loading: false,
         status: status,
         boundIds: bound.toSet(),
+        protectedIds: protected.toSet(),
         clearError: true,
       );
       // Signing in answers with the session, not with a download. The grid is
@@ -237,12 +259,90 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     }
   }
 
+  /// Only one account synchronizes at a time. Switching keeps every account's
+  /// saved credentials, scope and progress.
+  Future<String?> switchAccount(String accountId) async {
+    final gateway = _gateway;
+    if (gateway == null || _disposed || state.busy) return 'Internal';
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final status = await gateway.cloudSwitchAccount(accountId);
+      final bound = await gateway.cloudBoundMediaIds();
+      final protected = await gateway.cloudProtectedMediaIds();
+      if (_disposed) return null;
+      state = state.copyWith(
+        busy: false,
+        loading: false,
+        status: status,
+        boundIds: bound.toSet(),
+        protectedIds: protected.toSet(),
+        clearError: true,
+      );
+      await _refreshLibrary();
+      return null;
+    } catch (error) {
+      final code = cloudErrorCode(error);
+      if (!_disposed) {
+        state = state.copyWith(busy: false, errorCode: code);
+      }
+      return code;
+    }
+  }
+
+  Future<String?> removeAccount(String accountId) async {
+    final gateway = _gateway;
+    if (gateway == null || _disposed || state.busy) return 'Internal';
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final status = await gateway.cloudRemoveAccount(accountId);
+      final bound = await gateway.cloudBoundMediaIds();
+      final protected = await gateway.cloudProtectedMediaIds();
+      if (_disposed) return null;
+      state = state.copyWith(
+        busy: false,
+        loading: false,
+        status: status,
+        boundIds: bound.toSet(),
+        protectedIds: protected.toSet(),
+        clearError: true,
+      );
+      await _refreshLibrary();
+      return null;
+    } catch (error) {
+      final code = cloudErrorCode(error);
+      if (!_disposed) {
+        state = state.copyWith(busy: false, errorCode: code);
+      }
+      return code;
+    }
+  }
+
+  /// Persist which local albums the active account uploads automatically.
+  /// An empty selection means receive-only, matching the pre-refactor client.
+  Future<String?> setUploadScope(String mode, List<String> albums) async {
+    final gateway = _gateway;
+    if (gateway == null || _disposed || state.busy) return 'Internal';
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final status = await gateway.cloudSetUploadScope(mode, albums);
+      if (_disposed) return null;
+      state = state.copyWith(busy: false, status: status, clearError: true);
+      return null;
+    } catch (error) {
+      final code = cloudErrorCode(error);
+      if (!_disposed) {
+        state = state.copyWith(busy: false, errorCode: code);
+      }
+      return code;
+    }
+  }
+
   Future<CloudSyncReport?> syncNow() async {
     final gateway = _gateway;
     if (gateway == null || _disposed || state.busy || !state.loggedIn) {
       return null;
     }
-    state = state.copyWith(busy: true, clearError: true);
+    state = state.copyWith(busy: true, syncRunning: true, clearError: true);
     // A sweep can run for a long time. The status is refreshed while it runs
     // so the interface shows that syncing is under way and how far it got
     // instead of a button that only spins.
@@ -251,12 +351,14 @@ class CloudSyncController extends Notifier<CloudSyncState> {
       final report = await gateway.cloudSyncNow();
       final status = await gateway.cloudStatus();
       final bound = await gateway.cloudBoundMediaIds();
+      final protected = await gateway.cloudProtectedMediaIds();
       if (_disposed) return report;
       state = state.copyWith(
         busy: false,
         loading: false,
         status: status,
         boundIds: bound.toSet(),
+        protectedIds: protected.toSet(),
         report: report,
         clearError: report.errorCode == null,
         errorCode: report.errorCode,
@@ -271,6 +373,7 @@ class CloudSyncController extends Notifier<CloudSyncState> {
       return null;
     } finally {
       _stopStatusTicker();
+      if (!_disposed) state = state.copyWith(syncRunning: false);
     }
   }
 

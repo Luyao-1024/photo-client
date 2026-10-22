@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1073459512;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1909000180;
 
 // Section: executor
 
@@ -309,6 +309,41 @@ fn wire__crate__api__cloud_sync__cloud_logout_impl(
         },
     )
 }
+fn wire__crate__api__cloud_sync__cloud_protected_media_ids_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "cloud_protected_media_ids",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::cloud_sync::cloud_protected_media_ids().await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__cloud_sync__cloud_queue_upload_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -346,6 +381,82 @@ fn wire__crate__api__cloud_sync__cloud_queue_upload_impl(
         },
     )
 }
+fn wire__crate__api__cloud_sync__cloud_remove_account_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "cloud_remove_account",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_account_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::cloud_sync::cloud_remove_account(api_account_id).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__cloud_sync__cloud_set_upload_scope_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "cloud_set_upload_scope",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_mode = <String>::sse_decode(&mut deserializer);
+            let api_albums = <Vec<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::cloud_sync::cloud_set_upload_scope(api_mode, api_albums)
+                                .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__cloud_sync__cloud_status_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -373,6 +484,43 @@ fn wire__crate__api__cloud_sync__cloud_status_impl(
                 transform_result_sse::<_, String>(
                     (move || async move {
                         let output_ok = crate::api::cloud_sync::cloud_status().await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__cloud_sync__cloud_switch_account_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "cloud_switch_account",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_account_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::cloud_sync::cloud_switch_account(api_account_id).await?;
                         std::result::Result::Ok(output_ok)
                     })()
                     .await,
@@ -1124,6 +1272,62 @@ impl SseDecode for crate::api::bootstrap::BootstrapSnapshot {
     }
 }
 
+impl SseDecode for crate::api::cloud_sync::CloudAccountView {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_accountId = <String>::sse_decode(deserializer);
+        let mut var_endpoint = <String>::sse_decode(deserializer);
+        let mut var_username = <String>::sse_decode(deserializer);
+        let mut var_userId = <Option<String>>::sse_decode(deserializer);
+        let mut var_active = <bool>::sse_decode(deserializer);
+        let mut var_signedIn = <bool>::sse_decode(deserializer);
+        let mut var_lastSyncMs = <Option<i64>>::sse_decode(deserializer);
+        return crate::api::cloud_sync::CloudAccountView {
+            account_id: var_accountId,
+            endpoint: var_endpoint,
+            username: var_username,
+            user_id: var_userId,
+            active: var_active,
+            signed_in: var_signedIn,
+            last_sync_ms: var_lastSyncMs,
+        };
+    }
+}
+
+impl SseDecode for crate::api::cloud_sync::CloudActivityView {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_phase = <String>::sse_decode(deserializer);
+        let mut var_syncing = <bool>::sse_decode(deserializer);
+        let mut var_startedAtMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_downloaded = <u32>::sse_decode(deserializer);
+        let mut var_downloadTotal = <u32>::sse_decode(deserializer);
+        let mut var_uploaded = <u32>::sse_decode(deserializer);
+        let mut var_uploadTotal = <u32>::sse_decode(deserializer);
+        let mut var_favoritesApplied = <u32>::sse_decode(deserializer);
+        let mut var_favoritesUploaded = <u32>::sse_decode(deserializer);
+        let mut var_favoriteTotal = <u32>::sse_decode(deserializer);
+        let mut var_skipped = <u32>::sse_decode(deserializer);
+        let mut var_failed = <u32>::sse_decode(deserializer);
+        let mut var_errorCode = <Option<String>>::sse_decode(deserializer);
+        return crate::api::cloud_sync::CloudActivityView {
+            phase: var_phase,
+            syncing: var_syncing,
+            started_at_ms: var_startedAtMs,
+            downloaded: var_downloaded,
+            download_total: var_downloadTotal,
+            uploaded: var_uploaded,
+            upload_total: var_uploadTotal,
+            favorites_applied: var_favoritesApplied,
+            favorites_uploaded: var_favoritesUploaded,
+            favorite_total: var_favoriteTotal,
+            skipped: var_skipped,
+            failed: var_failed,
+            error_code: var_errorCode,
+        };
+    }
+}
+
 impl SseDecode for crate::api::cloud_sync::CloudQueueResultView {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1142,6 +1346,7 @@ impl SseDecode for crate::api::cloud_sync::CloudStatusView {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_loggedIn = <bool>::sse_decode(deserializer);
+        let mut var_accountId = <Option<String>>::sse_decode(deserializer);
         let mut var_endpoint = <Option<String>>::sse_decode(deserializer);
         let mut var_username = <Option<String>>::sse_decode(deserializer);
         let mut var_userId = <Option<String>>::sse_decode(deserializer);
@@ -1150,11 +1355,19 @@ impl SseDecode for crate::api::cloud_sync::CloudStatusView {
         let mut var_state = <String>::sse_decode(deserializer);
         let mut var_errorCode = <Option<String>>::sse_decode(deserializer);
         let mut var_pendingUploads = <u32>::sse_decode(deserializer);
+        let mut var_failedUploads = <u32>::sse_decode(deserializer);
         let mut var_pendingFavorites = <u32>::sse_decode(deserializer);
         let mut var_boundCount = <u32>::sse_decode(deserializer);
+        let mut var_uploadScope = <String>::sse_decode(deserializer);
+        let mut var_uploadAlbums = <Vec<String>>::sse_decode(deserializer);
         let mut var_syncing = <bool>::sse_decode(deserializer);
+        let mut var_activity =
+            <crate::api::cloud_sync::CloudActivityView>::sse_decode(deserializer);
+        let mut var_accounts =
+            <Vec<crate::api::cloud_sync::CloudAccountView>>::sse_decode(deserializer);
         return crate::api::cloud_sync::CloudStatusView {
             logged_in: var_loggedIn,
+            account_id: var_accountId,
             endpoint: var_endpoint,
             username: var_username,
             user_id: var_userId,
@@ -1163,9 +1376,14 @@ impl SseDecode for crate::api::cloud_sync::CloudStatusView {
             state: var_state,
             error_code: var_errorCode,
             pending_uploads: var_pendingUploads,
+            failed_uploads: var_failedUploads,
             pending_favorites: var_pendingFavorites,
             bound_count: var_boundCount,
+            upload_scope: var_uploadScope,
+            upload_albums: var_uploadAlbums,
             syncing: var_syncing,
+            activity: var_activity,
+            accounts: var_accounts,
         };
     }
 }
@@ -1174,18 +1392,24 @@ impl SseDecode for crate::api::cloud_sync::CloudSyncReportView {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_downloaded = <u32>::sse_decode(deserializer);
+        let mut var_downloadTotal = <u32>::sse_decode(deserializer);
         let mut var_uploaded = <u32>::sse_decode(deserializer);
+        let mut var_uploadTotal = <u32>::sse_decode(deserializer);
         let mut var_favoritesApplied = <u32>::sse_decode(deserializer);
         let mut var_favoritesUploaded = <u32>::sse_decode(deserializer);
+        let mut var_favoriteTotal = <u32>::sse_decode(deserializer);
         let mut var_skipped = <u32>::sse_decode(deserializer);
         let mut var_failed = <u32>::sse_decode(deserializer);
         let mut var_state = <String>::sse_decode(deserializer);
         let mut var_errorCode = <Option<String>>::sse_decode(deserializer);
         return crate::api::cloud_sync::CloudSyncReportView {
             downloaded: var_downloaded,
+            download_total: var_downloadTotal,
             uploaded: var_uploaded,
+            upload_total: var_uploadTotal,
             favorites_applied: var_favoritesApplied,
             favorites_uploaded: var_favoritesUploaded,
+            favorite_total: var_favoriteTotal,
             skipped: var_skipped,
             failed: var_failed,
             state: var_state,
@@ -1252,6 +1476,20 @@ impl SseDecode for Vec<String> {
     }
 }
 
+impl SseDecode for Vec<crate::api::cloud_sync::CloudAccountView> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::cloud_sync::CloudAccountView>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::local_library::LocalAlbum> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1299,11 +1537,13 @@ impl SseDecode for crate::api::local_library::LocalAlbum {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_count = <u64>::sse_decode(deserializer);
         let mut var_coverMediaId = <Option<String>>::sse_decode(deserializer);
+        let mut var_managed = <bool>::sse_decode(deserializer);
         return crate::api::local_library::LocalAlbum {
             path: var_path,
             name: var_name,
             count: var_count,
             cover_media_id: var_coverMediaId,
+            managed: var_managed,
         };
     }
 }
@@ -1503,32 +1743,56 @@ fn pde_ffi_dispatcher_primary_impl(
         ),
         6 => wire__crate__api__cloud_sync__cloud_login_impl(port, ptr, rust_vec_len, data_len),
         7 => wire__crate__api__cloud_sync__cloud_logout_impl(port, ptr, rust_vec_len, data_len),
-        8 => {
+        8 => wire__crate__api__cloud_sync__cloud_protected_media_ids_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        9 => {
             wire__crate__api__cloud_sync__cloud_queue_upload_impl(port, ptr, rust_vec_len, data_len)
         }
-        9 => wire__crate__api__cloud_sync__cloud_status_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__cloud_sync__cloud_sync_now_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__local_library__empty_trash_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__bootstrap__init_app_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__bootstrap__initialize_impl(port, ptr, rust_vec_len, data_len),
-        14 => {
+        10 => wire__crate__api__cloud_sync__cloud_remove_account_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        11 => wire__crate__api__cloud_sync__cloud_set_upload_scope_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        12 => wire__crate__api__cloud_sync__cloud_status_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__cloud_sync__cloud_switch_account_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        14 => wire__crate__api__cloud_sync__cloud_sync_now_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__local_library__empty_trash_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__bootstrap__init_app_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__bootstrap__initialize_impl(port, ptr, rust_vec_len, data_len),
+        18 => {
             wire__crate__api__local_library__library_tools_impl(port, ptr, rust_vec_len, data_len)
         }
-        15 => wire__crate__api__local_library__list_albums_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__local_library__list_photos_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__local_library__open_library_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__local_library__purge_media_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__local_library__rename_media_impl(port, ptr, rust_vec_len, data_len),
-        20 => {
+        19 => wire__crate__api__local_library__list_albums_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__local_library__list_photos_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__local_library__open_library_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__local_library__purge_media_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__local_library__rename_media_impl(port, ptr, rust_vec_len, data_len),
+        24 => {
             wire__crate__api__local_library__restore_media_impl(port, ptr, rust_vec_len, data_len)
         }
-        21 => wire__crate__api__bootstrap__round_trip_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__local_library__save_edited_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__local_library__set_favorite_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__bootstrap__shutdown_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__local_library__thumbnail_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__local_library__trash_media_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__bootstrap__watch_runtime_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__bootstrap__round_trip_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__local_library__save_edited_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__local_library__set_favorite_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__bootstrap__shutdown_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__local_library__thumbnail_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__local_library__trash_media_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__bootstrap__watch_runtime_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1572,6 +1836,64 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::bootstrap::BootstrapSnapshot>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::cloud_sync::CloudAccountView {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.account_id.into_into_dart().into_dart(),
+            self.endpoint.into_into_dart().into_dart(),
+            self.username.into_into_dart().into_dart(),
+            self.user_id.into_into_dart().into_dart(),
+            self.active.into_into_dart().into_dart(),
+            self.signed_in.into_into_dart().into_dart(),
+            self.last_sync_ms.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::cloud_sync::CloudAccountView
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::cloud_sync::CloudAccountView>
+    for crate::api::cloud_sync::CloudAccountView
+{
+    fn into_into_dart(self) -> crate::api::cloud_sync::CloudAccountView {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::cloud_sync::CloudActivityView {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.phase.into_into_dart().into_dart(),
+            self.syncing.into_into_dart().into_dart(),
+            self.started_at_ms.into_into_dart().into_dart(),
+            self.downloaded.into_into_dart().into_dart(),
+            self.download_total.into_into_dart().into_dart(),
+            self.uploaded.into_into_dart().into_dart(),
+            self.upload_total.into_into_dart().into_dart(),
+            self.favorites_applied.into_into_dart().into_dart(),
+            self.favorites_uploaded.into_into_dart().into_dart(),
+            self.favorite_total.into_into_dart().into_dart(),
+            self.skipped.into_into_dart().into_dart(),
+            self.failed.into_into_dart().into_dart(),
+            self.error_code.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::cloud_sync::CloudActivityView
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::cloud_sync::CloudActivityView>
+    for crate::api::cloud_sync::CloudActivityView
+{
+    fn into_into_dart(self) -> crate::api::cloud_sync::CloudActivityView {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::cloud_sync::CloudQueueResultView {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1598,6 +1920,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::cloud_sync::CloudStatusView {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.logged_in.into_into_dart().into_dart(),
+            self.account_id.into_into_dart().into_dart(),
             self.endpoint.into_into_dart().into_dart(),
             self.username.into_into_dart().into_dart(),
             self.user_id.into_into_dart().into_dart(),
@@ -1606,9 +1929,14 @@ impl flutter_rust_bridge::IntoDart for crate::api::cloud_sync::CloudStatusView {
             self.state.into_into_dart().into_dart(),
             self.error_code.into_into_dart().into_dart(),
             self.pending_uploads.into_into_dart().into_dart(),
+            self.failed_uploads.into_into_dart().into_dart(),
             self.pending_favorites.into_into_dart().into_dart(),
             self.bound_count.into_into_dart().into_dart(),
+            self.upload_scope.into_into_dart().into_dart(),
+            self.upload_albums.into_into_dart().into_dart(),
             self.syncing.into_into_dart().into_dart(),
+            self.activity.into_into_dart().into_dart(),
+            self.accounts.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1629,9 +1957,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::cloud_sync::CloudSyncReportVi
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.downloaded.into_into_dart().into_dart(),
+            self.download_total.into_into_dart().into_dart(),
             self.uploaded.into_into_dart().into_dart(),
+            self.upload_total.into_into_dart().into_dart(),
             self.favorites_applied.into_into_dart().into_dart(),
             self.favorites_uploaded.into_into_dart().into_dart(),
+            self.favorite_total.into_into_dart().into_dart(),
             self.skipped.into_into_dart().into_dart(),
             self.failed.into_into_dart().into_dart(),
             self.state.into_into_dart().into_dart(),
@@ -1690,6 +2021,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::local_library::LocalAlbum {
             self.name.into_into_dart().into_dart(),
             self.count.into_into_dart().into_dart(),
             self.cover_media_id.into_into_dart().into_dart(),
+            self.managed.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1877,6 +2209,38 @@ impl SseEncode for crate::api::bootstrap::BootstrapSnapshot {
     }
 }
 
+impl SseEncode for crate::api::cloud_sync::CloudAccountView {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.account_id, serializer);
+        <String>::sse_encode(self.endpoint, serializer);
+        <String>::sse_encode(self.username, serializer);
+        <Option<String>>::sse_encode(self.user_id, serializer);
+        <bool>::sse_encode(self.active, serializer);
+        <bool>::sse_encode(self.signed_in, serializer);
+        <Option<i64>>::sse_encode(self.last_sync_ms, serializer);
+    }
+}
+
+impl SseEncode for crate::api::cloud_sync::CloudActivityView {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.phase, serializer);
+        <bool>::sse_encode(self.syncing, serializer);
+        <Option<i64>>::sse_encode(self.started_at_ms, serializer);
+        <u32>::sse_encode(self.downloaded, serializer);
+        <u32>::sse_encode(self.download_total, serializer);
+        <u32>::sse_encode(self.uploaded, serializer);
+        <u32>::sse_encode(self.upload_total, serializer);
+        <u32>::sse_encode(self.favorites_applied, serializer);
+        <u32>::sse_encode(self.favorites_uploaded, serializer);
+        <u32>::sse_encode(self.favorite_total, serializer);
+        <u32>::sse_encode(self.skipped, serializer);
+        <u32>::sse_encode(self.failed, serializer);
+        <Option<String>>::sse_encode(self.error_code, serializer);
+    }
+}
+
 impl SseEncode for crate::api::cloud_sync::CloudQueueResultView {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1890,6 +2254,7 @@ impl SseEncode for crate::api::cloud_sync::CloudStatusView {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.logged_in, serializer);
+        <Option<String>>::sse_encode(self.account_id, serializer);
         <Option<String>>::sse_encode(self.endpoint, serializer);
         <Option<String>>::sse_encode(self.username, serializer);
         <Option<String>>::sse_encode(self.user_id, serializer);
@@ -1898,9 +2263,14 @@ impl SseEncode for crate::api::cloud_sync::CloudStatusView {
         <String>::sse_encode(self.state, serializer);
         <Option<String>>::sse_encode(self.error_code, serializer);
         <u32>::sse_encode(self.pending_uploads, serializer);
+        <u32>::sse_encode(self.failed_uploads, serializer);
         <u32>::sse_encode(self.pending_favorites, serializer);
         <u32>::sse_encode(self.bound_count, serializer);
+        <String>::sse_encode(self.upload_scope, serializer);
+        <Vec<String>>::sse_encode(self.upload_albums, serializer);
         <bool>::sse_encode(self.syncing, serializer);
+        <crate::api::cloud_sync::CloudActivityView>::sse_encode(self.activity, serializer);
+        <Vec<crate::api::cloud_sync::CloudAccountView>>::sse_encode(self.accounts, serializer);
     }
 }
 
@@ -1908,9 +2278,12 @@ impl SseEncode for crate::api::cloud_sync::CloudSyncReportView {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u32>::sse_encode(self.downloaded, serializer);
+        <u32>::sse_encode(self.download_total, serializer);
         <u32>::sse_encode(self.uploaded, serializer);
+        <u32>::sse_encode(self.upload_total, serializer);
         <u32>::sse_encode(self.favorites_applied, serializer);
         <u32>::sse_encode(self.favorites_uploaded, serializer);
+        <u32>::sse_encode(self.favorite_total, serializer);
         <u32>::sse_encode(self.skipped, serializer);
         <u32>::sse_encode(self.failed, serializer);
         <String>::sse_encode(self.state, serializer);
@@ -1960,6 +2333,16 @@ impl SseEncode for Vec<String> {
     }
 }
 
+impl SseEncode for Vec<crate::api::cloud_sync::CloudAccountView> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::cloud_sync::CloudAccountView>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::local_library::LocalAlbum> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1997,6 +2380,7 @@ impl SseEncode for crate::api::local_library::LocalAlbum {
         <String>::sse_encode(self.name, serializer);
         <u64>::sse_encode(self.count, serializer);
         <Option<String>>::sse_encode(self.cover_media_id, serializer);
+        <bool>::sse_encode(self.managed, serializer);
     }
 }
 

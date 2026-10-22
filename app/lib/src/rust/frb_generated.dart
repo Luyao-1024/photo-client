@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1073459512;
+  int get rustContentHash => -1909000180;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -107,11 +107,26 @@ abstract class RustLibApi extends BaseApi {
 
   Future<CloudStatusView> crateApiCloudSyncCloudLogout();
 
+  Future<List<String>> crateApiCloudSyncCloudProtectedMediaIds();
+
   Future<CloudQueueResultView> crateApiCloudSyncCloudQueueUpload({
     required List<String> mediaIds,
   });
 
+  Future<CloudStatusView> crateApiCloudSyncCloudRemoveAccount({
+    required String accountId,
+  });
+
+  Future<CloudStatusView> crateApiCloudSyncCloudSetUploadScope({
+    required String mode,
+    required List<String> albums,
+  });
+
   Future<CloudStatusView> crateApiCloudSyncCloudStatus();
+
+  Future<CloudStatusView> crateApiCloudSyncCloudSwitchAccount({
+    required String accountId,
+  });
 
   Future<CloudSyncReportView> crateApiCloudSyncCloudSyncNow();
 
@@ -402,6 +417,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "cloud_logout", argNames: []);
 
   @override
+  Future<List<String>> crateApiCloudSyncCloudProtectedMediaIds() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCloudSyncCloudProtectedMediaIdsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCloudSyncCloudProtectedMediaIdsConstMeta =>
+      const TaskConstMeta(debugName: "cloud_protected_media_ids", argNames: []);
+
+  @override
   Future<CloudQueueResultView> crateApiCloudSyncCloudQueueUpload({
     required List<String> mediaIds,
   }) {
@@ -413,7 +455,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },
@@ -435,6 +477,74 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<CloudStatusView> crateApiCloudSyncCloudRemoveAccount({
+    required String accountId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(accountId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_cloud_status_view,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCloudSyncCloudRemoveAccountConstMeta,
+        argValues: [accountId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCloudSyncCloudRemoveAccountConstMeta =>
+      const TaskConstMeta(
+        debugName: "cloud_remove_account",
+        argNames: ["accountId"],
+      );
+
+  @override
+  Future<CloudStatusView> crateApiCloudSyncCloudSetUploadScope({
+    required String mode,
+    required List<String> albums,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mode, serializer);
+          sse_encode_list_String(albums, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_cloud_status_view,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCloudSyncCloudSetUploadScopeConstMeta,
+        argValues: [mode, albums],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCloudSyncCloudSetUploadScopeConstMeta =>
+      const TaskConstMeta(
+        debugName: "cloud_set_upload_scope",
+        argNames: ["mode", "albums"],
+      );
+
+  @override
   Future<CloudStatusView> crateApiCloudSyncCloudStatus() {
     return handler.executeNormal(
       NormalTask(
@@ -443,7 +553,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 12,
             port: port_,
           );
         },
@@ -462,6 +572,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "cloud_status", argNames: []);
 
   @override
+  Future<CloudStatusView> crateApiCloudSyncCloudSwitchAccount({
+    required String accountId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(accountId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_cloud_status_view,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCloudSyncCloudSwitchAccountConstMeta,
+        argValues: [accountId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCloudSyncCloudSwitchAccountConstMeta =>
+      const TaskConstMeta(
+        debugName: "cloud_switch_account",
+        argNames: ["accountId"],
+      );
+
+  @override
   Future<CloudSyncReportView> crateApiCloudSyncCloudSyncNow() {
     return handler.executeNormal(
       NormalTask(
@@ -470,7 +613,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 14,
             port: port_,
           );
         },
@@ -497,7 +640,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 15,
             port: port_,
           );
         },
@@ -524,7 +667,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 16,
             port: port_,
           );
         },
@@ -558,7 +701,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 17,
             port: port_,
           );
         },
@@ -589,7 +732,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 18,
             port: port_,
           );
         },
@@ -616,7 +759,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 19,
             port: port_,
           );
         },
@@ -660,7 +803,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 20,
             port: port_,
           );
         },
@@ -709,7 +852,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 21,
             port: port_,
           );
         },
@@ -739,7 +882,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 22,
             port: port_,
           );
         },
@@ -771,7 +914,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 23,
             port: port_,
           );
         },
@@ -804,7 +947,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 24,
             port: port_,
           );
         },
@@ -832,7 +975,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 25,
             port: port_,
           );
         },
@@ -864,7 +1007,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 26,
             port: port_,
           );
         },
@@ -899,7 +1042,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 27,
             port: port_,
           );
         },
@@ -929,7 +1072,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 28,
             port: port_,
           );
         },
@@ -961,7 +1104,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 29,
             port: port_,
           );
         },
@@ -994,7 +1137,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1024,7 +1167,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 27,
+              funcId: 31,
               port: port_,
             );
           },
@@ -1110,6 +1253,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  CloudAccountView dco_decode_cloud_account_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return CloudAccountView(
+      accountId: dco_decode_String(arr[0]),
+      endpoint: dco_decode_String(arr[1]),
+      username: dco_decode_String(arr[2]),
+      userId: dco_decode_opt_String(arr[3]),
+      active: dco_decode_bool(arr[4]),
+      signedIn: dco_decode_bool(arr[5]),
+      lastSyncMs: dco_decode_opt_box_autoadd_i_64(arr[6]),
+    );
+  }
+
+  @protected
+  CloudActivityView dco_decode_cloud_activity_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    return CloudActivityView(
+      phase: dco_decode_String(arr[0]),
+      syncing: dco_decode_bool(arr[1]),
+      startedAtMs: dco_decode_opt_box_autoadd_i_64(arr[2]),
+      downloaded: dco_decode_u_32(arr[3]),
+      downloadTotal: dco_decode_u_32(arr[4]),
+      uploaded: dco_decode_u_32(arr[5]),
+      uploadTotal: dco_decode_u_32(arr[6]),
+      favoritesApplied: dco_decode_u_32(arr[7]),
+      favoritesUploaded: dco_decode_u_32(arr[8]),
+      favoriteTotal: dco_decode_u_32(arr[9]),
+      skipped: dco_decode_u_32(arr[10]),
+      failed: dco_decode_u_32(arr[11]),
+      errorCode: dco_decode_opt_String(arr[12]),
+    );
+  }
+
+  @protected
   CloudQueueResultView dco_decode_cloud_queue_result_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1126,21 +1309,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CloudStatusView dco_decode_cloud_status_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 18)
+      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
     return CloudStatusView(
       loggedIn: dco_decode_bool(arr[0]),
-      endpoint: dco_decode_opt_String(arr[1]),
-      username: dco_decode_opt_String(arr[2]),
-      userId: dco_decode_opt_String(arr[3]),
-      tokenExpiresAtMs: dco_decode_opt_box_autoadd_i_64(arr[4]),
-      lastSyncMs: dco_decode_opt_box_autoadd_i_64(arr[5]),
-      state: dco_decode_String(arr[6]),
-      errorCode: dco_decode_opt_String(arr[7]),
-      pendingUploads: dco_decode_u_32(arr[8]),
-      pendingFavorites: dco_decode_u_32(arr[9]),
-      boundCount: dco_decode_u_32(arr[10]),
-      syncing: dco_decode_bool(arr[11]),
+      accountId: dco_decode_opt_String(arr[1]),
+      endpoint: dco_decode_opt_String(arr[2]),
+      username: dco_decode_opt_String(arr[3]),
+      userId: dco_decode_opt_String(arr[4]),
+      tokenExpiresAtMs: dco_decode_opt_box_autoadd_i_64(arr[5]),
+      lastSyncMs: dco_decode_opt_box_autoadd_i_64(arr[6]),
+      state: dco_decode_String(arr[7]),
+      errorCode: dco_decode_opt_String(arr[8]),
+      pendingUploads: dco_decode_u_32(arr[9]),
+      failedUploads: dco_decode_u_32(arr[10]),
+      pendingFavorites: dco_decode_u_32(arr[11]),
+      boundCount: dco_decode_u_32(arr[12]),
+      uploadScope: dco_decode_String(arr[13]),
+      uploadAlbums: dco_decode_list_String(arr[14]),
+      syncing: dco_decode_bool(arr[15]),
+      activity: dco_decode_cloud_activity_view(arr[16]),
+      accounts: dco_decode_list_cloud_account_view(arr[17]),
     );
   }
 
@@ -1148,17 +1337,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CloudSyncReportView dco_decode_cloud_sync_report_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return CloudSyncReportView(
       downloaded: dco_decode_u_32(arr[0]),
-      uploaded: dco_decode_u_32(arr[1]),
-      favoritesApplied: dco_decode_u_32(arr[2]),
-      favoritesUploaded: dco_decode_u_32(arr[3]),
-      skipped: dco_decode_u_32(arr[4]),
-      failed: dco_decode_u_32(arr[5]),
-      state: dco_decode_String(arr[6]),
-      errorCode: dco_decode_opt_String(arr[7]),
+      downloadTotal: dco_decode_u_32(arr[1]),
+      uploaded: dco_decode_u_32(arr[2]),
+      uploadTotal: dco_decode_u_32(arr[3]),
+      favoritesApplied: dco_decode_u_32(arr[4]),
+      favoritesUploaded: dco_decode_u_32(arr[5]),
+      favoriteTotal: dco_decode_u_32(arr[6]),
+      skipped: dco_decode_u_32(arr[7]),
+      failed: dco_decode_u_32(arr[8]),
+      state: dco_decode_String(arr[9]),
+      errorCode: dco_decode_opt_String(arr[10]),
     );
   }
 
@@ -1203,6 +1395,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<CloudAccountView> dco_decode_list_cloud_account_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_cloud_account_view).toList();
+  }
+
+  @protected
   List<LocalAlbum> dco_decode_list_local_album(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_local_album).toList();
@@ -1224,13 +1422,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LocalAlbum dco_decode_local_album(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return LocalAlbum(
       path: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
       count: dco_decode_u_64(arr[2]),
       coverMediaId: dco_decode_opt_String(arr[3]),
+      managed: dco_decode_bool(arr[4]),
     );
   }
 
@@ -1438,6 +1637,62 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  CloudAccountView sse_decode_cloud_account_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_accountId = sse_decode_String(deserializer);
+    var var_endpoint = sse_decode_String(deserializer);
+    var var_username = sse_decode_String(deserializer);
+    var var_userId = sse_decode_opt_String(deserializer);
+    var var_active = sse_decode_bool(deserializer);
+    var var_signedIn = sse_decode_bool(deserializer);
+    var var_lastSyncMs = sse_decode_opt_box_autoadd_i_64(deserializer);
+    return CloudAccountView(
+      accountId: var_accountId,
+      endpoint: var_endpoint,
+      username: var_username,
+      userId: var_userId,
+      active: var_active,
+      signedIn: var_signedIn,
+      lastSyncMs: var_lastSyncMs,
+    );
+  }
+
+  @protected
+  CloudActivityView sse_decode_cloud_activity_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_phase = sse_decode_String(deserializer);
+    var var_syncing = sse_decode_bool(deserializer);
+    var var_startedAtMs = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_downloaded = sse_decode_u_32(deserializer);
+    var var_downloadTotal = sse_decode_u_32(deserializer);
+    var var_uploaded = sse_decode_u_32(deserializer);
+    var var_uploadTotal = sse_decode_u_32(deserializer);
+    var var_favoritesApplied = sse_decode_u_32(deserializer);
+    var var_favoritesUploaded = sse_decode_u_32(deserializer);
+    var var_favoriteTotal = sse_decode_u_32(deserializer);
+    var var_skipped = sse_decode_u_32(deserializer);
+    var var_failed = sse_decode_u_32(deserializer);
+    var var_errorCode = sse_decode_opt_String(deserializer);
+    return CloudActivityView(
+      phase: var_phase,
+      syncing: var_syncing,
+      startedAtMs: var_startedAtMs,
+      downloaded: var_downloaded,
+      downloadTotal: var_downloadTotal,
+      uploaded: var_uploaded,
+      uploadTotal: var_uploadTotal,
+      favoritesApplied: var_favoritesApplied,
+      favoritesUploaded: var_favoritesUploaded,
+      favoriteTotal: var_favoriteTotal,
+      skipped: var_skipped,
+      failed: var_failed,
+      errorCode: var_errorCode,
+    );
+  }
+
+  @protected
   CloudQueueResultView sse_decode_cloud_queue_result_view(
     SseDeserializer deserializer,
   ) {
@@ -1456,6 +1711,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CloudStatusView sse_decode_cloud_status_view(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_loggedIn = sse_decode_bool(deserializer);
+    var var_accountId = sse_decode_opt_String(deserializer);
     var var_endpoint = sse_decode_opt_String(deserializer);
     var var_username = sse_decode_opt_String(deserializer);
     var var_userId = sse_decode_opt_String(deserializer);
@@ -1464,11 +1720,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_state = sse_decode_String(deserializer);
     var var_errorCode = sse_decode_opt_String(deserializer);
     var var_pendingUploads = sse_decode_u_32(deserializer);
+    var var_failedUploads = sse_decode_u_32(deserializer);
     var var_pendingFavorites = sse_decode_u_32(deserializer);
     var var_boundCount = sse_decode_u_32(deserializer);
+    var var_uploadScope = sse_decode_String(deserializer);
+    var var_uploadAlbums = sse_decode_list_String(deserializer);
     var var_syncing = sse_decode_bool(deserializer);
+    var var_activity = sse_decode_cloud_activity_view(deserializer);
+    var var_accounts = sse_decode_list_cloud_account_view(deserializer);
     return CloudStatusView(
       loggedIn: var_loggedIn,
+      accountId: var_accountId,
       endpoint: var_endpoint,
       username: var_username,
       userId: var_userId,
@@ -1477,9 +1739,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       state: var_state,
       errorCode: var_errorCode,
       pendingUploads: var_pendingUploads,
+      failedUploads: var_failedUploads,
       pendingFavorites: var_pendingFavorites,
       boundCount: var_boundCount,
+      uploadScope: var_uploadScope,
+      uploadAlbums: var_uploadAlbums,
       syncing: var_syncing,
+      activity: var_activity,
+      accounts: var_accounts,
     );
   }
 
@@ -1489,18 +1756,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_downloaded = sse_decode_u_32(deserializer);
+    var var_downloadTotal = sse_decode_u_32(deserializer);
     var var_uploaded = sse_decode_u_32(deserializer);
+    var var_uploadTotal = sse_decode_u_32(deserializer);
     var var_favoritesApplied = sse_decode_u_32(deserializer);
     var var_favoritesUploaded = sse_decode_u_32(deserializer);
+    var var_favoriteTotal = sse_decode_u_32(deserializer);
     var var_skipped = sse_decode_u_32(deserializer);
     var var_failed = sse_decode_u_32(deserializer);
     var var_state = sse_decode_String(deserializer);
     var var_errorCode = sse_decode_opt_String(deserializer);
     return CloudSyncReportView(
       downloaded: var_downloaded,
+      downloadTotal: var_downloadTotal,
       uploaded: var_uploaded,
+      uploadTotal: var_uploadTotal,
       favoritesApplied: var_favoritesApplied,
       favoritesUploaded: var_favoritesUploaded,
+      favoriteTotal: var_favoriteTotal,
       skipped: var_skipped,
       failed: var_failed,
       state: var_state,
@@ -1566,6 +1839,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<CloudAccountView> sse_decode_list_cloud_account_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <CloudAccountView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_cloud_account_view(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<LocalAlbum> sse_decode_list_local_album(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1603,11 +1890,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_name = sse_decode_String(deserializer);
     var var_count = sse_decode_u_64(deserializer);
     var var_coverMediaId = sse_decode_opt_String(deserializer);
+    var var_managed = sse_decode_bool(deserializer);
     return LocalAlbum(
       path: var_path,
       name: var_name,
       count: var_count,
       coverMediaId: var_coverMediaId,
+      managed: var_managed,
     );
   }
 
@@ -1856,6 +2145,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_cloud_account_view(
+    CloudAccountView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.accountId, serializer);
+    sse_encode_String(self.endpoint, serializer);
+    sse_encode_String(self.username, serializer);
+    sse_encode_opt_String(self.userId, serializer);
+    sse_encode_bool(self.active, serializer);
+    sse_encode_bool(self.signedIn, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.lastSyncMs, serializer);
+  }
+
+  @protected
+  void sse_encode_cloud_activity_view(
+    CloudActivityView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.phase, serializer);
+    sse_encode_bool(self.syncing, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.startedAtMs, serializer);
+    sse_encode_u_32(self.downloaded, serializer);
+    sse_encode_u_32(self.downloadTotal, serializer);
+    sse_encode_u_32(self.uploaded, serializer);
+    sse_encode_u_32(self.uploadTotal, serializer);
+    sse_encode_u_32(self.favoritesApplied, serializer);
+    sse_encode_u_32(self.favoritesUploaded, serializer);
+    sse_encode_u_32(self.favoriteTotal, serializer);
+    sse_encode_u_32(self.skipped, serializer);
+    sse_encode_u_32(self.failed, serializer);
+    sse_encode_opt_String(self.errorCode, serializer);
+  }
+
+  @protected
   void sse_encode_cloud_queue_result_view(
     CloudQueueResultView self,
     SseSerializer serializer,
@@ -1873,6 +2198,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bool(self.loggedIn, serializer);
+    sse_encode_opt_String(self.accountId, serializer);
     sse_encode_opt_String(self.endpoint, serializer);
     sse_encode_opt_String(self.username, serializer);
     sse_encode_opt_String(self.userId, serializer);
@@ -1881,9 +2207,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.state, serializer);
     sse_encode_opt_String(self.errorCode, serializer);
     sse_encode_u_32(self.pendingUploads, serializer);
+    sse_encode_u_32(self.failedUploads, serializer);
     sse_encode_u_32(self.pendingFavorites, serializer);
     sse_encode_u_32(self.boundCount, serializer);
+    sse_encode_String(self.uploadScope, serializer);
+    sse_encode_list_String(self.uploadAlbums, serializer);
     sse_encode_bool(self.syncing, serializer);
+    sse_encode_cloud_activity_view(self.activity, serializer);
+    sse_encode_list_cloud_account_view(self.accounts, serializer);
   }
 
   @protected
@@ -1893,9 +2224,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self.downloaded, serializer);
+    sse_encode_u_32(self.downloadTotal, serializer);
     sse_encode_u_32(self.uploaded, serializer);
+    sse_encode_u_32(self.uploadTotal, serializer);
     sse_encode_u_32(self.favoritesApplied, serializer);
     sse_encode_u_32(self.favoritesUploaded, serializer);
+    sse_encode_u_32(self.favoriteTotal, serializer);
     sse_encode_u_32(self.skipped, serializer);
     sse_encode_u_32(self.failed, serializer);
     sse_encode_String(self.state, serializer);
@@ -1941,6 +2275,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_cloud_account_view(
+    List<CloudAccountView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_cloud_account_view(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_local_album(
     List<LocalAlbum> self,
     SseSerializer serializer,
@@ -1981,6 +2327,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.name, serializer);
     sse_encode_u_64(self.count, serializer);
     sse_encode_opt_String(self.coverMediaId, serializer);
+    sse_encode_bool(self.managed, serializer);
   }
 
   @protected

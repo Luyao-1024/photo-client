@@ -169,17 +169,23 @@ class LocalAlbum {
   final String name;
   final BigInt count;
   final String? coverMediaId;
+  final bool managed;
 
   const LocalAlbum({
     required this.path,
     required this.name,
     required this.count,
     this.coverMediaId,
+    required this.managed,
   });
 
   @override
   int get hashCode =>
-      path.hashCode ^ name.hashCode ^ count.hashCode ^ coverMediaId.hashCode;
+      path.hashCode ^
+      name.hashCode ^
+      count.hashCode ^
+      coverMediaId.hashCode ^
+      managed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -189,7 +195,8 @@ class LocalAlbum {
           path == other.path &&
           name == other.name &&
           count == other.count &&
-          coverMediaId == other.coverMediaId;
+          coverMediaId == other.coverMediaId &&
+          managed == other.managed;
 }
 
 class LocalLibraryInfo {

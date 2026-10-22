@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cloud_lock`, `current_status`, `enter`, `lock`, `report_view`, `view`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SyncFlag`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`
+// These functions are ignored because they are not marked as `pub`: `account_view`, `activity_view`, `activity`, `apply_progress`, `begin_activity`, `cloud_lock`, `current_status`, `end_activity`, `idle_activity`, `lock`, `now_ms`, `report_view`, `reset_activity`, `view`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Activity`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`
 
 /// Login is the only place a password exists. It stays in memory, is never
 /// stored or logged, and is dropped as soon as the SDK call returns.
@@ -27,7 +27,7 @@ Future<CloudStatusView> cloudLogout() =>
     RustLib.instance.api.crateApiCloudSyncCloudLogout();
 
 /// Read-only and deliberately not serialized: it must stay answerable while a
-/// sync is running so the UI can show `syncing`.
+/// sync is running so the UI can show the live phase and counters.
 Future<CloudStatusView> cloudStatus() =>
     RustLib.instance.api.crateApiCloudSyncCloudStatus();
 
@@ -42,6 +42,139 @@ Future<CloudQueueResultView> cloudQueueUpload({
 
 Future<List<String>> cloudBoundMediaIds() =>
     RustLib.instance.api.crateApiCloudSyncCloudBoundMediaIds();
+
+/// All cloud-bound photos, including other saved accounts: the UI keeps them
+/// read-only even while a different account is selected.
+Future<List<String>> cloudProtectedMediaIds() =>
+    RustLib.instance.api.crateApiCloudSyncCloudProtectedMediaIds();
+
+Future<CloudStatusView> cloudSwitchAccount({required String accountId}) =>
+    RustLib.instance.api.crateApiCloudSyncCloudSwitchAccount(
+      accountId: accountId,
+    );
+
+Future<CloudStatusView> cloudRemoveAccount({required String accountId}) =>
+    RustLib.instance.api.crateApiCloudSyncCloudRemoveAccount(
+      accountId: accountId,
+    );
+
+Future<CloudStatusView> cloudSetUploadScope({
+  required String mode,
+  required List<String> albums,
+}) => RustLib.instance.api.crateApiCloudSyncCloudSetUploadScope(
+  mode: mode,
+  albums: albums,
+);
+
+class CloudAccountView {
+  final String accountId;
+  final String endpoint;
+  final String username;
+  final String? userId;
+  final bool active;
+  final bool signedIn;
+  final PlatformInt64? lastSyncMs;
+
+  const CloudAccountView({
+    required this.accountId,
+    required this.endpoint,
+    required this.username,
+    this.userId,
+    required this.active,
+    required this.signedIn,
+    this.lastSyncMs,
+  });
+
+  @override
+  int get hashCode =>
+      accountId.hashCode ^
+      endpoint.hashCode ^
+      username.hashCode ^
+      userId.hashCode ^
+      active.hashCode ^
+      signedIn.hashCode ^
+      lastSyncMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CloudAccountView &&
+          runtimeType == other.runtimeType &&
+          accountId == other.accountId &&
+          endpoint == other.endpoint &&
+          username == other.username &&
+          userId == other.userId &&
+          active == other.active &&
+          signedIn == other.signedIn &&
+          lastSyncMs == other.lastSyncMs;
+}
+
+class CloudActivityView {
+  final String phase;
+  final bool syncing;
+  final PlatformInt64? startedAtMs;
+  final int downloaded;
+  final int downloadTotal;
+  final int uploaded;
+  final int uploadTotal;
+  final int favoritesApplied;
+  final int favoritesUploaded;
+  final int favoriteTotal;
+  final int skipped;
+  final int failed;
+  final String? errorCode;
+
+  const CloudActivityView({
+    required this.phase,
+    required this.syncing,
+    this.startedAtMs,
+    required this.downloaded,
+    required this.downloadTotal,
+    required this.uploaded,
+    required this.uploadTotal,
+    required this.favoritesApplied,
+    required this.favoritesUploaded,
+    required this.favoriteTotal,
+    required this.skipped,
+    required this.failed,
+    this.errorCode,
+  });
+
+  @override
+  int get hashCode =>
+      phase.hashCode ^
+      syncing.hashCode ^
+      startedAtMs.hashCode ^
+      downloaded.hashCode ^
+      downloadTotal.hashCode ^
+      uploaded.hashCode ^
+      uploadTotal.hashCode ^
+      favoritesApplied.hashCode ^
+      favoritesUploaded.hashCode ^
+      favoriteTotal.hashCode ^
+      skipped.hashCode ^
+      failed.hashCode ^
+      errorCode.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CloudActivityView &&
+          runtimeType == other.runtimeType &&
+          phase == other.phase &&
+          syncing == other.syncing &&
+          startedAtMs == other.startedAtMs &&
+          downloaded == other.downloaded &&
+          downloadTotal == other.downloadTotal &&
+          uploaded == other.uploaded &&
+          uploadTotal == other.uploadTotal &&
+          favoritesApplied == other.favoritesApplied &&
+          favoritesUploaded == other.favoritesUploaded &&
+          favoriteTotal == other.favoriteTotal &&
+          skipped == other.skipped &&
+          failed == other.failed &&
+          errorCode == other.errorCode;
+}
 
 class CloudQueueResultView {
   final int queued;
@@ -69,6 +202,7 @@ class CloudQueueResultView {
 
 class CloudStatusView {
   final bool loggedIn;
+  final String? accountId;
   final String? endpoint;
   final String? username;
   final String? userId;
@@ -77,12 +211,18 @@ class CloudStatusView {
   final String state;
   final String? errorCode;
   final int pendingUploads;
+  final int failedUploads;
   final int pendingFavorites;
   final int boundCount;
+  final String uploadScope;
+  final List<String> uploadAlbums;
   final bool syncing;
+  final CloudActivityView activity;
+  final List<CloudAccountView> accounts;
 
   const CloudStatusView({
     required this.loggedIn,
+    this.accountId,
     this.endpoint,
     this.username,
     this.userId,
@@ -91,14 +231,20 @@ class CloudStatusView {
     required this.state,
     this.errorCode,
     required this.pendingUploads,
+    required this.failedUploads,
     required this.pendingFavorites,
     required this.boundCount,
+    required this.uploadScope,
+    required this.uploadAlbums,
     required this.syncing,
+    required this.activity,
+    required this.accounts,
   });
 
   @override
   int get hashCode =>
       loggedIn.hashCode ^
+      accountId.hashCode ^
       endpoint.hashCode ^
       username.hashCode ^
       userId.hashCode ^
@@ -107,9 +253,14 @@ class CloudStatusView {
       state.hashCode ^
       errorCode.hashCode ^
       pendingUploads.hashCode ^
+      failedUploads.hashCode ^
       pendingFavorites.hashCode ^
       boundCount.hashCode ^
-      syncing.hashCode;
+      uploadScope.hashCode ^
+      uploadAlbums.hashCode ^
+      syncing.hashCode ^
+      activity.hashCode ^
+      accounts.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -117,6 +268,7 @@ class CloudStatusView {
       other is CloudStatusView &&
           runtimeType == other.runtimeType &&
           loggedIn == other.loggedIn &&
+          accountId == other.accountId &&
           endpoint == other.endpoint &&
           username == other.username &&
           userId == other.userId &&
@@ -125,16 +277,24 @@ class CloudStatusView {
           state == other.state &&
           errorCode == other.errorCode &&
           pendingUploads == other.pendingUploads &&
+          failedUploads == other.failedUploads &&
           pendingFavorites == other.pendingFavorites &&
           boundCount == other.boundCount &&
-          syncing == other.syncing;
+          uploadScope == other.uploadScope &&
+          uploadAlbums == other.uploadAlbums &&
+          syncing == other.syncing &&
+          activity == other.activity &&
+          accounts == other.accounts;
 }
 
 class CloudSyncReportView {
   final int downloaded;
+  final int downloadTotal;
   final int uploaded;
+  final int uploadTotal;
   final int favoritesApplied;
   final int favoritesUploaded;
+  final int favoriteTotal;
   final int skipped;
   final int failed;
   final String state;
@@ -142,9 +302,12 @@ class CloudSyncReportView {
 
   const CloudSyncReportView({
     required this.downloaded,
+    required this.downloadTotal,
     required this.uploaded,
+    required this.uploadTotal,
     required this.favoritesApplied,
     required this.favoritesUploaded,
+    required this.favoriteTotal,
     required this.skipped,
     required this.failed,
     required this.state,
@@ -154,9 +317,12 @@ class CloudSyncReportView {
   @override
   int get hashCode =>
       downloaded.hashCode ^
+      downloadTotal.hashCode ^
       uploaded.hashCode ^
+      uploadTotal.hashCode ^
       favoritesApplied.hashCode ^
       favoritesUploaded.hashCode ^
+      favoriteTotal.hashCode ^
       skipped.hashCode ^
       failed.hashCode ^
       state.hashCode ^
@@ -168,9 +334,12 @@ class CloudSyncReportView {
       other is CloudSyncReportView &&
           runtimeType == other.runtimeType &&
           downloaded == other.downloaded &&
+          downloadTotal == other.downloadTotal &&
           uploaded == other.uploaded &&
+          uploadTotal == other.uploadTotal &&
           favoritesApplied == other.favoritesApplied &&
           favoritesUploaded == other.favoritesUploaded &&
+          favoriteTotal == other.favoriteTotal &&
           skipped == other.skipped &&
           failed == other.failed &&
           state == other.state &&

@@ -9,7 +9,7 @@ const SCHEMA: &str = include_str!("../src/storage/local-schema.sql");
 const EXTENSIONS: &str = include_str!("../src/storage/local-v3.sql");
 
 /// Older supported catalogs are upgraded; future writers are still rejected.
-const CURRENT_SCHEMA_VERSION: i64 = 5;
+const CURRENT_SCHEMA_VERSION: i64 = 6;
 
 fn input(folder: &std::path::Path, name: &str, ns: i64) -> MediaInput {
     let path = folder.join(name);
@@ -583,7 +583,34 @@ fn v4_metadata_upgrade_preserves_dirty_work_and_backs_up_before_migration() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        5
+        CURRENT_SCHEMA_VERSION
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('cloud_accounts') WHERE name IN ('is_active','upload_scope')",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        2
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT is_active FROM cloud_accounts WHERE account_id='account'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('cloud_bindings') WHERE name IN ('remote_edited_at_ms','remote_source','remote_event_id')",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        3
     );
     let backups = backup_files(&root);
     assert_eq!(backups.len(), 1);
