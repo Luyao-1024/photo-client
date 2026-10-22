@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/local_library_gateway.dart';
+import 'android_runtime.dart';
 import '../ui/glass_dialog.dart';
 import '../ui/glass_theme.dart';
 import '../ui/strings.dart';
@@ -14,15 +15,26 @@ class InAppSourcePicker implements LocalSourcePicker {
   InAppSourcePicker(this.navigator);
   final GlobalKey<NavigatorState> navigator;
   String? _lastDirectory;
+  /// Desktop starts at HOME; Android starts at shared storage, where the
+  /// all-files grant admits the same path-based browsing.
+  Future<String> _defaultDirectory() async {
+    if (AndroidRuntime.isAndroid) {
+      final paths = await AndroidRuntime.paths();
+      return paths?.externalRoot ?? paths?.filesDir ?? Directory.current.path;
+    }
+    return Platform.environment['HOME'] ?? Directory.current.path;
+  }
+
   Future<List<String>> _choose(bool directory) async {
+    final home = await _defaultDirectory();
     final context = navigator.currentContext;
-    if (context == null) return [];
-    final home = Platform.environment['HOME'] ?? Directory.current.path;
+    if (context == null || !context.mounted) return [];
     final paths = await showDialog<List<String>>(
       context: context,
       builder: (_) => _LocalFileBrowser(
         directory: directory,
         initialPath: _lastDirectory ?? home,
+        homePath: home,
       ),
     );
     if (paths != null && paths.isNotEmpty) {
@@ -41,9 +53,14 @@ class InAppSourcePicker implements LocalSourcePicker {
 }
 
 class _LocalFileBrowser extends StatefulWidget {
-  const _LocalFileBrowser({required this.directory, required this.initialPath});
+  const _LocalFileBrowser({
+    required this.directory,
+    required this.initialPath,
+    required this.homePath,
+  });
   final bool directory;
   final String initialPath;
+  final String homePath;
   @override
   State<_LocalFileBrowser> createState() => _LocalFileBrowserState();
 }
@@ -100,9 +117,8 @@ class _LocalFileBrowserState extends State<_LocalFileBrowser> {
     if (value.trim().isEmpty) return;
     final token = ++_generation;
     var path = value.trim();
-    final home = Platform.environment['HOME'];
-    if (home != null && (path == '~' || path.startsWith('~/'))) {
-      path = home + path.substring(1);
+    if (path == '~' || path.startsWith('~/')) {
+      path = widget.homePath + path.substring(1);
     }
     if (!Directory(path).isAbsolute) {
       path = '$_path${Platform.pathSeparator}$path';
@@ -235,10 +251,7 @@ class _LocalFileBrowserState extends State<_LocalFileBrowser> {
                       ),
                       IconButton(
                         tooltip: strings.pick('主目录', 'Home'),
-                        onPressed: () => _navigate(
-                          Platform.environment['HOME'] ??
-                              Directory.current.path,
-                        ),
+                        onPressed: () => _navigate(widget.homePath),
                         icon: const Icon(Icons.home_outlined),
                       ),
                       Expanded(

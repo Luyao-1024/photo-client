@@ -1,14 +1,17 @@
 use serde_json::Value;
+use std::path::Path;
+
+#[cfg(not(target_os = "android"))]
 use std::{
     fs,
     io::{Read, Write},
-    path::Path,
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
 
 /// External codecs receive argument arrays, never a shell. Time and captured
 /// output are bounded; their stderr is kept out of user-visible messages.
+#[cfg(not(target_os = "android"))]
 fn output(mut command: Command) -> Result<Vec<u8>, String> {
     let mut child = command
         .stdout(Stdio::piped())
@@ -45,6 +48,7 @@ fn output(mut command: Command) -> Result<Vec<u8>, String> {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+#[cfg(not(target_os = "android"))]
 pub(super) fn probe(path: &Path) -> Result<Value, String> {
     let mut cmd = Command::new("ffprobe");
     cmd.args([
@@ -60,17 +64,45 @@ pub(super) fn probe(path: &Path) -> Result<Value, String> {
     .arg(path);
     serde_json::from_slice(&output(cmd)?).map_err(|_| "VideoMetadataFailed".into())
 }
+
+#[cfg(target_os = "android")]
+pub(super) fn probe(path: &Path) -> Result<Value, String> {
+    let probe = platform_android::probe_video(path)?;
+    Ok(serde_json::json!({
+        "streams": [{"width": probe.width, "height": probe.height}],
+        "format": {
+            "duration": format!("{:.3}", probe.duration_ms as f64 / 1000.0),
+            "tags": {"photo_capture_time_ms": probe.capture_time_ms},
+        },
+    }))
+}
+
 pub(super) fn video_header(value: &Value) -> Result<super::headers::Header, String> {
     let stream = value["streams"].get(0).ok_or("VideoMetadataFailed")?;
     let w = stream["width"].as_u64().ok_or("VideoMetadataFailed")? as u32;
     let h = stream["height"].as_u64().ok_or("VideoMetadataFailed")? as u32;
+    #[allow(unused_mut)]
     let mut header = super::headers::header(w, h, 4, None)?;
-    header.capture_time_ms = value["format"]["tags"]["creation_time"]
-        .as_str()
-        .and_then(|s| gio::glib::DateTime::from_iso8601(s, None).ok())
-        .map(|t| t.to_unix() * 1000);
+    #[cfg(target_os = "linux")]
+    {
+        header.capture_time_ms = value["format"]["tags"]["creation_time"]
+            .as_str()
+            .and_then(|s| gio::glib::DateTime::from_iso8601(s, None).ok())
+            .map(|t| t.to_unix() * 1000);
+    }
+    #[cfg(target_os = "android")]
+    {
+        header.capture_time_ms = value["format"]["tags"]["photo_capture_time_ms"].as_i64();
+    }
     Ok(header)
 }
+
+#[cfg(target_os = "android")]
+pub(super) fn thumbnail(path: &Path, max_edge: u32, destination: &Path) -> Result<(), String> {
+    platform_android::video_thumbnail(path, destination, max_edge)
+}
+
+#[cfg(not(target_os = "android"))]
 pub(super) fn thumbnail(path: &Path, max_edge: u32, destination: &Path) -> Result<(), String> {
     let dir = destination.parent().ok_or("InvalidDestination")?;
     fs::create_dir_all(dir).map_err(|_| "CacheUnavailable")?;

@@ -22,10 +22,15 @@ kamadak-exif = "0.6"
 
 notify = "6"
 tempfile = "3"
-gio = "0.19"
-libc = "0.2"
 jpeg-decoder = "0.3"
 png = "0.18"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.19"
+libc = "0.2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+platform-android.workspace = true
 
 [dev-dependencies]
 

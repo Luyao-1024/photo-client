@@ -86,6 +86,30 @@ pub enum ProfileError {
 }
 
 impl BuildProfile {
+    /// A profile is bound to the executable that links it: the desktop and the
+    /// universal Android package share every service but not their adapters.
+    fn matches_host(&self) -> bool {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        let host = self.platform == "linux"
+            && self.flutter_target == "linux"
+            && self.rust_target == "x86_64-unknown-linux-gnu"
+            && self.profile_id == "linux-x86_64"
+            && self.packaging.format == "linux_bundle";
+        #[cfg(target_os = "android")]
+        let host = self.platform == "android"
+            && self.flutter_target == "android"
+            && self.rust_target
+                == "aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android"
+            && self.profile_id == "android-universal"
+            && self.packaging.format == "apk_aab";
+        #[cfg(not(any(
+            all(target_os = "linux", target_arch = "x86_64"),
+            target_os = "android"
+        )))]
+        let host = false;
+        host
+    }
+
     pub fn from_json(raw: &str) -> Result<Self, ProfileError> {
         serde_json::from_str(raw).map_err(|_| ProfileError::Malformed)
     }
@@ -114,23 +138,10 @@ impl BuildProfile {
         if self.status != "active" {
             return Err(ProfileError::Planned);
         }
-        if !cfg!(all(target_os = "linux", target_arch = "x86_64"))
-            || self.platform != "linux"
-            || self.flutter_target != "linux"
-            || self.rust_target != "x86_64-unknown-linux-gnu"
-            || self.profile_id != "linux-x86_64"
-            || self.packaging.format != "linux_bundle"
-        {
+        if !self.matches_host() {
             return Err(ProfileError::Host);
         }
-        let expected = Adapters {
-            storage: "linux_xdg".into(),
-            source: "linux_file_picker".into(),
-            secrets: "linux_secret_service".into(),
-            scheduler: "while_app_running".into(),
-            codec: "portable_image".into(),
-            instance_lock: "linux_process_lock".into(),
-        };
+        let expected = expected_adapters().ok_or(ProfileError::Host)?;
         if self.adapters != expected {
             return Err(ProfileError::Adapter);
         }
@@ -165,6 +176,38 @@ impl BuildProfile {
             profile: self,
             digest,
         })
+    }
+}
+
+fn expected_adapters() -> Option<Adapters> {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        return Some(Adapters {
+            storage: "linux_xdg".into(),
+            source: "linux_file_picker".into(),
+            secrets: "linux_secret_service".into(),
+            scheduler: "while_app_running".into(),
+            codec: "portable_image".into(),
+            instance_lock: "linux_process_lock".into(),
+        });
+    }
+    #[cfg(target_os = "android")]
+    {
+        return Some(Adapters {
+            storage: "android_private".into(),
+            source: "android_content_uri".into(),
+            secrets: "android_protected_session".into(),
+            scheduler: "android_system_budget".into(),
+            codec: "android_media_codec".into(),
+            instance_lock: "android_process_lock".into(),
+        });
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        target_os = "android"
+    )))]
+    {
+        None
     }
 }
 

@@ -133,6 +133,7 @@ pub fn prepare_thumbnail(
         target_height: target_height as u32,
         thumbnail_bytes: thumbnail_bytes.unwrap_or(0),
     };
+    #[allow(unused_mut)]
     let mut jpeg_fast = None;
     #[cfg(target_os = "linux")]
     if format == image::ImageFormat::Jpeg {

@@ -1,16 +1,40 @@
-//! Small, owned libheif boundary. Handles never cross worker threads or FFI.
+//! Small, owned HEIF boundary. Handles never cross worker threads or FFI.
+//!
+//! Linux links libheif directly. Android owns HEIF through `ImageDecoder` and
+//! exposes only a header probe to Rust; previews are encoded on the platform
+//! side, so the catalog path stays identical.
+use std::path::Path;
+
+#[cfg(not(target_os = "android"))]
 use image::{DynamicImage, RgbImage};
+#[cfg(not(target_os = "android"))]
 use std::{
     ffi::{CString, c_char, c_int, c_void},
-    path::Path,
     ptr,
 };
+
+#[cfg(target_os = "android")]
+pub(super) fn header(path: &Path) -> Result<super::headers::Header, String> {
+    let probe = platform_android::probe_image(path)?;
+    let mut header = super::headers::header(probe.width, probe.height, 4, None)?;
+    header.orientation = probe.orientation;
+    header.capture_time_ms = probe.capture_time_ms;
+    Ok(header)
+}
+
+#[cfg(target_os = "android")]
+pub(super) fn exif(_path: &Path) -> Option<Vec<u8>> {
+    None
+}
+
+#[cfg(not(target_os = "android"))]
 #[repr(C)]
 struct HeifError {
     code: c_int,
     subcode: c_int,
     message: *const c_char,
 }
+#[cfg(not(target_os = "android"))]
 #[link(name = "heif")]
 unsafe extern "C" {
     fn heif_context_alloc() -> *mut c_void;
@@ -55,10 +79,12 @@ unsafe extern "C" {
         data: *mut c_void,
     ) -> HeifError;
 }
+#[cfg(not(target_os = "android"))]
 struct Handle {
     context: *mut c_void,
     handle: *mut c_void,
 }
+#[cfg(not(target_os = "android"))]
 impl Drop for Handle {
     fn drop(&mut self) {
         unsafe {
@@ -69,6 +95,7 @@ impl Drop for Handle {
         }
     }
 }
+#[cfg(not(target_os = "android"))]
 impl Handle {
     fn open(path: &Path) -> Result<Self, String> {
         let path = CString::new(path.to_str().ok_or("UnsupportedPathEncoding")?)
@@ -132,6 +159,7 @@ impl Handle {
         }
     }
 }
+#[cfg(not(target_os = "android"))]
 pub(super) fn header(path: &Path) -> Result<super::headers::Header, String> {
     let handle = Handle::open(path)?;
     let (w, h) = handle.dimensions()?;
@@ -140,6 +168,7 @@ pub(super) fn header(path: &Path) -> Result<super::headers::Header, String> {
     header.orientation = 1;
     Ok(header)
 }
+#[cfg(not(target_os = "android"))]
 pub(super) fn decode(path: &Path) -> Result<DynamicImage, String> {
     let handle = Handle::open(path)?;
     handle.dimensions()?;
@@ -183,6 +212,7 @@ pub(super) fn decode(path: &Path) -> Result<DynamicImage, String> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 pub(super) fn exif(path: &Path) -> Option<Vec<u8>> {
     Handle::open(path).ok()?.exif()
 }

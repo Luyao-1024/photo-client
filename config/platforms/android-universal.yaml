@@ -1,9 +1,9 @@
 schema_version: 1
-profile_id: android-arm64
+profile_id: android-universal
 platform: android
-status: planned
+status: active
 flutter_target: android
-rust_target: aarch64-linux-android
+rust_target: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 adapters:
   storage: android_private
   source: android_content_uri

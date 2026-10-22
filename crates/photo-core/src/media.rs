@@ -162,12 +162,28 @@ fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, St
     let mut file = File::open(path).map_err(|e| format!("SourceRead: {e}"))?;
     check_source(path, &file, &initial)?;
     let video = if mime.starts_with("video/") {
-        Some(external::probe(path)?)
+        match external::probe(path) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                #[cfg(target_os = "android")]
+                {
+                    // A container the platform extractor rejects can still be
+                    // listed; it is indexed without dimensions, not hidden.
+                    let _ = error;
+                    None
+                }
+                #[cfg(not(target_os = "android"))]
+                {
+                    return Err(error);
+                }
+            }
+        }
     } else {
         None
     };
+    let video_unprobed = mime.starts_with("video/") && video.is_none();
     let mut head = Vec::new();
-    if video.is_none() {
+    if video.is_none() && !video_unprobed {
         file.seek(SeekFrom::Start(0))
             .map_err(|e| format!("SourceRead: {e}"))?;
         Read::by_ref(&mut file)
@@ -176,16 +192,22 @@ fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, St
             .map_err(|e| format!("SourceRead: {e}"))?;
     }
     let header = if mime == "image/heic" {
-        heif::header(path)?
+        Some(heif::header(path)?)
     } else if let Some(value) = &video {
-        external::video_header(value)?
+        Some(external::video_header(value)?)
+    } else if video_unprobed {
+        None
     } else {
         let format = format_for_path(path).ok_or("UnsupportedSource")?.0;
-        headers::read_head(&head, format, initial.size)
-            .or_else(|_| headers::read(&mut file, format, initial.size))?
+        Some(
+            headers::read_head(&head, format, initial.size)
+                .or_else(|_| headers::read(&mut file, format, initial.size))?,
+        )
     };
     let details = if let Some(value) = &video {
         details::from_video_probe(value)
+    } else if video_unprobed {
+        details::MediaDetails::default()
     } else {
         details::read_with_head(path, &head, initial.size)
     };
@@ -201,10 +223,10 @@ fn inspect_with(path: &Path, initial: Fingerprint) -> Result<DiscoveredMedia, St
         size_bytes: initial.size,
         modified_ns: initial.modified_ns,
         mime_type: mime.into(),
-        width: Some(header.width),
-        height: Some(header.height),
-        orientation: header.orientation,
-        capture_time_ms: header.capture_time_ms,
+        width: header.as_ref().map(|header| header.width),
+        height: header.as_ref().map(|header| header.height),
+        orientation: header.as_ref().map_or(1, |header| header.orientation),
+        capture_time_ms: header.and_then(|header| header.capture_time_ms),
         details,
     })
 }
@@ -376,17 +398,28 @@ pub fn prepare_preview(
     fs::create_dir_all(destination.parent().ok_or("CacheUnavailable")?)
         .map_err(|_| "CacheUnavailable")?;
     if mime == "image/heic" {
-        let image = heif::decode(source)?.thumbnail(max_edge, max_edge);
-        let mut stage = tempfile::Builder::new()
-            .suffix(".jpg")
-            .tempfile_in(destination.parent().unwrap())
-            .map_err(|_| "CacheUnavailable")?;
-        image::codecs::jpeg::JpegEncoder::new_with_quality(stage.as_file_mut(), 90)
-            .encode_image(&image)
-            .map_err(|_| "EncodeFailed")?;
-        check_source(source, &handle, &expected)?;
-        stage.as_file().sync_all().map_err(|_| "CacheUnavailable")?;
-        stage.persist(destination).map_err(|_| "CacheUnavailable")?;
+        #[cfg(target_os = "android")]
+        {
+            platform_android::image_thumbnail(source, destination, max_edge)?;
+            if let Err(error) = check_source(source, &handle, &expected) {
+                let _ = fs::remove_file(destination);
+                return Err(error);
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let image = heif::decode(source)?.thumbnail(max_edge, max_edge);
+            let mut stage = tempfile::Builder::new()
+                .suffix(".jpg")
+                .tempfile_in(destination.parent().unwrap())
+                .map_err(|_| "CacheUnavailable")?;
+            image::codecs::jpeg::JpegEncoder::new_with_quality(stage.as_file_mut(), 90)
+                .encode_image(&image)
+                .map_err(|_| "EncodeFailed")?;
+            check_source(source, &handle, &expected)?;
+            stage.as_file().sync_all().map_err(|_| "CacheUnavailable")?;
+            stage.persist(destination).map_err(|_| "CacheUnavailable")?;
+        }
     } else {
         external::thumbnail(source, max_edge, destination)?;
         if let Err(error) = check_source(source, &handle, &expected) {

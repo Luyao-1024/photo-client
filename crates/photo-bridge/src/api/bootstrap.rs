@@ -8,6 +8,22 @@ pub(super) fn runtime() -> &'static BootstrapRuntime {
     RUNTIME.get_or_init(BootstrapRuntime::default)
 }
 
+#[cfg(target_os = "linux")]
+fn host_supported() -> bool {
+    platform_linux::capabilities().linux_host
+}
+
+#[cfg(target_os = "android")]
+fn host_supported() -> bool {
+    let _ = platform_android::retain_jni_entrypoints();
+    true
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn host_supported() -> bool {
+    false
+}
+
 pub struct BootstrapSnapshot {
     pub profile_id: String,
     pub profile_digest: String,
@@ -39,8 +55,8 @@ pub async fn initialize(
     let profile = BuildProfile::from_json(&profile_json)
         .and_then(|p| p.validate(&expected_digest, bridge_protocol_version))
         .map_err(|e| e.to_string())?;
-    if !platform_linux::capabilities().linux_host {
-        return Err("HostMismatch: Linux adapter is not available".into());
+    if !host_supported() {
+        return Err("HostMismatch: platform adapter is not available".into());
     }
     let snapshot = runtime().initialize(profile).map_err(|e| e.to_string())?;
     Ok(BootstrapSnapshot {

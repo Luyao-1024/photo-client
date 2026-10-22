@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'app.dart';
+import 'platform/android_runtime.dart';
 import 'platform/native_core_gateway.dart';
 import 'selftest/launch_options.dart';
 import 'selftest/local_journey.dart';
@@ -21,12 +22,19 @@ Future<void> main(List<String> arguments) async {
     exit(2);
   }
   final rejection = options.selfTest ? options.expectedRejection : null;
+  final dataRoot =
+      options.dataRoot ??
+      (AndroidRuntime.isAndroid ? await AndroidRuntime.defaultDataRoot() : null);
+  if (AndroidRuntime.isAndroid && dataRoot == null) {
+    stderr.writeln('PHOTO_CLIENT_ANDROID_PATHS_ERROR: data root unavailable');
+    exit(3);
+  }
   final gateway = NativeCoreGateway(
     expectedDigestOverride: rejection == 'BuildProfileMismatch'
         ? 'invalid'
         : null,
     protocolOverride: rejection == 'BridgeMismatch' ? 2 : null,
-    dataRoot: options.dataRoot,
+    dataRoot: dataRoot,
   );
   if (options.selfTest) {
     runApp(_BootstrapSmokeApp(gateway: gateway, expectedRejection: rejection));

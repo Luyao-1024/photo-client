@@ -145,15 +145,73 @@ fn root_path(override_path: Option<String>) -> Result<PathBuf, String> {
         }
         return Ok(path);
     }
-    let base = if let Some(path) = std::env::var_os("XDG_DATA_HOME").filter(|p| !p.is_empty()) {
-        PathBuf::from(path)
-    } else {
-        PathBuf::from(std::env::var_os("HOME").ok_or("HomeUnavailable")?).join(".local/share")
-    };
-    if !base.is_absolute() {
-        return Err("DataRootMustBeAbsolute".into());
+    #[cfg(target_os = "android")]
+    {
+        Err("DataRootRequired: the Android host supplies its private library root".into())
     }
-    Ok(base.join("photo-client/library"))
+    #[cfg(not(target_os = "android"))]
+    {
+        let base = if let Some(path) = std::env::var_os("XDG_DATA_HOME").filter(|p| !p.is_empty()) {
+            PathBuf::from(path)
+        } else {
+            PathBuf::from(std::env::var_os("HOME").ok_or("HomeUnavailable")?).join(".local/share")
+        };
+        if !base.is_absolute() {
+            return Err("DataRootMustBeAbsolute".into());
+        }
+        Ok(base.join("photo-client/library"))
+    }
+}
+
+/// Source folders a fresh library starts with. The same rule on every platform:
+/// standard media locations, never the whole filesystem.
+fn default_source_dirs() -> Vec<PathBuf> {
+    #[cfg(target_os = "linux")]
+    {
+        let Some(home) = std::env::var_os("HOME") else {
+            return Vec::new();
+        };
+        let home = PathBuf::from(home);
+        let config = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config"));
+        let dirs = std::fs::read_to_string(config.join("user-dirs.dirs")).unwrap_or_default();
+        let mut result = Vec::new();
+        for (key, fallback, localized) in [
+            ("XDG_PICTURES_DIR", "Pictures", "图片"),
+            ("XDG_VIDEOS_DIR", "Videos", "视频"),
+        ] {
+            let configured = dirs
+                .lines()
+                .find_map(|line| line.strip_prefix(&format!("{key}=")))
+                .map(|value| {
+                    PathBuf::from(
+                        value
+                            .trim_matches('"')
+                            .replace("$HOME", &home.to_string_lossy()),
+                    )
+                });
+            let path = configured.unwrap_or_else(|| {
+                if home.join(fallback).is_dir() {
+                    home.join(fallback)
+                } else {
+                    home.join(localized)
+                }
+            });
+            if path.is_dir() && path != home {
+                result.push(path);
+            }
+        }
+        result
+    }
+    #[cfg(target_os = "android")]
+    {
+        platform_android::media_directories()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        Vec::new()
+    }
 }
 fn crop_rect(x: u32, y: u32, width: u32, height: u32) -> CropRect {
     CropRect {
@@ -172,7 +230,9 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
     super::bootstrap::runtime()
         .subscribe()
         .map_err(|e| e.to_string())?;
-    let auto_discover = data_root.is_none();
+    // Android always receives an explicit private library root, but a fresh
+    // library still seeds the platform's standard media folders like Linux.
+    let auto_discover = data_root.is_none() || cfg!(target_os = "android");
     let root = root_path(data_root)?;
     let result = tokio::task::spawn_blocking(move || {
         let mut slot = global().lock().map_err(|_| "LibraryUnavailable")?;
@@ -184,38 +244,8 @@ pub async fn open_library(data_root: Option<String>) -> Result<LocalLibraryInfo,
                     .iter()
                     .all(|source| source.kind == "managed")
             {
-                if let Some(home) = std::env::var_os("HOME") {
-                    let home = PathBuf::from(home);
-                    let config = std::env::var_os("XDG_CONFIG_HOME")
-                        .map(PathBuf::from)
-                        .unwrap_or_else(|| home.join(".config"));
-                    let dirs =
-                        std::fs::read_to_string(config.join("user-dirs.dirs")).unwrap_or_default();
-                    for (key, fallback, localized) in [
-                        ("XDG_PICTURES_DIR", "Pictures", "图片"),
-                        ("XDG_VIDEOS_DIR", "Videos", "视频"),
-                    ] {
-                        let configured = dirs
-                            .lines()
-                            .find_map(|line| line.strip_prefix(&format!("{key}=")))
-                            .map(|value| {
-                                PathBuf::from(
-                                    value
-                                        .trim_matches('"')
-                                        .replace("$HOME", &home.to_string_lossy()),
-                                )
-                            });
-                        let path = configured.unwrap_or_else(|| {
-                            if home.join(fallback).is_dir() {
-                                home.join(fallback)
-                            } else {
-                                home.join(localized)
-                            }
-                        });
-                        if path.is_dir() && path != home {
-                            let _ = store.add_source(&path);
-                        }
-                    }
+                for path in default_source_dirs() {
+                    let _ = store.add_source(&path);
                 }
             }
             let workers = serde_json::from_str::<serde_json::Value>(&store.preferences()?)

@@ -160,12 +160,19 @@ class ProfileTests(unittest.TestCase):
                 validate_profile(self.profile, host=host)
 
     def test_planned_inspection_allowed_but_build_run_refused(self):
-        for name in ("android-arm64", "windows-x86_64"):
-            value = load_profile(ROOT / f"config/platforms/{name}.yaml", host=("Linux", "x86_64"))
-            with self.assertRaisesRegex(ProfileError, "planned"):
-                require_active(value)
-            value["status"] = "active"
-            self.check_invalid(value, "not activated")
+        value = load_profile(ROOT / "config/platforms/windows-x86_64.yaml", host=("Linux", "x86_64"))
+        with self.assertRaisesRegex(ProfileError, "planned"):
+            require_active(value)
+        value["status"] = "active"
+        self.check_invalid(value, "not activated")
+
+    def test_android_universal_profile_is_active_for_all_packaged_abis(self):
+        value = load_profile(ROOT / "config/platforms/android-universal.yaml", host=LINUX_HOST)
+        require_active(value)
+        self.assertEqual(value["rust_target"].split(","), [
+            "aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android",
+        ])
+        self.assertEqual(value["packaging"]["format"], "apk_aab")
 
     def test_canonical_json_digest_and_generated_defines(self):
         # Independent expected serializer also exercises nested order and UTF-8.
@@ -203,7 +210,7 @@ class ToolTests(unittest.TestCase):
 
     def test_planned_build_and_run_stop_before_tool_discovery(self):
         for operation in ("build", "run"):
-            result = self.cli(operation, "--profile", "android-arm64")
+            result = self.cli(operation, "--profile", "windows-x86_64")
             self.assertEqual(result.returncode, 2)
             self.assertIn("planned", result.stderr)
             self.assertNotIn("toolchain", result.stderr)

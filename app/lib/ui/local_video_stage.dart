@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,7 +42,15 @@ class _NativeVideoSession implements VideoPlaybackSession {
     player = Player(
       configuration: const PlayerConfiguration(title: 'PhotoViewer'),
     );
-    controller = VideoController(player);
+    controller = VideoController(
+      player,
+      configuration: Platform.isAndroid
+          ? const VideoControllerConfiguration(
+              vo: 'mediacodec_embed',
+              hwdec: 'mediacodec',
+            )
+          : const VideoControllerConfiguration(),
+    );
   }
   late final Player player;
   late final VideoController controller;
@@ -115,6 +124,9 @@ class _NativeVideoSession implements VideoPlaybackSession {
           key: ValueKey((bottomInset, theme.normal.seekBarPositionColor)),
           child: HoverVideoControls(
             bottomInset: bottomInset,
+            touchAutoHide: Platform.isAndroid
+                ? const Duration(seconds: 3)
+                : null,
             buttonBarHeight: style.bottomButtonBar.isEmpty
                 ? 0
                 : style.buttonBarHeight,
@@ -298,11 +310,19 @@ class LocalVideoStageState extends ConsumerState<LocalVideoStage> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final scheme = Theme.of(context).colorScheme;
+    final touch = Platform.isAndroid;
     MaterialDesktopVideoControlsThemeData controls({double? bottomInset}) =>
         MaterialDesktopVideoControlsThemeData(
           padding: bottomInset == null
               ? null
               : EdgeInsets.only(bottom: bottomInset),
+          // Touch screens emit no hover, so media_kit's desktop chrome would
+          // never reveal itself. Keep it mounted and let HoverVideoControls
+          // fade it in and run the idle timer.
+          visibleOnMount: touch,
+          controlsHoverDuration: touch
+              ? const Duration(days: 365)
+              : const Duration(seconds: 3),
           bottomButtonBar: const [
             MaterialDesktopSkipPreviousButton(),
             MaterialDesktopPlayOrPauseButton(),
@@ -323,10 +343,26 @@ class LocalVideoStageState extends ConsumerState<LocalVideoStage> {
       fit: StackFit.expand,
       children: [
         if (_session != null)
-          MaterialDesktopVideoControlsTheme(
-            normal: controls(bottomInset: widget.bottomInset),
-            fullscreen: controls(),
-            child: _session!.buildVideo(_view),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // The desktop chrome always lays out two button bars around the
+              // seek bar. A short 16:9 stage (portrait phones) cannot also
+              // clear a filmstrip-sized inset, so shrink the gap instead of
+              // overflowing.
+              final chrome = controls();
+              final extent =
+                  chrome.buttonBarHeight * 2 + chrome.seekBarContainerHeight;
+              final available = math.max(
+                0.0,
+                constraints.maxHeight - extent,
+              );
+              final inset = math.min(widget.bottomInset, available);
+              return MaterialDesktopVideoControlsTheme(
+                normal: controls(bottomInset: inset),
+                fullscreen: controls(),
+                child: _session!.buildVideo(_view),
+              );
+            },
           ),
         if (!_ready || _error != null) widget.placeholder,
         if (_error != null)

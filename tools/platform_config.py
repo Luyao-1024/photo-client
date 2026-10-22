@@ -35,8 +35,11 @@ TARGETS = {
         },
     },
     "android": {
-        "profile_id": "android-arm64", "flutter_target": "android",
-        "rust_target": "aarch64-linux-android", "format": "apk_aab",
+        "profile_id": "android-universal", "flutter_target": "android",
+        # One profile and one digest for every packaged ABI; the emulator runs
+        # the x86_64 artifact and devices run the ARM artifacts.
+        "rust_target": "aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android",
+        "format": "apk_aab",
         "adapters": {
             "storage": "android_private", "source": "android_content_uri",
             "secrets": "android_protected_session", "scheduler": "android_system_budget",
@@ -116,7 +119,7 @@ def validate_profile(profile: Any, *, host: tuple[str, str] | None = None) -> di
             raise ProfileError(f"{key}: expected {target[key]!r} for {p['platform']}")
     if p["status"] not in ("active", "planned"):
         raise ProfileError("status: allowed values: active, planned")
-    if p["platform"] != "linux" and p["status"] != "planned":
+    if p["platform"] == "windows" and p["status"] != "planned":
         raise ProfileError(f"status: {p['platform']} is not activated; must remain planned")
     adapters = _fields(p["adapters"], set(target["adapters"]), "adapters")
     for key, expected in target["adapters"].items():
@@ -144,7 +147,7 @@ def validate_profile(profile: Any, *, host: tuple[str, str] | None = None) -> di
     if p["status"] == "active":
         system, machine = host or (host_platform.system(), host_platform.machine())
         if (system.lower(), machine.lower()) not in {("linux", "x86_64"), ("linux", "amd64")}:
-            raise ProfileError(f"host: {p['profile_id']} requires Linux x86_64; got {system}/{machine}")
+            raise ProfileError(f"host: {p['profile_id']} requires a Linux x86_64 build host; got {system}/{machine}")
     return p
 
 
@@ -155,7 +158,7 @@ def require_active(profile: dict[str, Any]) -> None:
 
 def profile_path(profile_id: str, root: Path = ROOT) -> Path:
     if profile_id not in {target["profile_id"] for target in TARGETS.values()}:
-        raise ProfileError("profile_id: unknown profile; allowed: linux-x86_64, android-arm64, windows-x86_64")
+        raise ProfileError("profile_id: unknown profile; allowed: linux-x86_64, android-universal, windows-x86_64")
     return root / "config" / "platforms" / f"{profile_id}.yaml"
 
 

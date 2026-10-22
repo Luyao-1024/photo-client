@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -32,6 +34,15 @@ class WindowController {
   }
 
   Future<void> setFullscreen(bool value) async {
+    if (!kIsWeb && Platform.isAndroid) {
+      // Android has no desktop window; the viewer toggles immersive system UI
+      // instead, keeping the same fullscreen state the desktop shell reads.
+      await SystemChrome.setEnabledSystemUIMode(
+        value ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
+      fullscreen.value = value;
+      return;
+    }
     await command('fullscreen', value);
     fullscreen.value = value;
   }
@@ -43,7 +54,11 @@ class WindowController {
       if (confirmClose != null && !await confirmClose!()) return;
       if (confirmLibraryClose != null && !await confirmLibraryClose!()) return;
       await prepareClose?.call();
-      await command('close');
+      if (!kIsWeb && Platform.isAndroid) {
+        await SystemNavigator.pop();
+      } else {
+        await command('close');
+      }
     } finally {
       _closing = false;
     }

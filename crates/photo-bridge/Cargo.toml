@@ -11,11 +11,16 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 [dependencies]
 photo-domain.workspace = true
 photo-core.workspace = true
-platform-linux.workspace = true
 flutter_rust_bridge.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
 notify = "6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+platform-linux.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+platform-android.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

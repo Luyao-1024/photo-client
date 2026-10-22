@@ -73,7 +73,7 @@ class SmokeContractTests(unittest.TestCase):
                 self.validate(smoke_line({**NORMAL, "event_sequence": sequence}))
 
     def test_wrong_profile_digest_or_supplied_identity_cannot_pass(self):
-        for field, value in (("profile_digest", "wrong"), ("profile_id", "android-arm64"),
+        for field, value in (("profile_digest", "wrong"), ("profile_id", "windows-x86_64"),
                              ("bridge_protocol_version", 2), ("bridge_protocol_version", True),
                              ("bridge_protocol_version", 1.0)):
             with self.subTest(field=field, value=value), self.assertRaises(ProfileError):

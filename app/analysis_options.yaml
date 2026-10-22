@@ -5,3 +5,4 @@ analyzer:
     - lib/src/rust/**
     - build/**
     - linux/**
+    - android/**

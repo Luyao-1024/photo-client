@@ -1,34 +1,46 @@
 use super::*;
+#[cfg(target_os = "linux")]
 use gio::prelude::FileExt as GioFileExt;
+#[cfg(target_os = "linux")]
 use std::collections::HashSet;
 
 pub(super) fn roots(source: &Path, data_root: &Path) -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    if let Some(base) = std::env::var_os("XDG_DATA_HOME") {
-        roots.push(PathBuf::from(base).join("Trash"));
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        roots.push(PathBuf::from(home).join(".local/share/Trash"));
-    }
-    #[cfg(unix)]
+    #[cfg(target_os = "android")]
     {
-        use std::os::unix::fs::MetadataExt;
-        if let (Ok(metadata), Ok(owner)) = (fs::metadata(source), fs::metadata(data_root)) {
-            let mut top = source.to_path_buf();
-            while let Some(parent) = top.parent() {
-                if fs::metadata(parent).is_ok_and(|m| m.dev() == metadata.dev()) {
-                    top = parent.to_path_buf();
-                } else {
-                    break;
-                }
-            }
-            roots.push(top.join(format!(".Trash-{}", owner.uid())));
-            roots.push(top.join(".Trash").join(owner.uid().to_string()));
-        }
+        // Android has no shared freedesktop trash; the app keeps its own inside
+        // the library root so trash, restore and empty behave identically.
+        let _ = source;
+        return vec![data_root.join("Trash")];
     }
-    roots.sort();
-    roots.dedup();
-    roots
+    #[cfg(not(target_os = "android"))]
+    {
+        let mut roots = Vec::new();
+        if let Some(base) = std::env::var_os("XDG_DATA_HOME") {
+            roots.push(PathBuf::from(base).join("Trash"));
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            roots.push(PathBuf::from(home).join(".local/share/Trash"));
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if let (Ok(metadata), Ok(owner)) = (fs::metadata(source), fs::metadata(data_root)) {
+                let mut top = source.to_path_buf();
+                while let Some(parent) = top.parent() {
+                    if fs::metadata(parent).is_ok_and(|m| m.dev() == metadata.dev()) {
+                        top = parent.to_path_buf();
+                    } else {
+                        break;
+                    }
+                }
+                roots.push(top.join(format!(".Trash-{}", owner.uid())));
+                roots.push(top.join(".Trash").join(owner.uid().to_string()));
+            }
+        }
+        roots.sort();
+        roots.dedup();
+        roots
+    }
 }
 fn decode(value: &str) -> Option<PathBuf> {
     let mut decoded = Vec::new();
@@ -92,22 +104,28 @@ pub(super) fn entries(source: &Path, data_root: &Path) -> Vec<(PathBuf, PathBuf,
     result
 }
 pub(super) fn move_to_trash(source: &Path, data_root: &Path) -> Result<(PathBuf, PathBuf), String> {
-    let before: HashSet<_> = entries(source, data_root)
-        .into_iter()
-        .map(|(_, _, info)| info)
-        .collect();
-    if gio::File::for_path(source)
-        .trash(gio::Cancellable::NONE)
-        .is_ok()
+    #[cfg(target_os = "linux")]
     {
-        return entries(source, data_root)
+        let before: HashSet<_> = entries(source, data_root)
             .into_iter()
-            .find(|(original, _, info)| original == source && !before.contains(info))
-            .map(|(_, payload, info)| (payload, info))
-            .ok_or_else(|| "TrashResolutionFailed".into());
+            .map(|(_, _, info)| info)
+            .collect();
+        if gio::File::for_path(source)
+            .trash(gio::Cancellable::NONE)
+            .is_ok()
+        {
+            return entries(source, data_root)
+                .into_iter()
+                .find(|(original, _, info)| original == source && !before.contains(info))
+                .map(|(_, payload, info)| (payload, info))
+                .ok_or_else(|| "TrashResolutionFailed".into());
+        }
     }
     // GIO refuses some cross-filesystem sources (notably /tmp). Publish a
-    // standard freedesktop payload + .trashinfo in the user's system trash.
+    // standard freedesktop payload + .trashinfo in the app's own trash root.
+    #[cfg(target_os = "android")]
+    let base = data_root.to_path_buf();
+    #[cfg(not(target_os = "android"))]
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
@@ -153,9 +171,12 @@ pub(super) fn move_to_trash(source: &Path, data_root: &Path) -> Result<(PathBuf,
                 }
             })
             .collect::<String>();
+        #[cfg(target_os = "linux")]
         let date = gio::glib::DateTime::now_local()
             .and_then(|t| t.format("%Y-%m-%dT%H:%M:%S"))
             .map_err(error)?;
+        #[cfg(not(target_os = "linux"))]
+        let date = timestamp();
         let published = (|| {
             writeln!(file, "[Trash Info]\nPath={encoded}\nDeletionDate={date}").map_err(error)?;
             file.sync_all().map_err(error)?;
@@ -169,6 +190,32 @@ pub(super) fn move_to_trash(source: &Path, data_root: &Path) -> Result<(PathBuf,
     }
     Err("NoAvailableFileName".into())
 }
+
+#[cfg(not(target_os = "linux"))]
+fn timestamp() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let days = (seconds / 86_400) as i64;
+    let remainder = seconds % 86_400;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}",
+        remainder / 3_600,
+        (remainder % 3_600) / 60,
+        remainder % 60
+    )
+}
+
 pub(super) fn info_for(payload: &Path) -> Option<PathBuf> {
     let root = payload.parent()?.parent()?;
     let info = root.join("info").join(format!(

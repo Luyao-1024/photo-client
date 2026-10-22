@@ -83,16 +83,19 @@ pub(super) fn install(service: &Arc<Service>) -> Result<(), String> {
             let _ = watcher.watch(&watched, RecursiveMode::Recursive);
         }
     }
-    if let Some(home) = std::env::var_os("HOME") {
-        let root = PathBuf::from(home).join(".local/share/Trash");
-        if root.exists() {
-            let _ = watcher.watch(&root, RecursiveMode::Recursive);
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            let root = PathBuf::from(home).join(".local/share/Trash");
+            if root.exists() {
+                let _ = watcher.watch(&root, RecursiveMode::Recursive);
+            }
         }
-    }
-    if let Some(data) = std::env::var_os("XDG_DATA_HOME") {
-        let root = PathBuf::from(data).join("Trash");
-        if root.exists() {
-            let _ = watcher.watch(&root, RecursiveMode::Recursive);
+        if let Some(data) = std::env::var_os("XDG_DATA_HOME") {
+            let root = PathBuf::from(data).join("Trash");
+            if root.exists() {
+                let _ = watcher.watch(&root, RecursiveMode::Recursive);
+            }
         }
     }
     *service.watcher.lock().map_err(|_| "WatchUnavailable")? = Some(watcher);

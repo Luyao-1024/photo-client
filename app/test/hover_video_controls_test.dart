@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/ui/hover_video_controls.dart';
 
 void main() {
-  Widget host() => MaterialApp(
+  Widget host({Duration? touchAutoHide}) => MaterialApp(
     home: Scaffold(
       body: Center(
         child: SizedBox(
@@ -12,6 +12,7 @@ void main() {
           height: 500,
           child: HoverVideoControls(
             bottomInset: 104,
+            touchAutoHide: touchAutoHide,
             child: SizedBox.expand(
               child: GestureDetector(
                 onPanUpdate: (_) {},
@@ -83,6 +84,60 @@ void main() {
       await mouse.removePointer();
     },
   );
+
+  testWidgets('a touch anywhere reveals the controls and dismisses on picture', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host());
+    final bounds = tester.getRect(find.byType(HoverVideoControls));
+    var touch = await tester.startGesture(
+      bounds.center,
+      kind: PointerDeviceKind.touch,
+    );
+    await touch.up();
+    await tester.pumpAndSettle();
+    expect(opacity(tester), 1);
+    // Taps inside the revealed controls keep them mounted.
+    touch = await tester.startGesture(
+      bounds.bottomCenter - const Offset(0, 110),
+      kind: PointerDeviceKind.touch,
+    );
+    await touch.up();
+    await tester.pumpAndSettle();
+    expect(opacity(tester), 1);
+    // A tap on the picture dismisses them.
+    touch = await tester.startGesture(
+      bounds.center - const Offset(0, 120),
+      kind: PointerDeviceKind.touch,
+    );
+    await touch.up();
+    await tester.pumpAndSettle();
+    expect(opacity(tester), 0);
+  });
+
+  testWidgets('touch chrome hides after the idle timeout', (tester) async {
+    await tester.pumpWidget(
+      host(touchAutoHide: const Duration(seconds: 3)),
+    );
+    final bounds = tester.getRect(find.byType(HoverVideoControls));
+    var touch = await tester.startGesture(
+      bounds.center,
+      kind: PointerDeviceKind.touch,
+    );
+    await touch.up();
+    await tester.pumpAndSettle();
+    expect(opacity(tester), 1);
+    touch = await tester.startGesture(
+      bounds.bottomCenter - const Offset(0, 110),
+      kind: PointerDeviceKind.touch,
+    );
+    await touch.up();
+    await tester.pump(const Duration(seconds: 2));
+    expect(opacity(tester), 1);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(opacity(tester), 0);
+  });
 
   testWidgets('playback controls remain usable while dragging beyond the bar', (
     tester,

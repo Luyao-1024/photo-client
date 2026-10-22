@@ -42,6 +42,12 @@ final class NativeCoreGateway
   int? _thumbnailCacheEpoch;
 
   static Future<void> _initializeBinding() async {
+    if (Platform.isAndroid) {
+      // The generated loader opens libphoto_bridge.so from the APK's
+      // nativeLibraryDir, where cargo-ndk placed the same core used on Linux.
+      await RustLib.init();
+      return;
+    }
     if (!Platform.isLinux) {
       throw UnsupportedError('PlatformPlanned');
     }

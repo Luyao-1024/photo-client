@@ -11,6 +11,7 @@ import 'services/core_gateway.dart';
 import 'services/local_library_gateway.dart';
 import 'services/window_controller.dart';
 import 'services/video_playback_lifecycle.dart';
+import 'ui/android_permission_gate.dart';
 import 'ui/glass_dialog.dart';
 import 'ui/library_backdrop.dart';
 import 'ui/library_shell.dart';
@@ -187,7 +188,7 @@ class _ApplicationState extends ConsumerState<_Application>
           locale?.languageCode == 'zh'
           ? const Locale('zh', 'CN')
           : const Locale('en'),
-      home: const LibraryShell(),
+      home: const AndroidPermissionGate(child: LibraryShell()),
     );
   }
 }
