@@ -36,7 +36,10 @@ impl CloudEngine {
             let Some(current) = sync_token.clone() else {
                 // Bootstrap is only allowed to start from a cleared cache, so
                 // a rebuild never mixes snapshots from two generations.
-                store(self.library.cloud_clear_records_and_token(account_id.clone()))?;
+                store(
+                    self.library
+                        .cloud_clear_records_and_token(account_id.clone()),
+                )?;
                 let bootstrap = session
                     .connection
                     .bootstrap(&session.zone)
@@ -48,7 +51,10 @@ impl CloudEngine {
                     .chain(bootstrap.assets.iter())
                     .map(records::stored)
                     .collect::<Result<Vec<_>, _>>()?;
-                store(self.library.cloud_replace_records(account_id.clone(), records))?;
+                store(
+                    self.library
+                        .cloud_replace_records(account_id.clone(), records),
+                )?;
                 sync_token = Some(bootstrap.sync_token);
                 snapshot_token = Some(bootstrap.snapshot_token);
                 break;
@@ -76,10 +82,10 @@ impl CloudEngine {
                             .iter()
                             .map(records::stored)
                             .collect::<Result<Vec<_>, _>>()?;
-                        store(self.library.cloud_apply_record_changes(
-                            account_id.clone(),
-                            records,
-                        ))?;
+                        store(
+                            self.library
+                                .cloud_apply_record_changes(account_id.clone(), records),
+                        )?;
                         token = page.sync_token;
                         if !page.more_coming {
                             sync_token = Some(token);
@@ -95,7 +101,10 @@ impl CloudEngine {
                 }
             }
             if expired {
-                store(self.library.cloud_clear_records_and_token(account_id.clone()))?;
+                store(
+                    self.library
+                        .cloud_clear_records_and_token(account_id.clone()),
+                )?;
                 sync_token = None;
                 snapshot_token = None;
                 continue;
@@ -112,6 +121,34 @@ impl CloudEngine {
             .iter()
             .map(|photo| photo.photo_id.clone())
             .collect();
+
+        store(
+            self.library.cloud_refresh_binding_paths(
+                account_id.clone(),
+                graph
+                    .photos
+                    .iter()
+                    .map(|photo| (photo.photo_id.clone(), photo.relative_path.clone()))
+                    .collect(),
+            ),
+        )?;
+
+        // A committed create can reach this graph before its response/binding
+        // reached the client. Reattach its durable intent before classifying
+        // unbound photos as downloads, preserving the original local media ID.
+        let pending: HashMap<_, _> = store(self.library.cloud_pending_uploads(account_id.clone()))?
+            .into_iter()
+            .map(|upload| (upload.photo_id.clone(), upload))
+            .collect();
+        for photo in &graph.photos {
+            if let Some(upload) = pending.get(&photo.photo_id)
+                && upload.master_id == photo.master_id
+                && upload.content_generation == photo.content_generation
+            {
+                self.publish_binding(&account_id, upload, photo, report)
+                    .await?;
+            }
+        }
 
         let bindings: HashMap<String, _> = store(self.library.cloud_bindings(account_id.clone()))?
             .into_iter()
@@ -142,8 +179,7 @@ impl CloudEngine {
             let unsupported = info.is_some_and(|info| info.state == "unsupported");
             let present = info.is_some_and(|info| Path::new(&info.path).is_file());
             let was_inactive = binding.is_hidden || binding.is_trashed;
-            let generation_changed =
-                binding.content_generation != photo.content_generation;
+            let generation_changed = binding.content_generation != photo.content_generation;
             let mut media_state = None;
             if inactive {
                 if !unsupported {
@@ -154,9 +190,7 @@ impl CloudEngine {
                 // A decoded failure is not retried every cycle; the binding
                 // keeps the file so export/copy still work.
             } else if present {
-                if was_inactive
-                    || info.is_some_and(|info| info.state != "active")
-                {
+                if was_inactive || info.is_some_and(|info| info.state != "active") {
                     media_state = Some("active".to_owned());
                 }
             } else {
@@ -184,10 +218,11 @@ impl CloudEngine {
 
         for photo in &graph.photos {
             if bindings.contains_key(&photo.photo_id)
-                && store(self.library.cloud_apply_remote_favorite(
+                && store(self.library.cloud_apply_remote_metadata(
                     account_id.clone(),
                     photo.photo_id.clone(),
                     photo.is_favorite,
+                    photo.asset.events.metadata_event.clone(),
                 ))?
             {
                 report.favorites_applied += 1;
@@ -239,11 +274,12 @@ impl CloudEngine {
             &photo.photo_id,
             &photo.content_generation,
         )?;
-        paths::private_directory(&directory)?;        let original_extension =
+        paths::private_directory(&directory)?;
+        let original_extension =
             paths::download_extension(&photo.relative_path, &photo.original.mime_type)
                 .ok_or("UnsupportedMedia")?;
-        let thumbnail_extension = paths::thumbnail_extension(&photo.thumbnail.mime_type)
-            .ok_or("UnsupportedMedia")?;
+        let thumbnail_extension =
+            paths::thumbnail_extension(&photo.thumbnail.mime_type).ok_or("UnsupportedMedia")?;
         let original_path = directory.join(format!("original.{original_extension}"));
         let thumbnail_path = directory.join(format!("thumbnail.{thumbnail_extension}"));
 
@@ -354,10 +390,13 @@ impl CloudEngine {
             thumbnail_path: Some(thumbnail_path.to_string_lossy().into_owned()),
             thumbnail_sha256: Some(thumbnail_sha256),
         };
-        store(
-            self.library
-                .cloud_publish_remote_media(account_id, input),
-        )?;
+        store(self.library.cloud_publish_remote_media(account_id, input))?;
+        store(self.library.cloud_apply_remote_metadata(
+            session.account.account_id.clone(),
+            photo.photo_id.clone(),
+            photo.is_favorite,
+            photo.asset.events.metadata_event.clone(),
+        ))?;
         Ok(if state == "active" {
             DownloadOutcome::Downloaded
         } else {
@@ -376,9 +415,7 @@ async fn ensure_asset(
     if path.is_file() {
         let verified = sdk::ContentDigest::from_file(path)
             .await
-            .is_ok_and(|actual| {
-                actual.size() == expected.size() && actual.hex() == expected.hex()
-            });
+            .is_ok_and(|actual| actual.size() == expected.size() && actual.hex() == expected.hex());
         if verified {
             return Ok(());
         }

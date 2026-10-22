@@ -168,6 +168,12 @@ impl CloudEngine {
         }
         let session = self.open_session().await?;
         let mut report = CloudSyncReport::default();
+        if let Err(code) = self
+            .recover_metadata_operations(&session, &mut report)
+            .await
+        {
+            return Ok(self.failed_report(&session, report, &code));
+        }
         if let Err(code) = self.downlink(&session, &mut report).await {
             return Ok(self.failed_report(&session, report, &code));
         }
@@ -184,6 +190,25 @@ impl CloudEngine {
             }
             Err(code) => return Ok(self.failed_report(&session, report, &code)),
         }
+        // A new photo is created in the final lease phase. Publish any local
+        // edit stamp in a following modify lease, preserving the original edit
+        // time rather than accepting the server's create/commit time as it.
+        if report.uploaded > 0
+            && report.failed == 0
+            && store(
+                self.library
+                    .cloud_counts(session.account.account_id.clone()),
+            )?
+            .pending_favorites
+                > 0
+        {
+            if let Err(code) = self.downlink(&session, &mut report).await {
+                return Ok(self.failed_report(&session, report, &code));
+            }
+            if let Err(code) = self.uplink(&session, &mut report).await {
+                return Ok(self.failed_report(&session, report, &code));
+            }
+        }
         if report.failed > 0 {
             report.state = "error".into();
             let code = report
@@ -199,11 +224,9 @@ impl CloudEngine {
         }
         report.state = "idle".into();
         report.error_code = None;
-        let _ = self.library.cloud_set_status(
-            session.account.account_id.clone(),
-            "idle".into(),
-            None,
-        );
+        let _ =
+            self.library
+                .cloud_set_status(session.account.account_id.clone(), "idle".into(), None);
         Ok(report)
     }
 
@@ -272,10 +295,8 @@ impl CloudEngine {
                 rejected += 1;
                 continue;
             }
-            let extension = match paths::upload_extension(
-                Path::new(&photo.path),
-                &photo.mime_type,
-            ) {
+            let extension = match paths::upload_extension(Path::new(&photo.path), &photo.mime_type)
+            {
                 Some(extension) => extension,
                 None => {
                     rejected += 1;
@@ -308,8 +329,10 @@ impl CloudEngine {
                 modified_ns: photo.modified_ns,
             });
         }
-        let counts: CloudQueueCounts =
-            store(self.library.cloud_queue_uploads(account.account_id, intents))?;
+        let counts: CloudQueueCounts = store(
+            self.library
+                .cloud_queue_uploads(account.account_id, intents),
+        )?;
         Ok(CloudQueueResult {
             queued: counts.queued,
             skipped: counts.skipped + skipped,

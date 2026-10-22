@@ -284,6 +284,10 @@ class AppStrings {
       '此图库已登录其他账号。更换账号需要新的数据目录。',
       'This library is signed in to another account. A new account needs a fresh data directory.',
     ),
+    'CloudScopeChanged' => pick(
+      '云端图库身份已变化，已停止同步以保护现有照片。',
+      'The cloud library identity changed. Sync stopped to protect existing photos.',
+    ),
     'AdminAccountUnsupported' => pick(
       '不支持管理员账号，请使用普通用户。',
       'Administrator accounts are not supported. Use a regular user.',

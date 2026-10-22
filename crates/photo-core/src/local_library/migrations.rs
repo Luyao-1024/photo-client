@@ -1,5 +1,5 @@
 //! Additive catalog upgrades. Originals and catalog identities stay intact.
-use super::{CLOUD_SCHEMA, EXTENSIONS, SCHEMA, SCHEMA_VERSION, error, now_ms};
+use super::{CLOUD_SCHEMA, EXTENSIONS, METADATA_SCHEMA, SCHEMA, SCHEMA_VERSION, error, now_ms};
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
@@ -47,7 +47,7 @@ pub(super) fn upgrade(
     root: &Path,
     version: i64,
 ) -> Result<(), String> {
-    if !matches!(version, 1 | 2 | 3) {
+    if !matches!(version, 1 | 2 | 3 | 4) {
         return Err("SchemaUpgradeRequired".into());
     }
     backup(connection, root, version)?;
@@ -64,6 +64,7 @@ pub(super) fn upgrade(
     }
     tx.execute_batch(EXTENSIONS).map_err(error)?;
     tx.execute_batch(CLOUD_SCHEMA).map_err(error)?;
+    tx.execute_batch(METADATA_SCHEMA).map_err(error)?;
     if !has_column(&tx, "media_details", "hdr")? {
         tx.execute_batch("ALTER TABLE media_details ADD COLUMN hdr INTEGER NOT NULL DEFAULT 0")
             .map_err(error)?;
@@ -111,7 +112,7 @@ pub(super) fn upgrade(
             SCHEMA_VERSION,
             format!(
                 "{:x}",
-                Sha256::digest([SCHEMA, EXTENSIONS, CLOUD_SCHEMA].concat().as_bytes())
+                Sha256::digest([SCHEMA, EXTENSIONS, CLOUD_SCHEMA, METADATA_SCHEMA].concat().as_bytes())
             ),
             now_ms()
         ],

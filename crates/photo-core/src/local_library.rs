@@ -15,7 +15,9 @@ use uuid::Uuid;
 const SCHEMA: &str = include_str!("storage/local-schema.sql");
 const EXTENSIONS: &str = include_str!("storage/local-v3.sql");
 const CLOUD_SCHEMA: &str = include_str!("storage/local-v4.sql");
-const SCHEMA_VERSION: i64 = 4;
+const METADATA_SCHEMA: &str = include_str!("storage/local-v5.sql");
+const SCHEMA_VERSION: i64 = 5;
+mod metadata;
 mod cloud_store;
 pub(crate) use cloud_store::{
     CloudAccount, CloudBinding, CloudBindingMedia, CloudBindingUpdate, CloudQueueCounts,
@@ -181,6 +183,7 @@ impl LocalLibrary {
             transaction.execute_batch(SCHEMA).map_err(error)?;
             transaction.execute_batch(EXTENSIONS).map_err(error)?;
             transaction.execute_batch(CLOUD_SCHEMA).map_err(error)?;
+            transaction.execute_batch(METADATA_SCHEMA).map_err(error)?;
             let installation_id = Uuid::new_v4().to_string();
             let library_id = Uuid::new_v4().to_string();
             transaction
@@ -204,7 +207,7 @@ impl LocalLibrary {
                         format!(
                             "{:x}",
                             Sha256::digest(
-                                [SCHEMA, EXTENSIONS, CLOUD_SCHEMA].concat().as_bytes()
+                                [SCHEMA, EXTENSIONS, CLOUD_SCHEMA, METADATA_SCHEMA].concat().as_bytes()
                             )
                         ),
                         now_ms()
@@ -416,7 +419,7 @@ impl LocalLibrary {
             let exists:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM media WHERE library_id=?1 AND media_id=?2 AND state='active')",params![library,media_id],|r|r.get(0)).map_err(error)?;
             if !exists{return Err("PhotoNotFound".into());}
             let changed=tx.execute("UPDATE media SET favorite=?3 WHERE library_id=?1 AND media_id=?2 AND favorite<>?3",params![library,media_id,favorite]).map_err(error)?>0;
-            if changed{tools::recount(&tx,&library)?;cloud_store::mark_favorite_dirty(&tx,&library,&media_id)?;}
+            if changed{tools::recount(&tx,&library)?;metadata::note_local_edit(&tx,&library,&media_id)?;}
             tx.commit().map_err(error)?;Ok(changed)
         })
     }

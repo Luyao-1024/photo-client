@@ -9,7 +9,7 @@ const SCHEMA: &str = include_str!("../src/storage/local-schema.sql");
 const EXTENSIONS: &str = include_str!("../src/storage/local-v3.sql");
 
 /// Older supported catalogs are upgraded; future writers are still rejected.
-const CURRENT_SCHEMA_VERSION: i64 = 4;
+const CURRENT_SCHEMA_VERSION: i64 = 5;
 
 fn input(folder: &std::path::Path, name: &str, ns: i64) -> MediaInput {
     let path = folder.join(name);
@@ -441,9 +441,12 @@ fn v3_migration_adds_cloud_tables_and_preserves_catalog() {
         CURRENT_SCHEMA_VERSION
     );
     assert_eq!(
-        c.query_row("SELECT favorite FROM media WHERE media_id='photo'", [], |r| r
-            .get::<_, i64>(0))
-            .unwrap(),
+        c.query_row(
+            "SELECT favorite FROM media WHERE media_id='photo'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
         1
     );
     drop(c);
@@ -540,4 +543,63 @@ fn migration_backup_failure_leaves_database_untouched() {
             .unwrap(),
         1
     );
+}
+
+#[test]
+fn v4_metadata_upgrade_preserves_dirty_work_and_backs_up_before_migration() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    legacy_catalog(&root, &photos, 4);
+    let old = Connection::open(root.path().join("library.sqlite")).unwrap();
+    old.execute_batch(include_str!("../src/storage/local-v4.sql"))
+        .unwrap();
+    old.execute("INSERT INTO cloud_accounts(account_id,endpoint,username,token_file,device_id,created_at_ms) VALUES('account','http://127.0.0.1:8790','user','cloud/account/session.token','device',1)",[]).unwrap();
+    old.execute("INSERT INTO cloud_sync_state(account_id,status,sync_token,updated_at_ms) VALUES('account','idle','keep-token',1)",[]).unwrap();
+    old.execute("INSERT INTO cloud_bindings(account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,favorite_dirty,created_at_ms,updated_at_ms) VALUES('account','photo-id','master-id','generation','legacy-library','photo','keep.jpg',0,1,1,123456)",[]).unwrap();
+    drop(old);
+    let library = LocalLibrary::open(root.path()).unwrap();
+    assert_eq!(library.library_id, "legacy-library");
+    assert!(library.photo("photo".into()).unwrap().favorite);
+    let db = Connection::open(root.path().join("library.sqlite")).unwrap();
+    let state:(i64,i64,i64,i64,String,String)=db.query_row("SELECT dirty,metadata_version,acked_metadata_version,edited_at_ms,source,event_id FROM media_sync_state WHERE media_id='photo'",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))).unwrap();
+    assert_eq!((state.0, state.1, state.2, state.3), (2, 1, 0, 123456));
+    assert_eq!(state.4, "installation");
+    assert!(state.5.starts_with("migration-"));
+    assert_eq!(
+        db.query_row("SELECT sync_token FROM cloud_sync_state", [], |r| r
+            .get::<_, String>(0))
+            .unwrap(),
+        "keep-token"
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('cloud_bindings') WHERE name='favorite_dirty'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        5
+    );
+    let backups = backup_files(&root);
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    assert_eq!(
+        backup
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        backup
+            .query_row("SELECT favorite_dirty FROM cloud_bindings", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert!(photos.path().join("keep.jpg").is_file());
 }

@@ -1952,6 +1952,7 @@ name = "syncserver-client"
 version = "0.1.0"
 dependencies = [
  "photo-domain",
+ "serde_json",
  "sync-client",
 ]
 

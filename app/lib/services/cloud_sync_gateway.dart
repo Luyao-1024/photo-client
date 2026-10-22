@@ -79,6 +79,7 @@ const List<String> kCloudErrorCodes = [
   'Network',
   'EndpointRejected',
   'AccountExists',
+  'CloudScopeChanged',
   'AdminAccountUnsupported',
   'LeaseBusy',
   'LeaseLost',

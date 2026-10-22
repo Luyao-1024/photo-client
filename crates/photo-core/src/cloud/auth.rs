@@ -39,10 +39,7 @@ impl CloudEngine {
         let client = sdk::Client::from_endpoint(endpoint)
             .build()
             .map_err(|error| sdk_code(&error))?;
-        client
-            .ready()
-            .await
-            .map_err(|error| sdk_code(&error))?;
+        client.ready().await.map_err(|error| sdk_code(&error))?;
         let session = client
             .login(username, password)
             .await
@@ -58,14 +55,14 @@ impl CloudEngine {
         {
             return Err("AccountExists".into());
         }
-        let connection = client
-            .connect()
-            .await
-            .map_err(|error| sdk_code(&error))?;
+        let connection = client.connect().await.map_err(|error| sdk_code(&error))?;
         connection
             .primary_zone()
             .map_err(|error| sdk_code(&error))?;
 
+        if let Some(account) = &existing {
+            self.verify_scope(&account.account_id, &connection)?;
+        }
         let account_id = existing
             .as_ref()
             .map(|account| account.account_id.clone())
@@ -96,8 +93,29 @@ impl CloudEngine {
             let _ = fs::remove_file(&path);
             return Err(error);
         }
-        store(self.library.cloud_set_status(account_id, "idle".into(), None))?;
+        self.verify_scope(&account_id, &connection)?;
+        store(
+            self.library
+                .cloud_set_status(account_id, "idle".into(), None),
+        )?;
         self.status()
+    }
+
+    fn verify_scope(&self, account: &str, connection: &sdk::Connection) -> Result<(), String> {
+        let scope = connection.scope();
+        if !store(self.library.cloud_pin_scope(
+            account.to_owned(),
+            scope.namespace.clone(),
+            scope.database_generation.clone(),
+        ))? {
+            let _ = self.library.cloud_set_status(
+                account.to_owned(),
+                "error".into(),
+                Some("CloudScopeChanged".into()),
+            );
+            return Err("CloudScopeChanged".into());
+        }
+        Ok(())
     }
 
     pub fn logout(&self) -> Result<CloudStatus, String> {
@@ -120,7 +138,10 @@ impl CloudEngine {
         }
         let account = store(self.library.cloud_account())?.ok_or("AuthFailed")?;
         let state = store(self.library.cloud_sync_state(account.account_id.clone()))?;
-        if state.as_ref().is_none_or(|state| state.status == "logged_out") {
+        if state
+            .as_ref()
+            .is_none_or(|state| state.status == "logged_out")
+        {
             return Err("AuthFailed".into());
         }
         if account
@@ -183,6 +204,7 @@ impl CloudEngine {
             );
             return Err("AuthFailed".into());
         }
+        self.verify_scope(&account.account_id, &connection)?;
         Ok(CloudSession {
             account,
             connection,

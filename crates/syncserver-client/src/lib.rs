@@ -4,6 +4,11 @@
 //! SDK. This crate exists so the application depends on one stable boundary and
 //! can add app-specific error classification without reimplementing transport.
 
+mod metadata;
+
+pub use metadata::{
+    MetadataMutation, metadata_receipt, update_metadata, validate_metadata_confirmation,
+};
 pub use sync_client::*;
 
 /// Stable, non-sensitive error family used by UI and persistence.

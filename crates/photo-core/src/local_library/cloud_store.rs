@@ -44,7 +44,7 @@ pub(crate) struct CloudBinding {
     pub media_id: String,
     pub relative_path: String,
     pub cloud_favorite: bool,
-    pub favorite_dirty: bool,
+    pub dirty: u8,
     pub asset_date_ms: Option<i64>,
     pub is_hidden: bool,
     pub is_trashed: bool,
@@ -165,7 +165,7 @@ fn binding_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudBinding> {
         media_id: row.get(5)?,
         relative_path: row.get(6)?,
         cloud_favorite: row.get(7)?,
-        favorite_dirty: row.get(8)?,
+        dirty: row.get(8)?,
         asset_date_ms: row.get(9)?,
         is_hidden: row.get(10)?,
         is_trashed: row.get(11)?,
@@ -175,7 +175,7 @@ fn binding_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudBinding> {
     })
 }
 
-const BINDING_COLUMNS: &str = "account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,favorite_dirty,asset_date_ms,is_hidden,is_trashed,content_stale,thumbnail_path,thumbnail_sha256";
+const BINDING_COLUMNS: &str = "account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,COALESCE((SELECT dirty FROM media_sync_state s WHERE s.library_id=cloud_bindings.library_id AND s.media_id=cloud_bindings.media_id),0),asset_date_ms,is_hidden,is_trashed,content_stale,thumbnail_path,thumbnail_sha256";
 
 /// Whether a media row belongs to any cloud account. File-mutating catalog
 /// operations call this inside their transaction before touching the file.
@@ -186,19 +186,6 @@ pub(super) fn is_bound(c: &Connection, library: &str, media_id: &str) -> Result<
         |r| r.get(0),
     )
     .map_err(error)
-}
-
-pub(super) fn mark_favorite_dirty(
-    c: &Connection,
-    library: &str,
-    media_id: &str,
-) -> Result<(), String> {
-    c.execute(
-        "UPDATE cloud_bindings SET favorite_dirty=1,updated_at_ms=?3 WHERE library_id=?1 AND media_id=?2",
-        params![library, media_id, now_ms()],
-    )
-    .map_err(error)?;
-    Ok(())
 }
 
 impl LocalLibrary {
@@ -536,7 +523,7 @@ impl LocalLibrary {
                 media_id
             };
             tx.execute(
-                "INSERT INTO cloud_bindings(account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,favorite_dirty,asset_date_ms,is_hidden,is_trashed,content_stale,thumbnail_path,thumbnail_sha256,created_at_ms,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,0,?9,0,?10,0,?11,?12,?13,?13) ON CONFLICT(account_id,photo_id) DO UPDATE SET master_id=excluded.master_id,content_generation=excluded.content_generation,library_id=excluded.library_id,media_id=excluded.media_id,relative_path=excluded.relative_path,asset_date_ms=excluded.asset_date_ms,is_hidden=excluded.is_hidden,is_trashed=excluded.is_trashed,content_stale=0,thumbnail_path=excluded.thumbnail_path,thumbnail_sha256=excluded.thumbnail_sha256,updated_at_ms=excluded.updated_at_ms",
+                "INSERT INTO cloud_bindings(account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,asset_date_ms,is_hidden,is_trashed,content_stale,thumbnail_path,thumbnail_sha256,created_at_ms,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,0,?10,0,?11,?12,?13,?13) ON CONFLICT(account_id,photo_id) DO UPDATE SET master_id=excluded.master_id,content_generation=excluded.content_generation,library_id=excluded.library_id,media_id=excluded.media_id,relative_path=excluded.relative_path,asset_date_ms=excluded.asset_date_ms,is_hidden=excluded.is_hidden,is_trashed=excluded.is_trashed,content_stale=0,thumbnail_path=excluded.thumbnail_path,thumbnail_sha256=excluded.thumbnail_sha256,updated_at_ms=excluded.updated_at_ms",
                 params![
                     account_id,
                     input.photo_id,
@@ -557,6 +544,49 @@ impl LocalLibrary {
             super::tools::recount(&tx, &library)?;
             tx.commit().map_err(error)?;
             Ok(media_id)
+        })
+    }
+
+    /// Refresh the whole graph's paths before admitting new bindings. Park all
+    /// changed paths first so swaps and reuse of a deleted photo's path cannot
+    /// violate the immediate UNIQUE constraint. Parked paths start with `/`,
+    /// which the remote safe-relative-path contract forbids; they stay local.
+    /// An orphan retains its binding and media under its reserved local path.
+    pub(crate) fn cloud_refresh_binding_paths(
+        &self,
+        account_id: String,
+        remote_paths: Vec<(String, String)>,
+    ) -> Result<(), String> {
+        self.execute(move |c| {
+            let tx = c.transaction().map_err(error)?;
+            let remote: std::collections::HashMap<_, _> = remote_paths.into_iter().collect();
+            let bindings = {
+                let mut statement = tx.prepare(
+                    "SELECT photo_id,relative_path FROM cloud_bindings WHERE account_id=?1",
+                ).map_err(error)?;
+                statement.query_map([&account_id], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                }).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?
+            };
+            let changes: Vec<_> = bindings.into_iter().filter_map(|(photo_id, current)| {
+                let parked = format!("/.cloud-binding/{photo_id}");
+                let target = remote.get(&photo_id).cloned().unwrap_or_else(|| parked.clone());
+                (target != current).then_some((photo_id, parked, target))
+            }).collect();
+            let now = now_ms();
+            for (photo_id, parked, _) in &changes {
+                tx.execute(
+                    "UPDATE cloud_bindings SET relative_path=?3,updated_at_ms=?4 WHERE account_id=?1 AND photo_id=?2",
+                    params![account_id, photo_id, parked, now],
+                ).map_err(error)?;
+            }
+            for (photo_id, _, target) in changes {
+                tx.execute(
+                    "UPDATE cloud_bindings SET relative_path=?3 WHERE account_id=?1 AND photo_id=?2",
+                    params![account_id, photo_id, target],
+                ).map_err(error)?;
+            }
+            tx.commit().map_err(error)
         })
     }
 
@@ -656,123 +686,6 @@ impl LocalLibrary {
         })
     }
 
-    pub(crate) fn cloud_binding_favorite(
-        &self,
-        account_id: String,
-        photo_id: String,
-    ) -> Result<Option<(String, bool)>, String> {
-        self.execute(move |c| {
-            c.query_row(
-                "SELECT b.media_id,m.favorite FROM cloud_bindings b JOIN media m ON m.library_id=b.library_id AND m.media_id=b.media_id WHERE b.account_id=?1 AND b.photo_id=?2",
-                params![account_id, photo_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()
-            .map_err(error)
-        })
-    }
-
-    pub(crate) fn cloud_clear_favorite_dirty(
-        &self,
-        account_id: String,
-        photo_id: String,
-    ) -> Result<(), String> {
-        self.execute(move |c| {
-            c.execute(
-                "UPDATE cloud_bindings SET favorite_dirty=0,updated_at_ms=?3 WHERE account_id=?1 AND photo_id=?2",
-                params![account_id, photo_id, now_ms()],
-            )
-            .map_err(error)?;
-            Ok(())
-        })
-    }
-
-    pub(crate) fn cloud_apply_remote_favorite(
-        &self,
-        account_id: String,
-        photo_id: String,
-        favorite: bool,
-    ) -> Result<bool, String> {
-        self.execute(move |c| {
-            let tx = c.transaction().map_err(error)?;
-            let row: Option<(String, String, bool)> = tx
-                .query_row(
-                    "SELECT media_id,library_id,favorite_dirty FROM cloud_bindings WHERE account_id=?1 AND photo_id=?2",
-                    params![account_id, photo_id],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-                )
-                .optional()
-                .map_err(error)?;
-            let Some((media_id, library, dirty)) = row else {
-                return Ok(false);
-            };
-            if dirty {
-                tx.rollback().map_err(error)?;
-                return Ok(false);
-            }
-            tx.execute(
-                "UPDATE cloud_bindings SET cloud_favorite=?3,updated_at_ms=?4 WHERE account_id=?1 AND photo_id=?2",
-                params![account_id, photo_id, favorite, now_ms()],
-            )
-            .map_err(error)?;
-            let changed = tx
-                .execute(
-                    "UPDATE media SET favorite=?3 WHERE library_id=?1 AND media_id=?2 AND favorite<>?3",
-                    params![library, media_id, favorite],
-                )
-                .map_err(error)?;
-            if changed > 0 {
-                super::tools::recount(&tx, &library)?;
-            }
-            tx.commit().map_err(error)?;
-            Ok(changed > 0)
-        })
-    }
-
-    /// The favorite was sent with `sent`. If the local value moved meanwhile,
-    /// keep the binding dirty so the next round publishes the newer value.
-    pub(crate) fn cloud_finish_favorite_upload(
-        &self,
-        account_id: String,
-        photo_id: String,
-        sent: bool,
-    ) -> Result<bool, String> {
-        self.execute(move |c| {
-            let tx = c.transaction().map_err(error)?;
-            let row: Option<(String, String)> = tx
-                .query_row(
-                    "SELECT media_id,library_id FROM cloud_bindings WHERE account_id=?1 AND photo_id=?2",
-                    params![account_id, photo_id],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )
-                .optional()
-                .map_err(error)?;
-            let Some((media_id, library)) = row else {
-                return Ok(false);
-            };
-            tx.execute(
-                "UPDATE cloud_bindings SET cloud_favorite=?3,updated_at_ms=?4 WHERE account_id=?1 AND photo_id=?2",
-                params![account_id, photo_id, sent, now_ms()],
-            )
-            .map_err(error)?;
-            let local: bool = tx
-                .query_row(
-                    "SELECT favorite FROM media WHERE library_id=?1 AND media_id=?2",
-                    params![library, media_id],
-                    |r| r.get(0),
-                )
-                .map_err(error)?;
-            let dirty = local != sent;
-            tx.execute(
-                "UPDATE cloud_bindings SET favorite_dirty=?3 WHERE account_id=?1 AND photo_id=?2",
-                params![account_id, photo_id, dirty],
-            )
-            .map_err(error)?;
-            tx.commit().map_err(error)?;
-            Ok(dirty)
-        })
-    }
-
     pub(crate) fn cloud_queue_uploads(
         &self,
         account_id: String,
@@ -844,6 +757,7 @@ impl LocalLibrary {
                     )
                     .map_err(error)?;
                 if inserted > 0 {
+                    tx.execute("INSERT INTO media_sync_state(library_id,media_id,dirty) VALUES(?1,?2,1) ON CONFLICT(library_id,media_id) DO UPDATE SET dirty=1", params![library, intent.media_id]).map_err(error)?;
                     counts.queued += 1;
                 } else {
                     counts.skipped += 1;
@@ -942,7 +856,7 @@ impl LocalLibrary {
                 )
                 .map_err(error)?;
             tx.execute(
-                "INSERT INTO cloud_bindings(account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,favorite_dirty,asset_date_ms,is_hidden,is_trashed,content_stale,thumbnail_path,thumbnail_sha256,created_at_ms,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,0,0,0,NULL,NULL,?11,?11) ON CONFLICT(account_id,photo_id) DO UPDATE SET master_id=excluded.master_id,content_generation=excluded.content_generation,library_id=excluded.library_id,media_id=excluded.media_id,relative_path=excluded.relative_path,asset_date_ms=excluded.asset_date_ms,updated_at_ms=excluded.updated_at_ms",
+                "INSERT INTO cloud_bindings(account_id,photo_id,master_id,content_generation,library_id,media_id,relative_path,cloud_favorite,asset_date_ms,is_hidden,is_trashed,content_stale,thumbnail_path,thumbnail_sha256,created_at_ms,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,0,0,0,NULL,NULL,?10,?10) ON CONFLICT(account_id,photo_id) DO UPDATE SET master_id=excluded.master_id,content_generation=excluded.content_generation,library_id=excluded.library_id,media_id=excluded.media_id,relative_path=excluded.relative_path,asset_date_ms=excluded.asset_date_ms,updated_at_ms=excluded.updated_at_ms",
                 params![
                     account_id,
                     photo_id,
@@ -952,12 +866,12 @@ impl LocalLibrary {
                     media_id,
                     relative_path,
                     cloud_favorite,
-                    local_favorite != cloud_favorite,
                     asset_date_ms,
                     now,
                 ],
             )
             .map_err(error)?;
+            metadata::settle_create(&tx, &library, &media_id, local_favorite != cloud_favorite)?;
             tx.execute(
                 "UPDATE cloud_uploads SET state='published',error_code=NULL,updated_at_ms=?4 WHERE account_id=?1 AND media_id=?2 AND content_generation=?3",
                 params![account_id, media_id, content_generation, now],
@@ -985,7 +899,7 @@ impl LocalLibrary {
                 .map_err(error)?;
             let pending_favorites = c
                 .query_row(
-                    "SELECT COUNT(*) FROM cloud_bindings WHERE account_id=?1 AND favorite_dirty=1",
+                    "SELECT COUNT(*) FROM cloud_bindings b JOIN media_sync_state s ON s.library_id=b.library_id AND s.media_id=b.media_id WHERE b.account_id=?1 AND s.dirty=2",
                     [&account_id],
                     |r| r.get::<_, i64>(0),
                 )
@@ -1245,61 +1159,213 @@ mod tests {
         assert_eq!(bindings[0].media_id, media_id);
     }
 
-    #[test]
-    fn remote_favorite_skips_dirty_binding_until_upload_finishes() {
+    fn metadata_photo() -> syncserver_client::RemotePhoto {
+        use syncserver_client as sdk;
+        let record: sdk::RemoteRecord=serde_json::from_value(serde_json::json!({
+            "recordName":"photo-1","recordType":"CPLAsset","recordChangeTag":"revision-1",
+            "fields":{"relativePath":{"type":"STRING","value":"a.jpg"},"isFavorite":{"type":"INT64","value":0},"isHidden":{"type":"INT64","value":0}}
+        })).unwrap();
+        let asset:sdk::AssetDescriptor=serde_json::from_value(serde_json::json!({"assetId":Uuid::new_v4().to_string(),"size":14,"fileChecksum":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","mimeType":"image/jpeg"})).unwrap();
+        sdk::RemotePhoto {
+            photo_id: "photo-1".into(),
+            master_id: "photo-1-master".into(),
+            content_generation: Uuid::new_v4().to_string(),
+            relative_path: "a.jpg".into(),
+            is_favorite: false,
+            asset_date_ms: None,
+            is_hidden: false,
+            original: asset.clone(),
+            thumbnail: asset,
+            thumbnail_source_sha256: "0".repeat(64),
+            events: Default::default(),
+            asset_revision: "revision-1".into(),
+            master_revision: "master-revision".into(),
+            asset: record.clone(),
+            master: record,
+        }
+    }
+
+    fn confirmed_metadata(operation: &metadata::IssuedMetadata) -> syncserver_client::RemoteRecord {
+        let mutation = &operation.mutation;
+        serde_json::from_value(serde_json::json!({
+            "recordName":mutation.photo_id,"recordType":"CPLAsset","recordChangeTag":"confirmed-revision",
+            "fields":{"relativePath":{"type":"STRING","value":mutation.metadata.relative_path},"isFavorite":{"type":"INT64","value":i64::from(mutation.metadata.is_favorite)},"isHidden":{"type":"INT64","value":0}},
+            "_syncserver":{"metadataEvent":mutation.event}
+        })).unwrap()
+    }
+
+    fn metadata_binding() -> (tempfile::TempDir, LocalLibrary, String) {
         let (root, library) = open_library();
         let folder = root.path().join("photos");
         fs::create_dir_all(&folder).unwrap();
-        let (source_id, media_id) = seed_photo(&library, &folder, "one.jpg");
-        let path = PathBuf::from(&library.photo(media_id.clone()).unwrap().path);
+        let (source, media) = seed_photo(&library, &folder, "one.jpg");
+        let path = PathBuf::from(library.photo(media.clone()).unwrap().path);
         library
             .cloud_publish_remote_media(
                 ACCOUNT.into(),
-                remote_input(&source_id, "photo-1", "a.jpg", &path, false),
+                remote_input(&source, "photo-1", "a.jpg", &path, false),
             )
             .unwrap();
-
-        assert!(library.set_favorite(media_id.clone(), true).unwrap());
-        assert!(!library
-            .cloud_apply_remote_favorite(ACCOUNT.into(), "photo-1".into(), false)
-            .unwrap());
-        assert!(library.photo(media_id.clone()).unwrap().favorite);
-
-        assert!(!library
-            .cloud_finish_favorite_upload(ACCOUNT.into(), "photo-1".into(), true)
-            .unwrap());
-        assert!(library
-            .cloud_apply_remote_favorite(ACCOUNT.into(), "photo-1".into(), false)
-            .unwrap());
-        assert!(!library.photo(media_id).unwrap().favorite);
+        (root, library, media)
     }
 
     #[test]
-    fn favorite_upload_keeps_a_newer_local_toggle_dirty() {
-        let (root, library) = open_library();
-        let folder = root.path().join("photos");
-        fs::create_dir_all(&folder).unwrap();
-        let (source_id, media_id) = seed_photo(&library, &folder, "one.jpg");
-        let path = PathBuf::from(&library.photo(media_id.clone()).unwrap().path);
-        library
-            .cloud_publish_remote_media(
+    fn metadata_dirty_is_cleared_only_by_matching_event_confirmation() {
+        let (_root, library, media) = metadata_binding();
+        library.set_favorite(media.clone(), true).unwrap();
+        let issued = library
+            .cloud_issue_metadata(
                 ACCOUNT.into(),
-                remote_input(&source_id, "photo-1", "a.jpg", &path, false),
+                metadata_photo(),
+                syncserver_client::ZoneId::primary(),
             )
+            .unwrap()
             .unwrap();
-        library.set_favorite(media_id.clone(), true).unwrap();
-        library.set_favorite(media_id, false).unwrap();
-
-        // The upload sent `true`, but the local value moved back to `false`
-        // while it was in flight, so the binding must stay dirty.
-        assert!(library
-            .cloud_finish_favorite_upload(ACCOUNT.into(), "photo-1".into(), true)
-            .unwrap());
-        let binding = library.cloud_bindings(ACCOUNT.into()).unwrap().remove(0);
-        assert!(binding.favorite_dirty);
-        assert!(binding.cloud_favorite);
+        assert!(
+            !library
+                .cloud_apply_remote_metadata(ACCOUNT.into(), "photo-1".into(), false, None)
+                .unwrap()
+        );
+        assert!(library.photo(media.clone()).unwrap().favorite);
+        let mut wrong = confirmed_metadata(&issued);
+        wrong.events.metadata_event.as_mut().unwrap().event_id = "another-event".into();
+        assert!(
+            library
+                .cloud_confirm_metadata(ACCOUNT.into(), issued.clone(), wrong)
+                .is_err()
+        );
+        assert_eq!(library.cloud_bindings(ACCOUNT.into()).unwrap()[0].dirty, 2);
+        assert!(
+            !library
+                .cloud_confirm_metadata(ACCOUNT.into(), issued.clone(), confirmed_metadata(&issued))
+                .unwrap()
+        );
+        let remote = syncserver_client::EditEvent {
+            edited_at_ms: issued.mutation.event.edited_at_ms + 1,
+            source: "other-device".into(),
+            event_id: "newer".into(),
+        };
+        assert!(
+            library
+                .cloud_apply_remote_metadata(ACCOUNT.into(), "photo-1".into(), false, Some(remote))
+                .unwrap()
+        );
+        assert!(!library.photo(media).unwrap().favorite);
     }
 
+    #[test]
+    fn metadata_confirmation_keeps_a_newer_edit_even_when_value_returns_to_sent_value() {
+        let (_root, library, media) = metadata_binding();
+        library.set_favorite(media.clone(), true).unwrap();
+        let issued = library
+            .cloud_issue_metadata(
+                ACCOUNT.into(),
+                metadata_photo(),
+                syncserver_client::ZoneId::primary(),
+            )
+            .unwrap()
+            .unwrap();
+        library.set_favorite(media.clone(), false).unwrap();
+        library.set_favorite(media.clone(), true).unwrap();
+        assert!(
+            library
+                .cloud_confirm_metadata(ACCOUNT.into(), issued.clone(), confirmed_metadata(&issued))
+                .unwrap()
+        );
+        assert_eq!(library.cloud_bindings(ACCOUNT.into()).unwrap()[0].dirty, 2);
+        let library_id = library.library_id.clone();
+        let versions=library.execute(move|c|c.query_row("SELECT metadata_version,acked_metadata_version FROM media_sync_state WHERE library_id=?1 AND media_id=?2",params![library_id,media],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?))).map_err(error)).unwrap();
+        assert_eq!(versions, (3, 1));
+    }
+
+    #[test]
+    fn metadata_conflict_uses_event_order_and_preserves_pending_requests() {
+        let (_root, library, media) = metadata_binding();
+        library.set_favorite(media.clone(), true).unwrap();
+        let issued = library
+            .cloud_issue_metadata(
+                ACCOUNT.into(),
+                metadata_photo(),
+                syncserver_client::ZoneId::primary(),
+            )
+            .unwrap()
+            .unwrap();
+        let newer = syncserver_client::EditEvent {
+            edited_at_ms: issued.mutation.event.edited_at_ms + 1,
+            source: "other-device".into(),
+            event_id: "remote".into(),
+        };
+        assert!(
+            !library
+                .cloud_apply_remote_metadata(
+                    ACCOUNT.into(),
+                    "photo-1".into(),
+                    false,
+                    Some(newer.clone())
+                )
+                .unwrap()
+        );
+        library
+            .cloud_forget_rejected_metadata(ACCOUNT.into(), issued.mutation.operation_id)
+            .unwrap();
+        assert!(
+            library
+                .cloud_apply_remote_metadata(ACCOUNT.into(), "photo-1".into(), false, Some(newer))
+                .unwrap()
+        );
+        assert!(!library.photo(media).unwrap().favorite);
+        assert_eq!(library.cloud_bindings(ACCOUNT.into()).unwrap()[0].dirty, 0);
+    }
+
+    #[test]
+    fn metadata_event_order_matches_legacy_ties_and_unknown_fallback() {
+        for (local_time, remote_time, remote_source, remote_id, keep_local) in [
+            (Some(300), Some(200), "remote", "r", true),
+            (Some(100), Some(200), "remote", "r", false),
+            (Some(200), Some(200), "aaa", "r", true),
+            (Some(200), Some(200), "zzz", "r", false),
+            (Some(200), Some(200), "local", "zzz", false),
+            (Some(200), None, "", "", true),
+            (None, None, "", "", true),
+            (None, Some(200), "remote", "r", false),
+        ] {
+            let (_root, library, media) = metadata_binding();
+            library.set_favorite(media.clone(), true).unwrap();
+            library
+                .execute(move |c| {
+                    c.execute(
+                        "UPDATE media_sync_state SET edited_at_ms=?1,source=?2,event_id=?3",
+                        params![
+                            local_time,
+                            local_time.map(|_| "local"),
+                            local_time.map(|_| "local")
+                        ],
+                    )
+                    .map_err(error)?;
+                    Ok(())
+                })
+                .unwrap();
+            let remote = remote_time.map(|edited_at_ms| syncserver_client::EditEvent {
+                edited_at_ms,
+                source: remote_source.into(),
+                event_id: remote_id.into(),
+            });
+            library
+                .cloud_apply_remote_metadata(ACCOUNT.into(), "photo-1".into(), false, remote)
+                .unwrap();
+            assert_eq!(library.photo(media).unwrap().favorite, keep_local);
+            assert_eq!(
+                library.cloud_bindings(ACCOUNT.into()).unwrap()[0].dirty,
+                if keep_local { 2 } else { 0 }
+            );
+            if keep_local && local_time.is_none() {
+                let issued=library.cloud_issue_metadata(ACCOUNT.into(),metadata_photo(),syncserver_client::ZoneId::primary()).unwrap().unwrap();
+                assert_eq!(issued.mutation.event.edited_at_ms,0);
+                assert!(!issued.mutation.event.source.is_empty());
+                assert!(!issued.mutation.event.event_id.is_empty());
+            }
+        }
+    }
     #[test]
     fn favorite_toggle_heals_a_drifted_counter() {
         let (root, library) = open_library();
@@ -1391,5 +1457,129 @@ mod tests {
         assert!(path.exists());
         assert_eq!(library.photo(media_id).unwrap().state, "active");
         assert_eq!(library.cloud_bound_media_ids().unwrap().len(), 1);
+    }
+
+    fn path_binding_fixture() -> (tempfile::TempDir, LocalLibrary, String, Vec<String>) {
+        let (root, library) = open_library();
+        let source = library.ensure_managed_cloud_source(ACCOUNT).unwrap();
+        let mut media_ids = Vec::new();
+        for name in ["one", "two"] {
+            let path = root.path().join(format!("{name}.jpg"));
+            fs::write(&path, b"cloud fixture").unwrap();
+            media_ids.push(
+                library
+                    .cloud_publish_remote_media(
+                        ACCOUNT.into(),
+                        remote_input(&source, name, &format!("{name}.jpg"), &path, false),
+                    )
+                    .unwrap(),
+            );
+        }
+        (root, library, source, media_ids)
+    }
+
+    #[test]
+    fn binding_paths_swap_atomically_without_changing_media_identity() {
+        let (_root, library, _source, media_ids) = path_binding_fixture();
+        library
+            .cloud_refresh_binding_paths(
+                ACCOUNT.into(),
+                vec![
+                    ("one".into(), "two.jpg".into()),
+                    ("two".into(), "one.jpg".into()),
+                ],
+            )
+            .unwrap();
+        let bindings = library.cloud_bindings(ACCOUNT.into()).unwrap();
+        assert_eq!(bindings[0].relative_path, "two.jpg");
+        assert_eq!(bindings[1].relative_path, "one.jpg");
+        assert_eq!(bindings[0].media_id, media_ids[0]);
+        assert_eq!(bindings[1].media_id, media_ids[1]);
+        assert_eq!(
+            library
+                .query(PhotoFilter::default(), None, 10)
+                .unwrap()
+                .total,
+            2
+        );
+    }
+
+    #[test]
+    fn orphan_binding_releases_its_path_and_can_later_return() {
+        let (root, library, source, media_ids) = path_binding_fixture();
+        library
+            .cloud_refresh_binding_paths(
+                ACCOUNT.into(),
+                vec![
+                    ("two".into(), "two.jpg".into()),
+                    ("three".into(), "one.jpg".into()),
+                ],
+            )
+            .unwrap();
+        library
+            .cloud_deactivate_orphan_bindings(ACCOUNT.into(), vec!["two".into(), "three".into()])
+            .unwrap();
+        let path = root.path().join("three.jpg");
+        fs::write(&path, b"cloud fixture").unwrap();
+        library
+            .cloud_publish_remote_media(
+                ACCOUNT.into(),
+                remote_input(&source, "three", "one.jpg", &path, false),
+            )
+            .unwrap();
+        let bindings = library.cloud_bindings(ACCOUNT.into()).unwrap();
+        let orphan = bindings.iter().find(|b| b.photo_id == "one").unwrap();
+        assert!(orphan.relative_path.starts_with('/'));
+        assert_eq!(orphan.media_id, media_ids[0]);
+        assert_eq!(library.cloud_bound_media_ids().unwrap().len(), 3);
+        assert!(root.path().join("one.jpg").is_file());
+        library
+            .cloud_refresh_binding_paths(
+                ACCOUNT.into(),
+                vec![
+                    ("one".into(), "restored.jpg".into()),
+                    ("two".into(), "two.jpg".into()),
+                    ("three".into(), "one.jpg".into()),
+                ],
+            )
+            .unwrap();
+        let restored = library
+            .cloud_bindings(ACCOUNT.into())
+            .unwrap()
+            .into_iter()
+            .find(|b| b.photo_id == "one")
+            .unwrap();
+        assert_eq!(restored.relative_path, "restored.jpg");
+        assert_eq!(restored.media_id, media_ids[0]);
+    }
+
+    #[test]
+    fn binding_path_conflict_rolls_back_the_entire_remap() {
+        let (_root, library, _source, _ids) = path_binding_fixture();
+        assert!(
+            library
+                .cloud_refresh_binding_paths(
+                    ACCOUNT.into(),
+                    vec![
+                        ("one".into(), "same.jpg".into()),
+                        ("two".into(), "same.jpg".into()),
+                    ]
+                )
+                .is_err()
+        );
+        let bindings = library.cloud_bindings(ACCOUNT.into()).unwrap();
+        assert_eq!(bindings[0].relative_path, "one.jpg");
+        assert_eq!(bindings[1].relative_path, "two.jpg");
+    }
+    #[test]
+    fn cloud_scope_pin_rejects_changed_namespace_or_database_generation() {
+        let (_root,library)=open_library();
+        let namespace=syncserver_client::Namespace {tenant:"user".into(),container:"photos".into(),environment:"production".into(),database:"private".into()};
+        assert!(library.cloud_pin_scope(ACCOUNT.into(),namespace.clone(),"generation-1".into()).unwrap());
+        assert!(library.cloud_pin_scope(ACCOUNT.into(),namespace.clone(),"generation-1".into()).unwrap());
+        assert!(!library.cloud_pin_scope(ACCOUNT.into(),namespace.clone(),"generation-2".into()).unwrap());
+        let mut other=namespace.clone();other.tenant="another-user".into();
+        assert!(!library.cloud_pin_scope(ACCOUNT.into(),other,"generation-1".into()).unwrap());
+        assert!(library.cloud_pin_scope(ACCOUNT.into(),namespace,"generation-1".into()).unwrap());
     }
 }
