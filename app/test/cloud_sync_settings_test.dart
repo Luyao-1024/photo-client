@@ -25,7 +25,11 @@ void main() {
   });
   tearDownAll(() => fixtures.delete(recursive: true));
 
-  Future<void> mount(WidgetTester tester, FakeLocalGateway gateway) async {
+  Future<void> mount(
+    WidgetTester tester,
+    FakeLocalGateway gateway, {
+    LocalSourcePicker? sourcePicker,
+  }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1280, 900);
     tester.platformDispatcher.localeTestValue = const Locale('en');
@@ -34,7 +38,9 @@ void main() {
       tester.view.resetDevicePixelRatio();
       tester.platformDispatcher.clearLocaleTestValue();
     });
-    await tester.pumpWidget(PhotoClientApp(gateway: gateway));
+    await tester.pumpWidget(
+      PhotoClientApp(gateway: gateway, sourcePicker: sourcePicker),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -553,6 +559,99 @@ void main() {
     expect(gateway.cloudSyncCalls, 3);
     await disposeApp(tester, gateway);
   });
+  testWidgets('the download folder is chosen and shown for the account', (
+    tester,
+  ) async {
+    const root = '/home/alice/Pictures/Cloud';
+    final gateway = FakeLocalGateway(imagePath: image)
+      ..cloudState = const CloudStatus(
+        loggedIn: true,
+        accountId: 'a1',
+        endpoint: 'http://127.0.0.1:8790',
+        username: 'alice',
+        accounts: [
+          CloudAccount(
+            accountId: 'a1',
+            endpoint: 'http://127.0.0.1:8790',
+            username: 'alice',
+            active: true,
+            signedIn: true,
+          ),
+        ],
+      );
+    await mount(
+      tester,
+      gateway,
+      sourcePicker: _FixedSourcePicker(root),
+    );
+    await openCloudSettings(tester);
+
+    expect(
+      find.text('Not chosen; pick a real folder before syncing'),
+      findsOneWidget,
+    );
+    final choose = find.byKey(const ValueKey('cloud-choose-download-root'));
+    await tester.ensureVisible(choose);
+    await tester.pumpAndSettle();
+    await tester.tap(choose);
+    await tester.pumpAndSettle();
+
+    expect(gateway.cloudDownloadRootCalls, [root]);
+    expect(find.text(root), findsOneWidget);
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('a sync without a download folder asks for one', (tester) async {
+    const root = '/home/alice/Pictures/Cloud';
+    final gateway = FakeLocalGateway(imagePath: image)
+      ..cloudState = const CloudStatus(
+        loggedIn: true,
+        accountId: 'a1',
+        endpoint: 'http://127.0.0.1:8790',
+        username: 'alice',
+        accounts: [
+          CloudAccount(
+            accountId: 'a1',
+            endpoint: 'http://127.0.0.1:8790',
+            username: 'alice',
+            active: true,
+            signedIn: true,
+          ),
+        ],
+      )
+      ..cloudReport = const CloudSyncReport(
+        failed: 1,
+        state: 'error',
+        errorCode: 'DownloadRootMissing',
+      );
+    await mount(
+      tester,
+      gateway,
+      sourcePicker: _FixedSourcePicker(root),
+    );
+    await openCloudSettings(tester);
+
+    final sync = find.byKey(const ValueKey('cloud-sync-now'));
+    await tester.ensureVisible(sync);
+    await tester.pumpAndSettle();
+    await tester.tap(sync);
+    await tester.pumpAndSettle();
+
+    expect(gateway.cloudDownloadRootCalls, [root]);
+    await disposeApp(tester, gateway);
+  });
+}
+
+class _FixedSourcePicker implements LocalSourcePicker {
+  _FixedSourcePicker(this.directory);
+
+  final String? directory;
+
+  @override
+  Future<List<String>> chooseFiles() async => const [];
+
+  @override
+  Future<String?> chooseDirectory() async => directory;
 }
 
 class _AutoSyncGateway extends FakeLocalGateway implements LocalLibraryTools {

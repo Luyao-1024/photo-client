@@ -68,3 +68,13 @@ cargo test --locked -p photo-core --test cloud_sync_recovery -- --ignored
 部分用例包含多项断言，以上按行为列举；实际测试函数数量为 9。断点由隔离数据库状态注入，包含真实关闭/重开图库，不声称杀死了客户端进程。服务端使用相邻已有发布二进制。未重跑完整桌面旅程。
 
 新增跨重启身份检查：持久命名空间或数据库代际不匹配时，真实服务端用例验证在重放前返回 `CloudScopeChanged`，本地 dirty 与已固定代际不被覆盖，服务端照片不被修改。
+
+## 2026-10-24 真实下载目录落盘回归
+
+入口与隔离方式不变：真实图库的 SQLite 快照（403 张活动照片，v7）清除 cloud_* 表后作为未登录起点，独立 SyncServer 与 Xvfb 运行最新 Release 包。5 个阶段全部 PASS。
+
+- 原图落在账号选择的下载根下，按云端相对路径镜像为真实文件；云端文件名（含唯一后缀）保留为本地文件名。证据中下载根为独立临时目录，下载结果为 `Uploads/2026/<cloud-name>`。
+- 缩略图位于 `<数据根>/cache/cloud/<account>/<photo>/<generation>/thumbnail.jpg`，下载根内没有缩略图或临时文件。
+- 客户端数据库 `user_version=8`，`cloud_accounts.download_root` 记录真实目录，该目录作为普通 `linked_directory` 来源参与相册列表。
+- 上传/下载分布为 2/1 与 1/2，共 3 张照片、2 个收藏；服务端摘要与客户端文件一致，会话令牌 `0600`、账号目录 `0700`。
+- 真实服务端定向用例同时通过：`cloud_album_mapping` 验证上传相册与下载真实目录同名；`cloud_sync_unrestricted` 的改名、回收站/恢复、内容替换、永久删除 4 项；`cloud_sync_recovery` 10 项。路径交换、下载根内用户文件保护和清理范围另由 `cloud_store` 单测覆盖。

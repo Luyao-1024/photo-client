@@ -9,7 +9,7 @@ const SCHEMA: &str = include_str!("../src/storage/local-schema.sql");
 const EXTENSIONS: &str = include_str!("../src/storage/local-v3.sql");
 
 /// Older supported catalogs are upgraded; future writers are still rejected.
-const CURRENT_SCHEMA_VERSION: i64 = 7;
+const CURRENT_SCHEMA_VERSION: i64 = 8;
 
 fn input(folder: &std::path::Path, name: &str, ns: i64) -> MediaInput {
     let path = folder.join(name);
@@ -628,6 +628,62 @@ fn v4_metadata_upgrade_preserves_dirty_work_and_backs_up_before_migration() {
             .unwrap(),
         1
     );
+    assert!(photos.path().join("keep.jpg").is_file());
+}
+
+#[test]
+fn v8_upgrade_adds_the_download_root_column_and_keeps_accounts() {
+    let root = TempDir::new().unwrap();
+    let photos = TempDir::new().unwrap();
+    legacy_catalog(&root, &photos, 7);
+    let old = Connection::open(root.path().join("library.sqlite")).unwrap();
+    old.execute_batch(include_str!("../src/storage/local-v4.sql"))
+        .unwrap();
+    old.execute_batch(include_str!("../src/storage/local-v5.sql"))
+        .unwrap();
+    old.execute_batch(include_str!("../src/storage/local-v6.sql"))
+        .unwrap();
+    old.execute_batch(include_str!("../src/storage/local-v7.sql"))
+        .unwrap();
+    old.execute("INSERT INTO cloud_accounts(account_id,endpoint,username,token_file,device_id,created_at_ms) VALUES('account','http://127.0.0.1:8790','user','cloud/account/session.token','device',1)",[]).unwrap();
+    old.execute(
+        "INSERT INTO cloud_sync_state(account_id,status,updated_at_ms) VALUES('account','idle',1)",
+        [],
+    )
+    .unwrap();
+    drop(old);
+
+    let library = LocalLibrary::open(root.path()).unwrap();
+    assert!(library.photo("photo".into()).unwrap().favorite);
+    let db = Connection::open(root.path().join("library.sqlite")).unwrap();
+    assert_eq!(
+        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        CURRENT_SCHEMA_VERSION
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('cloud_accounts') WHERE name='download_root'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1,
+        "the v8 upgrade must add the download root column"
+    );
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM cloud_accounts", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.query_row("SELECT download_root FROM cloud_accounts", [], |r| r
+            .get::<_, Option<String>>(0))
+            .unwrap(),
+        None
+    );
+    assert_eq!(backup_files(&root).len(), 1);
     assert!(photos.path().join("keep.jpg").is_file());
 }
 

@@ -15,6 +15,7 @@ pub(crate) struct CloudAccount {
     pub last_sync_ms: Option<i64>,
     pub upload_scope: String,
     pub is_active: bool,
+    pub download_root: Option<String>,
 }
 
 /// A local photo that the active account's upload scope may still send.
@@ -152,7 +153,7 @@ pub(crate) struct CloudCounts {
     pub bound: u32,
 }
 
-const ACCOUNT_COLUMNS: &str = "account_id,endpoint,username,user_id,token_file,token_expires_at_ms,device_id,created_at_ms,last_sync_ms,upload_scope,is_active";
+const ACCOUNT_COLUMNS: &str = "account_id,endpoint,username,user_id,token_file,token_expires_at_ms,device_id,created_at_ms,last_sync_ms,upload_scope,is_active,download_root";
 
 fn account_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudAccount> {
     Ok(CloudAccount {
@@ -167,6 +168,7 @@ fn account_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CloudAccount> {
         last_sync_ms: row.get(8)?,
         upload_scope: row.get(9)?,
         is_active: row.get(10)?,
+        download_root: row.get(11)?,
     })
 }
 
@@ -193,6 +195,73 @@ pub(super) fn is_bound(c: &Connection, library: &str, media_id: &str) -> Result<
         |r| r.get(0),
     )
     .map_err(error)
+}
+
+/// The name a cloud-side move publishes under: the wanted name when it is
+/// free, otherwise the first suffixed variant that is not taken. A foreign
+/// file sitting on the wanted name must not block the sync forever.
+fn unique_move_target(current: &Path, target: &Path) -> Result<PathBuf, String> {
+    if !target.exists() || target == current {
+        return Ok(target.to_path_buf());
+    }
+    let parent = target.parent().ok_or("Internal")?;
+    let name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("Internal")?;
+    let stem = Path::new(name)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or("photo");
+    let extension = Path::new(name).extension().and_then(|ext| ext.to_str());
+    for index in 1..=9999_u32 {
+        let candidate = if let Some(extension) = extension {
+            parent.join(format!("{stem}_{index}.{extension}"))
+        } else {
+            parent.join(format!("{stem}_{index}"))
+        };
+        if !candidate.exists() || candidate == current {
+            return Ok(candidate);
+        }
+    }
+    Err("NoAvailableFileName".into())
+}
+
+/// Whether a file already carries a suffixed spelling of the wanted name. A
+/// permanent foreign blocker leaves the photo on `stem_1.ext`; that settled
+/// name must not be reshuffled on every sync.
+fn settled_under_suffix(current: &Path, target: &Path) -> bool {
+    if current
+        .parent()
+        .zip(target.parent())
+        .is_none_or(|(a, b)| a != b)
+    {
+        return false;
+    }
+    let Some(current_name) = current.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let Some(target_name) = target.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let Some(current_stem) = Path::new(current_name).file_stem().and_then(|s| s.to_str()) else {
+        return false;
+    };
+    let Some(target_stem) = Path::new(target_name).file_stem().and_then(|s| s.to_str()) else {
+        return false;
+    };
+    let extension = Path::new(current_name).extension().and_then(|e| e.to_str())
+        == Path::new(target_name).extension().and_then(|e| e.to_str());
+    let suffix = current_stem
+        .strip_prefix(target_stem)
+        .and_then(|rest| rest.strip_prefix('_'));
+    extension
+        && !target_stem.is_empty()
+        && (current_stem == target_stem
+            || suffix.is_some_and(|rest| {
+                !rest.is_empty() && rest.bytes().all(|byte| byte.is_ascii_digit())
+            }))
 }
 
 impl LocalLibrary {
@@ -271,11 +340,17 @@ impl LocalLibrary {
     pub(crate) fn cloud_remove_account(&self, account_id: String) -> Result<(), String> {
         self.execute(move |c| {
             let tx = c.transaction().map_err(error)?;
-            tx.execute(
-                "DELETE FROM cloud_metadata_operations WHERE account_id=?1",
-                [&account_id],
-            )
-            .map_err(error)?;
+            for table in [
+                "cloud_metadata_operations",
+                "cloud_content_operations",
+                "cloud_delete_operations",
+            ] {
+                tx.execute(
+                    &format!("DELETE FROM {table} WHERE account_id=?1"),
+                    [&account_id],
+                )
+                .map_err(error)?;
+            }
             let removed = tx
                 .execute(
                     "DELETE FROM cloud_accounts WHERE account_id=?1",
@@ -293,7 +368,7 @@ impl LocalLibrary {
         self.execute(move |c| {
             let tx = c.transaction().map_err(error)?;
             tx.execute(
-                "INSERT INTO cloud_accounts(account_id,endpoint,username,user_id,token_file,token_expires_at_ms,device_id,created_at_ms,last_sync_ms,upload_scope,is_active) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,0) ON CONFLICT(account_id) DO UPDATE SET endpoint=excluded.endpoint,username=excluded.username,user_id=excluded.user_id,token_file=excluded.token_file,token_expires_at_ms=excluded.token_expires_at_ms,device_id=excluded.device_id,last_sync_ms=excluded.last_sync_ms",
+                "INSERT INTO cloud_accounts(account_id,endpoint,username,user_id,token_file,token_expires_at_ms,device_id,created_at_ms,last_sync_ms,upload_scope,is_active,download_root) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,0,?11) ON CONFLICT(account_id) DO UPDATE SET endpoint=excluded.endpoint,username=excluded.username,user_id=excluded.user_id,token_file=excluded.token_file,token_expires_at_ms=excluded.token_expires_at_ms,device_id=excluded.device_id,last_sync_ms=excluded.last_sync_ms,download_root=excluded.download_root",
                 params![
                     account.account_id,
                     account.endpoint,
@@ -305,6 +380,7 @@ impl LocalLibrary {
                     account.created_at_ms,
                     account.last_sync_ms,
                     account.upload_scope,
+                    account.download_root,
                 ],
             )
             .map_err(error)?;
@@ -590,6 +666,27 @@ impl LocalLibrary {
     pub(crate) fn cloud_media_bound(&self, media_id: String) -> Result<bool, String> {
         let library = self.library_id.clone();
         self.execute(move |c| is_bound(c, &library, &media_id))
+    }
+
+    /// Whether a media row other than this photo's own binding already owns
+    /// the path. A download must never rebind another photo's file.
+    pub(crate) fn cloud_path_claimed_by_other(
+        &self,
+        account_id: String,
+        photo_id: String,
+        path: String,
+    ) -> Result<bool, String> {
+        let library = self.library_id.clone();
+        self.execute(move |c| {
+            c.query_row(
+                "SELECT EXISTS(SELECT 1 FROM media m WHERE m.library_id=?1 AND m.source_uri=?2 \
+                 AND NOT EXISTS(SELECT 1 FROM cloud_bindings b WHERE b.library_id=m.library_id \
+                 AND b.media_id=m.media_id AND b.account_id=?3 AND b.photo_id=?4))",
+                params![library, path, account_id, photo_id],
+                |r| r.get(0),
+            )
+            .map_err(error)
+        })
     }
 
     pub fn cloud_thumbnail_for_media(
@@ -1217,64 +1314,128 @@ impl LocalLibrary {
         })
     }
 
-    pub(crate) fn ensure_managed_cloud_source(&self, account_id: &str) -> Result<String, String> {
-        if account_id.is_empty()
-            || !account_id
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-        {
-            return Err("InvalidAccount".into());
+    /// Choose the real directory this account's downloads mirror into.
+    ///
+    /// The directory is created when missing and registered as an ordinary
+    /// linked source, so the downloaded albums are real albums the scanner and
+    /// the album UI already understand. The private data root is refused: a
+    /// download root inside it would be invisible to the user and skipped by
+    /// every scan.
+    pub(crate) fn set_cloud_download_root(
+        &self,
+        account_id: &str,
+        path: &str,
+    ) -> Result<String, String> {
+        let requested = PathBuf::from(path);
+        if !requested.is_absolute() {
+            return Err("DownloadRootMustBeAbsolute".into());
         }
-        let directory = self.root.join("cloud").join(account_id);
-        fs::create_dir_all(&directory).map_err(error)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(error)?;
+        fs::create_dir_all(&requested).map_err(|_| "DownloadRootUnavailable".to_owned())?;
+        let directory = requested
+            .canonicalize()
+            .map_err(|_| "DownloadRootUnavailable".to_owned())?;
+        if directory == self.root || directory.starts_with(&self.root) {
+            return Err("DownloadRootInsideDataRoot".into());
         }
-        let directory = directory.canonicalize().map_err(error)?;
         let path = directory
             .to_str()
             .ok_or("UnsupportedPathEncoding")?
             .to_owned();
+        let source_id = self.add_source(&directory)?;
+        let account = account_id.to_owned();
+        self.execute(move |c| {
+            let changed = c
+                .execute(
+                    "UPDATE cloud_accounts SET download_root=?2 WHERE account_id=?1",
+                    params![account, path],
+                )
+                .map_err(error)?;
+            if changed == 0 {
+                return Err("AccountNotFound".into());
+            }
+            Ok(())
+        })?;
+        Ok(source_id)
+    }
+
+    /// Every real root the downloaded photos live under: the accounts' chosen
+    /// download directories plus the managed directories older libraries
+    /// still use.
+    pub(crate) fn cloud_download_roots(&self) -> Result<Vec<PathBuf>, String> {
         let library = self.library_id.clone();
         self.execute(move |c| {
-            c.execute(
-                "INSERT INTO sources(library_id,source_id,root_uri,source_kind,recursive) VALUES(?1,?2,?3,'managed',0) ON CONFLICT(library_id,root_uri) DO UPDATE SET source_kind='managed',recursive=0,enabled=1,availability='available'",
-                params![library, Uuid::new_v4().to_string(), path],
-            )
-            .map_err(error)?;
-            c.query_row(
-                "SELECT source_id FROM sources WHERE library_id=?1 AND root_uri=?2",
-                params![library, path],
-                |r| r.get(0),
-            )
-            .map_err(error)
+            let mut statement = c
+                .prepare(
+                    "SELECT DISTINCT root_uri FROM sources WHERE library_id=?1 AND source_kind='managed'
+                     UNION SELECT DISTINCT download_root FROM cloud_accounts WHERE download_root IS NOT NULL",
+                )
+                .map_err(error)?;
+            statement
+                .query_map([&library], |r| r.get::<_, String>(0))
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
         })
+        .map(|roots| roots.into_iter().map(PathBuf::from).collect())
     }
 
     /// The bytes the app downloaded from the cloud.
     ///
     /// The setting shows this next to the thumbnail cache, because the
     /// cleanup removes both, and the downloaded photos are the bigger part.
+    /// The originals live as real files under the accounts' download roots;
+    /// the thumbnails, the session tokens and older managed copies stay in
+    /// the private data root.
     pub fn cloud_usage(&self) -> Result<u64, String> {
-        let cloud = self.root.join("cloud");
-        Ok(walkdir::WalkDir::new(cloud)
-            .follow_links(false)
+        let roots = self.cloud_download_roots()?;
+        let legacy = self.root.join("cloud");
+        let originals = self.execute(move |c| {
+            let mut statement = c
+                .prepare(
+                    "SELECT DISTINCT m.source_uri FROM cloud_bindings b \
+                     JOIN media m ON m.library_id=b.library_id AND m.media_id=b.media_id \
+                     WHERE b.thumbnail_path IS NOT NULL",
+                )
+                .map_err(error)?;
+            statement
+                .query_map([], |r| r.get::<_, String>(0))
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
+        })?;
+        let mut total: u64 = originals
             .into_iter()
-            .flatten()
-            .filter(|entry| entry.file_type().is_file())
-            .filter_map(|entry| entry.metadata().ok())
+            .filter(|uri| {
+                // Legacy managed originals are counted by the directory walk
+                // below; counting them here again would double the usage.
+                let path = Path::new(uri);
+                roots.iter().any(|root| path.starts_with(root)) && !path.starts_with(&legacy)
+            })
+            .filter_map(|uri| fs::metadata(uri).ok())
             .map(|meta| meta.len())
-            .sum())
+            .sum();
+        for directory in [legacy, self.root.join("cache").join("cloud")] {
+            total += walkdir::WalkDir::new(directory)
+                .follow_links(false)
+                .into_iter()
+                .flatten()
+                .filter(|entry| entry.file_type().is_file())
+                .filter_map(|entry| entry.metadata().ok())
+                .map(|meta| meta.len())
+                .sum::<u64>();
+        }
+        Ok(total)
     }
 
     /// Remove everything the app downloaded from the cloud.
     ///
     /// The bytes, the session token and the catalog rows go together: a half
     /// state would show photos the library no longer knows, and a session
-    /// without its catalog would sync into nothing. The user's own photos are
-    /// never touched; only the managed cloud source and its rows are removed.
+    /// without its catalog would sync into nothing. Only photos the cloud
+    /// delivered are deleted: rows are selected through their binding before
+    /// the cloud tables go, and files are only removed under the accounts'
+    /// download roots or the legacy managed directories, so the user's own
+    /// photos that happen to live in the same real folders stay untouched.
     ///
     /// The rows go first and the bytes second, and the rows go in the order
     /// the foreign keys demand: the metadata operations point at the
@@ -1285,6 +1446,29 @@ impl LocalLibrary {
     pub fn clear_cloud_state(&self) -> Result<usize, String> {
         let library = self.library_id.clone();
         let root = self.root.clone();
+        let roots = self.cloud_download_roots()?;
+        // The bindings with a downloaded thumbnail are the only proof that a
+        // media row came from the cloud; uploaded photos keep their file even
+        // when the user picked their folder as the download root.
+        let targets: Vec<(String, String)> = self.execute(move |c| {
+            let mut statement = c
+                .prepare(
+                    "SELECT DISTINCT b.media_id,m.source_uri FROM cloud_bindings b \
+                     JOIN media m ON m.library_id=b.library_id AND m.media_id=b.media_id \
+                     WHERE b.thumbnail_path IS NOT NULL",
+                )
+                .map_err(error)?;
+            statement
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map_err(error)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(error)
+        })?;
+        let targets: Vec<(String, String)> = targets
+            .into_iter()
+            .filter(|(_, uri)| roots.iter().any(|root| Path::new(uri).starts_with(root)))
+            .collect();
+        let media_ids: Vec<String> = targets.iter().map(|(id, _)| id.clone()).collect();
         let removed = self.execute(move |c| {
             let tx = c.transaction().map_err(error)?;
             let accounts: Vec<String> = {
@@ -1302,11 +1486,14 @@ impl LocalLibrary {
             for account_id in &accounts {
                 for table in [
                     "cloud_metadata_operations",
+                    "cloud_content_operations",
+                    "cloud_delete_operations",
                     "cloud_bindings",
                     "cloud_uploads",
                     "cloud_account_scope",
                     "cloud_sync_state",
                     "cloud_records",
+                    "cloud_upload_albums",
                 ] {
                     tx.execute(
                         &format!("DELETE FROM {table} WHERE account_id=?1"),
@@ -1320,21 +1507,8 @@ impl LocalLibrary {
                 )
                 .map_err(error)?;
             }
-            // The photos that came from the cloud, identified by their source.
-            let media: Vec<String> = {
-                let mut statement = tx
-                    .prepare(
-                        "SELECT media_id FROM media WHERE library_id=?1 AND source_id IN \
-                         (SELECT source_id FROM sources WHERE library_id=?1 AND source_kind='managed')",
-                    )
-                    .map_err(error)?;
-                statement
-                    .query_map([&library], |r| r.get(0))
-                    .map_err(error)?
-                    .collect::<rusqlite::Result<Vec<_>>>()
-                    .map_err(error)?
-            };
-            for media_id in &media {
+            // The photos that came from the cloud.
+            for media_id in &media_ids {
                 tx.execute(
                     "DELETE FROM file_publications WHERE library_id=?1 AND operation_id IN \
                      (SELECT operation_id FROM file_operations WHERE library_id=?1 AND media_id=?2)",
@@ -1376,7 +1550,8 @@ impl LocalLibrary {
                 params![library],
             )
             .map_err(error)?;
-            // The scans of the managed source point at it, so they go first.
+            // Legacy managed sources disappear with their rows; a download
+            // root stays a normal source the user manages themselves.
             tx.execute(
                 "DELETE FROM scan_runs WHERE library_id=?1 AND source_id IN \
                  (SELECT source_id FROM sources WHERE library_id=?1 AND source_kind='managed')",
@@ -1390,9 +1565,31 @@ impl LocalLibrary {
             .map_err(error)?;
             super::tools::recount(&tx, &library)?;
             tx.commit().map_err(error)?;
-            Ok(media.len())
+            Ok(media_ids.len())
         })?;
-        // The bytes: the downloaded media and the session token.
+        // The bytes: the downloaded originals, then the empty album folders
+        // they leaves behind, then the private cloud state.
+        for (_, uri) in &targets {
+            let _ = fs::remove_file(uri);
+            let mut directory = Path::new(uri).parent().map(Path::to_path_buf);
+            while let Some(folder) = directory {
+                if roots.contains(&folder) || !folder.is_dir() {
+                    break;
+                }
+                // A folder that still holds anything is a user folder now.
+                let empty = match fs::read_dir(&folder) {
+                    Ok(mut entries) => entries.next().is_none(),
+                    Err(_) => false,
+                };
+                directory = if empty {
+                    let _ = fs::remove_dir(&folder);
+                    folder.parent().map(Path::to_path_buf)
+                } else {
+                    None
+                };
+            }
+        }
+        let _ = fs::remove_dir_all(root.join("cache").join("cloud"));
         let cloud = root.join("cloud");
         if cloud.is_dir() {
             fs::remove_dir_all(&cloud).map_err(error)?;
@@ -1400,48 +1597,117 @@ impl LocalLibrary {
         Ok(removed)
     }
 
-    /// Put the bound photos into the album of their cloud path.
+    /// Move bound photo files so they keep mirroring their cloud relative
+    /// path inside the download root.
     ///
-    /// A photo that was downloaded before the album mapping existed still sits
-    /// in the flat cloud album. This moves it into the album of its path
-    /// without touching its bytes, so an existing library is reorganised
-    /// instead of downloaded again.
-    pub(crate) fn cloud_reparent_media(
+    /// A rename, an album move or a path swap on the cloud side changes the
+    /// binding's relative path; the local file follows so the album layout
+    /// stays an exact mirror. Photos with a pending local path edit keep
+    /// their file where it is until the edit is uploaded, and files outside
+    /// the download root (legacy managed copies or user-moved files) are left
+    /// alone.
+    pub(crate) fn cloud_sync_remote_paths(
         &self,
         account_id: String,
-        albums: Vec<(String, String)>,
+        download_root: PathBuf,
     ) -> Result<usize, String> {
         let library = self.library_id.clone();
         self.execute(move |c| {
-            let albums: std::collections::HashMap<&str, &str> = albums
-                .iter()
-                .map(|(path, parent)| (path.as_str(), parent.as_str()))
-                .collect();
-            let rows: Vec<(String, String)> = {
+            let rows: Vec<(String, String, String, String)> = {
                 let mut statement = c
                     .prepare(
-                        "SELECT media_id,relative_path FROM cloud_bindings WHERE account_id=?1",
+                        "SELECT b.media_id,b.relative_path,m.source_uri,m.mime_type FROM cloud_bindings b \
+                         JOIN media m ON m.library_id=b.library_id AND m.media_id=b.media_id \
+                         LEFT JOIN media_sync_state s ON s.library_id=m.library_id AND s.media_id=m.media_id \
+                         WHERE b.account_id=?1 AND b.thumbnail_path IS NOT NULL \
+                         AND b.relative_path NOT LIKE '/%' \
+                         AND m.state<>'trashed' AND COALESCE(s.path_dirty,0)=0",
                     )
                     .map_err(error)?;
                 statement
                     .query_map([&account_id], |r| {
-                        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                        Ok((
+                            r.get::<_, String>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, String>(3)?,
+                        ))
                     })
                     .map_err(error)?
                     .collect::<rusqlite::Result<Vec<_>>>()
                     .map_err(error)?
             };
-            let mut moved = 0;
-            for (media_id, relative_path) in rows {
-                let Some(parent) = albums.get(relative_path.as_str()) else {
+            let mut queue: Vec<(String, PathBuf, PathBuf)> = Vec::new();
+            for (media_id, relative_path, source_uri, mime_type) in rows {
+                let current = PathBuf::from(&source_uri);
+                if !current.starts_with(&download_root) || !current.is_file() {
+                    continue;
+                }
+                let Some(extension) =
+                    crate::cloud::paths::download_extension(&relative_path, &mime_type)
+                else {
                     continue;
                 };
-                moved += c
-                    .execute(
-                        "UPDATE media SET parent_uri=?3 WHERE library_id=?1 AND media_id=?2 AND parent_uri<>?3",
-                        params![library, media_id, parent],
+                let placement =
+                    crate::cloud::paths::download_placement(&download_root, &relative_path);
+                let target = placement.directory.join(format!("{}.{extension}", placement.stem));
+                if target != current && !settled_under_suffix(&current, &target) {
+                    queue.push((media_id, current, target));
+                }
+            }
+            let mut moved = 0;
+            // A move whose target is still occupied by another pending move
+            // waits for that move to free the name; an exact swap never
+            // unblocks, so the final pass gives the blocked side a suffixed
+            // name instead of losing the rename.
+            let rounds = queue.len() + 1;
+            for round in 0..rounds {
+                if queue.is_empty() {
+                    break;
+                }
+                let forced = round + 1 == rounds;
+                let round_moves = std::mem::take(&mut queue);
+                let mut occupied: std::collections::HashSet<PathBuf> =
+                    round_moves.iter().map(|(_, current, _)| current.clone()).collect();
+                for (media_id, current, target) in round_moves {
+                    if target.is_file() && occupied.contains(&target) && !forced {
+                        queue.push((media_id, current, target));
+                        continue;
+                    }
+                    let destination = unique_move_target(&current, &target)?;
+                    if let Some(parent) = destination.parent() {
+                        fs::create_dir_all(parent).map_err(error)?;
+                    }
+                    move_file(&current, &destination).map_err(error)?;
+                    let display_name = destination
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    let parent_uri = destination
+                        .parent()
+                        .map(|parent| parent.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    c.execute(
+                        "UPDATE media SET source_uri=?3,parent_uri=?4,display_name=?5 WHERE library_id=?1 AND media_id=?2",
+                        params![
+                            library,
+                            media_id,
+                            destination.to_string_lossy().into_owned(),
+                            parent_uri,
+                            display_name
+                        ],
                     )
                     .map_err(error)?;
+                    occupied.remove(&current);
+                    moved += 1;
+                }
+            }
+            if moved > 0 {
+                c.execute(
+                    "UPDATE libraries SET revision=revision+1 WHERE library_id=?1",
+                    params![library],
+                )
+                .map_err(error)?;
             }
             Ok(moved)
         })
@@ -1534,6 +1800,7 @@ mod tests {
                 last_sync_ms: None,
                 upload_scope: "none".into(),
                 is_active: true,
+                download_root: None,
             })
             .unwrap();
         library.cloud_set_active_account(ACCOUNT.into()).unwrap();
@@ -1642,6 +1909,21 @@ mod tests {
             thumbnail_path: None,
             thumbnail_sha256: None,
         }
+    }
+
+    /// A binding whose original was downloaded by this client: only these
+    /// carry a private thumbnail and may be moved or removed by cloud sync.
+    fn downloaded_input(
+        source_id: &str,
+        photo_id: &str,
+        relative_path: &str,
+        path: &Path,
+        favorite: bool,
+    ) -> RemoteMediaInput {
+        let mut input = remote_input(source_id, photo_id, relative_path, path, favorite);
+        input.thumbnail_path = Some(format!("/private/cloud/{photo_id}/thumbnail.jpg"));
+        input.thumbnail_sha256 = Some("0".repeat(64));
+        input
     }
 
     fn record(name: &str, deleted: bool, json: Option<&str>) -> StoredCloudRecord {
@@ -1844,6 +2126,7 @@ mod tests {
                 last_sync_ms: None,
                 upload_scope: "none".into(),
                 is_active: false,
+                download_root: None,
             })
             .unwrap();
         let photo = library.photo(media).unwrap();
@@ -2141,8 +2424,23 @@ mod tests {
 
     #[test]
     fn managed_source_stays_out_of_normal_source_handling() {
+        // Managed sources only exist as rows of libraries that downloaded
+        // into the private cloud folder before the real download root; they
+        // keep their protected handling until the cleanup removes them.
         let (root, library) = open_library();
-        let managed = library.ensure_managed_cloud_source(ACCOUNT).unwrap();
+        let managed_dir = root.path().join("cloud").join(ACCOUNT);
+        fs::create_dir_all(&managed_dir).unwrap();
+        let managed = library.add_source(&managed_dir).unwrap();
+        let source_id = managed.clone();
+        library
+            .execute(move |c| {
+                c.execute(
+                    "UPDATE sources SET source_kind='managed',recursive=0 WHERE source_id=?1",
+                    params![source_id],
+                )
+                .map_err(error)
+            })
+            .unwrap();
         let source = library
             .sources()
             .unwrap()
@@ -2151,20 +2449,10 @@ mod tests {
             .unwrap();
         assert_eq!(source.kind, "managed");
         assert_eq!(library.remove_source(managed).unwrap_err(), "ManagedSource");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = fs::metadata(root.path().join("cloud").join(ACCOUNT))
-                .unwrap()
-                .permissions()
-                .mode()
-                & 0o777;
-            assert_eq!(mode, 0o700);
-        }
     }
 
     #[test]
-    fn bound_media_rejects_file_mutations() {
+    fn bound_media_stays_editable() {
         let (root, library) = open_library();
         let folder = root.path().join("photos");
         fs::create_dir_all(&folder).unwrap();
@@ -2177,43 +2465,71 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(
-            library.trash_media(vec![media_id.clone()]).unwrap_err(),
-            "CloudMediaReadOnly"
-        );
-        assert_eq!(
-            library
-                .rename_media(media_id.clone(), "renamed.jpg".into())
-                .unwrap_err(),
-            "CloudMediaReadOnly"
-        );
-        assert!(path.exists());
-        assert_eq!(library.photo(media_id).unwrap().state, "active");
+        library
+            .rename_media(media_id.clone(), "renamed.jpg".into())
+            .unwrap();
+        assert!(folder.join("renamed.jpg").is_file());
+        assert!(!path.exists());
+        assert_eq!(library.photo(media_id.clone()).unwrap().name, "renamed.jpg");
+
+        library.trash_media(vec![media_id.clone()]).unwrap();
+        assert_eq!(library.photo(media_id).unwrap().state, "trashed");
         assert_eq!(library.cloud_bound_media_ids().unwrap().len(), 1);
     }
 
-    fn path_binding_fixture() -> (tempfile::TempDir, LocalLibrary, String, Vec<String>) {
-        let (root, library) = open_library();
-        let source = library.ensure_managed_cloud_source(ACCOUNT).unwrap();
+    fn path_binding_fixture() -> (
+        tempfile::TempDir,
+        tempfile::TempDir,
+        LocalLibrary,
+        String,
+        Vec<String>,
+    ) {
+        let root = tempfile::TempDir::new().unwrap();
+        let downloads = tempfile::TempDir::new().unwrap();
+        let library = LocalLibrary::open(root.path()).unwrap();
+        library
+            .cloud_upsert_account(CloudAccount {
+                account_id: ACCOUNT.into(),
+                endpoint: "http://127.0.0.1:8790".into(),
+                username: "alice".into(),
+                user_id: Some("user-1".into()),
+                token_file: format!("cloud/{ACCOUNT}/session.token"),
+                token_expires_at_ms: None,
+                device_id: "device-1".into(),
+                created_at_ms: 1,
+                last_sync_ms: None,
+                upload_scope: "none".into(),
+                is_active: true,
+                download_root: None,
+            })
+            .unwrap();
+        library.cloud_set_active_account(ACCOUNT.into()).unwrap();
+        let source = library
+            .set_cloud_download_root(ACCOUNT, downloads.path().to_str().unwrap())
+            .unwrap();
         let mut media_ids = Vec::new();
+        // A flat cloud path publishes into the Cloud album of the root, so
+        // the fixture mirrors what a download would have written.
+        let cloud_album = downloads.path().join("Cloud");
+        fs::create_dir_all(&cloud_album).unwrap();
         for name in ["one", "two"] {
-            let path = root.path().join(format!("{name}.jpg"));
+            let path = cloud_album.join(format!("{name}.jpg"));
             fs::write(&path, b"cloud fixture").unwrap();
             media_ids.push(
                 library
                     .cloud_publish_remote_media(
                         ACCOUNT.into(),
-                        remote_input(&source, name, &format!("{name}.jpg"), &path, false),
+                        downloaded_input(&source, name, &format!("{name}.jpg"), &path, false),
                     )
                     .unwrap(),
             );
         }
-        (root, library, source, media_ids)
+        (root, downloads, library, source, media_ids)
     }
 
     #[test]
     fn binding_paths_swap_atomically_without_changing_media_identity() {
-        let (_root, library, _source, media_ids) = path_binding_fixture();
+        let (_root, _downloads, library, _source, media_ids) = path_binding_fixture();
         library
             .cloud_refresh_binding_paths(
                 ACCOUNT.into(),
@@ -2237,6 +2553,51 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_cloud_rename_moves_the_file_into_the_new_album() {
+        let (_root, downloads, library, _source, media_ids) = path_binding_fixture();
+        library
+            .cloud_refresh_binding_paths(
+                ACCOUNT.into(),
+                vec![
+                    ("one".into(), "Camera/moved.jpg".into()),
+                    ("two".into(), "two.jpg".into()),
+                ],
+            )
+            .unwrap();
+        let moved = library
+            .cloud_sync_remote_paths(ACCOUNT.into(), downloads.path().to_path_buf())
+            .unwrap();
+        assert_eq!(moved, 1);
+        let expected = downloads.path().join("Camera").join("moved.jpg");
+        assert!(expected.is_file(), "the file must follow its cloud path");
+        assert!(!downloads.path().join("one.jpg").exists());
+        let photo = library.photo(media_ids[0].clone()).unwrap();
+        assert_eq!(photo.path, expected.to_string_lossy());
+        assert_eq!(photo.name, "moved.jpg");
+        // The photo the cloud did not touch keeps its file.
+        assert!(downloads.path().join("Cloud").join("two.jpg").is_file());
+    }
+
+    #[test]
+    fn a_download_root_must_be_absolute_and_outside_the_data_root() {
+        let (root, library) = open_library();
+        let inside = root.path().join("nested");
+        fs::create_dir_all(&inside).unwrap();
+        assert_eq!(
+            library
+                .set_cloud_download_root(ACCOUNT, inside.to_str().unwrap())
+                .unwrap_err(),
+            "DownloadRootInsideDataRoot"
+        );
+        assert_eq!(
+            library
+                .set_cloud_download_root(ACCOUNT, "not/absolute")
+                .unwrap_err(),
+            "DownloadRootMustBeAbsolute"
+        );
+    }
+
     fn count_rows(library: &LocalLibrary, table: &str) -> i64 {
         let table = table.to_owned();
         library
@@ -2249,19 +2610,30 @@ mod tests {
 
     #[test]
     fn clearing_the_cloud_state_removes_the_downloads_and_the_catalog() {
-        let (root, library, _source, media_ids) = path_binding_fixture();
-        // The downloaded media and the session token live under the cloud
-        // folder; the user never has to find it by hand.
+        let (root, downloads, library, _source, media_ids) = path_binding_fixture();
+        // The session token lives under the private cloud folder of the data
+        // root; the user never has to find it by hand.
         let cloud = root.path().join("cloud").join(ACCOUNT);
         fs::create_dir_all(cloud.join("media")).unwrap();
         fs::write(cloud.join("session.token"), b"token").unwrap();
+        // A file the user dropped into the download root is not a download.
+        let user_file = downloads.path().join("user-file.jpg");
+        fs::write(&user_file, b"user owned").unwrap();
         assert_eq!(library.cloud_bindings(ACCOUNT.into()).unwrap().len(), 2);
         assert_eq!(library.cloud_bound_media_ids().unwrap().len(), 2);
         assert!(count_rows(&library, "cloud_accounts") > 0);
 
         let removed = library.clear_cloud_state().unwrap();
         assert_eq!(removed, 2, "the downloaded photos were not removed");
-        // The bytes and the session are gone.
+        // The downloaded bytes and the session are gone; the download root
+        // itself and the user's own file in it stay.
+        assert!(!downloads.path().join("Cloud").join("one.jpg").exists());
+        assert!(!downloads.path().join("Cloud").join("two.jpg").exists());
+        assert!(downloads.path().is_dir(), "the download root was removed");
+        assert!(
+            user_file.is_file(),
+            "a user file inside the root was deleted"
+        );
         assert!(!cloud.exists(), "the cloud folder survived the cleanup");
         // The catalog rows are gone with them.
         assert!(library.cloud_bindings(ACCOUNT.into()).unwrap().is_empty());
@@ -2289,15 +2661,56 @@ mod tests {
                 .total,
             0
         );
-        // The photos the user owns are untouched.
-        assert!(root.path().join("one.jpg").is_file());
-        assert!(root.path().join("two.jpg").is_file());
         assert_eq!(media_ids.len(), 2);
     }
 
     #[test]
+    fn cloud_moves_and_cleanup_keep_uploaded_photos_in_the_download_root() {
+        let (_root, library) = open_library();
+        let downloads = tempfile::TempDir::new().unwrap();
+        library
+            .set_cloud_download_root(ACCOUNT, downloads.path().to_str().unwrap())
+            .unwrap();
+        let folder = downloads.path().join("Camera");
+        fs::create_dir_all(&folder).unwrap();
+        let (source, media_id) = seed_photo(&library, &folder, "mine.jpg");
+        let path = folder.join("mine.jpg");
+        library
+            .cloud_publish_remote_media(
+                ACCOUNT.into(),
+                remote_input(&source, "uploaded", "Camera/mine.jpg", &path, false),
+            )
+            .unwrap();
+
+        // A cloud rename never rearranges a file this client uploaded; only
+        // downloaded originals mirror the remote path.
+        library
+            .cloud_refresh_binding_paths(
+                ACCOUNT.into(),
+                vec![("uploaded".into(), "Other/renamed.jpg".into())],
+            )
+            .unwrap();
+        assert_eq!(
+            library
+                .cloud_sync_remote_paths(ACCOUNT.into(), downloads.path().to_path_buf(),)
+                .unwrap(),
+            0
+        );
+        assert!(path.is_file());
+        assert!(!downloads.path().join("Other").join("renamed.jpg").exists());
+
+        assert_eq!(library.clear_cloud_state().unwrap(), 0);
+        assert!(path.is_file(), "an uploaded original was deleted");
+        assert_eq!(
+            library.photo(media_id).unwrap().path,
+            path.to_str().unwrap()
+        );
+        assert!(library.cloud_bound_media_ids().unwrap().is_empty());
+    }
+
+    #[test]
     fn orphan_binding_releases_its_path_and_can_later_return() {
-        let (root, library, source, media_ids) = path_binding_fixture();
+        let (_root, downloads, library, source, media_ids) = path_binding_fixture();
         library
             .cloud_refresh_binding_paths(
                 ACCOUNT.into(),
@@ -2310,12 +2723,12 @@ mod tests {
         library
             .cloud_deactivate_orphan_bindings(ACCOUNT.into(), vec!["two".into(), "three".into()])
             .unwrap();
-        let path = root.path().join("three.jpg");
+        let path = downloads.path().join("Cloud").join("three.jpg");
         fs::write(&path, b"cloud fixture").unwrap();
         library
             .cloud_publish_remote_media(
                 ACCOUNT.into(),
-                remote_input(&source, "three", "one.jpg", &path, false),
+                downloaded_input(&source, "three", "one.jpg", &path, false),
             )
             .unwrap();
         let bindings = library.cloud_bindings(ACCOUNT.into()).unwrap();
@@ -2323,7 +2736,7 @@ mod tests {
         assert!(binding_path(&library, "one").starts_with('/'));
         assert_eq!(orphan.media_id, media_ids[0]);
         assert_eq!(library.cloud_bound_media_ids().unwrap().len(), 3);
-        assert!(root.path().join("one.jpg").is_file());
+        assert!(downloads.path().join("Cloud").join("one.jpg").is_file());
         library
             .cloud_refresh_binding_paths(
                 ACCOUNT.into(),
@@ -2346,7 +2759,7 @@ mod tests {
 
     #[test]
     fn binding_path_conflict_rolls_back_the_entire_remap() {
-        let (_root, library, _source, _ids) = path_binding_fixture();
+        let (_root, _downloads, library, _source, _ids) = path_binding_fixture();
         assert!(
             library
                 .cloud_refresh_binding_paths(
@@ -2415,6 +2828,7 @@ mod tests {
                 last_sync_ms: None,
                 upload_scope: "none".into(),
                 is_active: false,
+                download_root: None,
             })
             .unwrap();
         library.cloud_set_active_account("acct-2".into()).unwrap();

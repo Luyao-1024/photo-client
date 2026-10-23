@@ -320,7 +320,7 @@ impl ThumbnailLoader {
             let mut s = self.inner.state.lock().unwrap();
             let previous = s.cache.remove(&key).map(|(path, _)| path);
             if bad_path.or(previous).is_some_and(|path| {
-                Path::new(&path).starts_with(self.inner.store.root.join("cloud"))
+                Path::new(&path).starts_with(self.inner.store.root.join("cache").join("cloud"))
             }) {
                 if s.bad_cloud.len() >= 512 {
                     s.bad_cloud.clear();
@@ -985,8 +985,12 @@ fn maintain_cache(inner: &Inner, limit: u64) {
     let began = std::time::SystemTime::now();
     if let Ok(dirs) = std::fs::read_dir(&root) {
         for entry in dirs.flatten() {
-            if entry.file_type().is_ok_and(|t| t.is_dir())
-                && !members.contains(&entry.file_name().to_string_lossy().into_owned())
+            let name = entry.file_name().to_string_lossy().into_owned();
+            // `cloud` holds the downloaded cloud thumbnails, not the cache of
+            // one media row; capacity maintenance must never sweep it away.
+            if name != "cloud"
+                && entry.file_type().is_ok_and(|t| t.is_dir())
+                && !members.contains(&name)
                 && entry
                     .metadata()
                     .and_then(|m| m.modified())

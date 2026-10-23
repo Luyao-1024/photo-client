@@ -380,6 +380,16 @@ class AppStrings {
     'Each sync uploads unsynced photos in the selected albums; an empty selection means receive only. Manual upload from the library stays available.',
   );
   String get cloudChooseAlbums => pick('选择相册', 'Choose albums');
+  String get cloudDownloadRoot => pick('下载目录', 'Download folder');
+  String get cloudDownloadRootMissing => pick(
+    '未选择，同步前必须指定一个真实目录',
+    'Not chosen; pick a real folder before syncing',
+  );
+  String get cloudChooseFolder => pick('选择目录', 'Choose folder');
+  String get cloudDownloadRootApplied => pick(
+    '下载目录已保存，云端照片将按相册下载到该目录。',
+    'Download folder saved. Cloud photos arrive in it, sorted into their albums.',
+  );
   String get cloudUploadScopeTitle => pick('选择上传相册', 'Choose upload albums');
   String get cloudUploadScopeReceiveOnly =>
       pick('仅接收（不上传）', 'Receive only (no uploads)');
@@ -416,6 +426,8 @@ class AppStrings {
     'SourceChanged' => pick('照片已发生变化', 'A photo changed'),
     'ThumbnailFailed' => pick('缩略图处理失败', 'Thumbnail failed'),
     'UnsupportedMedia' => pick('存在不支持的媒体格式', 'Unsupported media'),
+    'DownloadRootMissing' => pick('未选择下载目录', 'No download folder'),
+    'DownloadRootUnavailable' => pick('下载目录不可用', 'Download folder unavailable'),
     'GraphInvalid' ||
     'ChangeFailed' => pick('云端数据不完整', 'Cloud data is incomplete'),
     _ => pick('云同步失败', 'Cloud sync failed'),
@@ -495,6 +507,22 @@ class AppStrings {
     'ServerRejected' => pick(
       '服务器拒绝了请求，请稍后重试。',
       'The server rejected the request. Try again later.',
+    ),
+    'DownloadRootMissing' => pick(
+      '尚未选择下载目录。请先选择一个真实目录，云端照片会按相册下载到其中。',
+      'No download folder yet. Choose a real folder first; cloud photos arrive in it, sorted into their albums.',
+    ),
+    'DownloadRootUnavailable' => pick(
+      '下载目录无法创建或不可写，请重新选择。',
+      'The download folder could not be created or written. Choose another one.',
+    ),
+    'DownloadRootMustBeAbsolute' => pick(
+      '下载目录必须是绝对路径，请重新选择。',
+      'The download folder must be an absolute path. Choose it again.',
+    ),
+    'DownloadRootInsideDataRoot' => pick(
+      '下载目录不能位于应用私有数据目录内，请选择一个可见的真实目录。',
+      'The download folder cannot sit inside the app private data. Choose a visible real folder.',
     ),
     _ => pick('云同步失败，请重试。', 'Cloud sync failed. Try again.'),
   };

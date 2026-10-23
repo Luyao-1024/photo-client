@@ -18,7 +18,8 @@ const CLOUD_SCHEMA: &str = include_str!("storage/local-v4.sql");
 const METADATA_SCHEMA: &str = include_str!("storage/local-v5.sql");
 const ACCOUNT_SCHEMA: &str = include_str!("storage/local-v6.sql");
 const SYNC_OBLIGATION_SCHEMA: &str = include_str!("storage/local-v7.sql");
-const SCHEMA_VERSION: i64 = 7;
+const DOWNLOAD_ROOT_SCHEMA: &str = include_str!("storage/local-v8.sql");
+const SCHEMA_VERSION: i64 = 8;
 mod cloud_store;
 mod media_sync;
 mod metadata;
@@ -195,6 +196,9 @@ impl LocalLibrary {
             transaction
                 .execute_batch(SYNC_OBLIGATION_SCHEMA)
                 .map_err(error)?;
+            transaction
+                .execute_batch(DOWNLOAD_ROOT_SCHEMA)
+                .map_err(error)?;
             let installation_id = Uuid::new_v4().to_string();
             let library_id = Uuid::new_v4().to_string();
             transaction
@@ -224,7 +228,8 @@ impl LocalLibrary {
                                     CLOUD_SCHEMA,
                                     METADATA_SCHEMA,
                                     ACCOUNT_SCHEMA,
-                                    SYNC_OBLIGATION_SCHEMA
+                                    SYNC_OBLIGATION_SCHEMA,
+                                    DOWNLOAD_ROOT_SCHEMA
                                 ]
                                 .concat()
                                 .as_bytes()
@@ -1024,7 +1029,7 @@ fn sql_u64(row: &rusqlite::Row<'_>, column: usize) -> rusqlite::Result<u64> {
     u64::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(column, value))
 }
 
-fn unique_destination(folder: &Path, requested: &str) -> Result<PathBuf, String> {
+pub(crate) fn unique_destination(folder: &Path, requested: &str) -> Result<PathBuf, String> {
     let requested = Path::new(requested);
     let file_name = requested
         .file_name()

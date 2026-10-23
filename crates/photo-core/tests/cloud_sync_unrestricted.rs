@@ -308,3 +308,77 @@ async fn purging_a_bound_photo_deletes_both_cloud_records() {
         0
     );
 }
+
+#[test]
+fn logging_out_removes_the_token_and_keeps_the_account() {
+    let root = tempfile::TempDir::new().unwrap();
+    let library = photo_core::local_library::LocalLibrary::open(root.path()).unwrap();
+    let database = rusqlite::Connection::open(root.path().join("library.sqlite")).unwrap();
+    database
+        .execute(
+            "INSERT INTO cloud_accounts(account_id,endpoint,username,token_file,device_id,created_at_ms,is_active) \
+             VALUES('acct','http://127.0.0.1:8790','alice','cloud/acct/session.token','device',1,1)",
+            [],
+        )
+        .unwrap();
+    database
+        .execute(
+            "INSERT INTO cloud_sync_state(account_id,status,updated_at_ms) VALUES('acct','idle',1)",
+            [],
+        )
+        .unwrap();
+    drop(database);
+    let token = root.path().join("cloud").join("acct").join("session.token");
+    std::fs::create_dir_all(token.parent().unwrap()).unwrap();
+    std::fs::write(&token, b"token").unwrap();
+    let engine = photo_core::cloud::CloudEngine::new(library.clone());
+    let status = engine.logout().unwrap();
+    assert!(!status.logged_in, "logout must end the session");
+    assert!(!token.exists(), "logout must remove the session token");
+    let database = rusqlite::Connection::open(root.path().join("library.sqlite")).unwrap();
+    let state: String = database
+        .query_row(
+            "SELECT status FROM cloud_sync_state WHERE account_id='acct'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(state, "logged_out");
+    // The account row survives for offline browsing and a later re-login.
+    let accounts: i64 = database
+        .query_row("SELECT COUNT(*) FROM cloud_accounts", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(accounts, 1);
+}
+
+#[test]
+fn choosing_a_download_root_clears_the_missing_root_error() {
+    let root = TempDir::new().unwrap();
+    let downloads = TempDir::new().unwrap();
+    let library = LocalLibrary::open(root.path()).unwrap();
+    let database = Connection::open(root.path().join("library.sqlite")).unwrap();
+    database
+        .execute(
+            "INSERT INTO cloud_accounts(account_id,endpoint,username,token_file,device_id,created_at_ms,is_active) \
+             VALUES('acct','http://127.0.0.1:8790','alice','cloud/acct/session.token','device',1,1)",
+            [],
+        )
+        .unwrap();
+    database
+        .execute(
+            "INSERT INTO cloud_sync_state(account_id,status,error_code,updated_at_ms) \
+             VALUES('acct','error','DownloadRootMissing',1)",
+            [],
+        )
+        .unwrap();
+    drop(database);
+
+    let engine = photo_core::cloud::CloudEngine::new(library);
+    let status = engine
+        .set_download_root(downloads.path().to_str().unwrap())
+        .unwrap();
+    let canonical = downloads.path().canonicalize().unwrap();
+    assert_eq!(status.download_root.as_deref(), canonical.to_str());
+    assert_eq!(status.error_code, None, "the resolved error still shows");
+    assert_eq!(status.state, "idle");
+}

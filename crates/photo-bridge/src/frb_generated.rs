@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1909000180;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -838267813;
 
 // Section: executor
 
@@ -410,6 +410,43 @@ fn wire__crate__api__cloud_sync__cloud_remove_account_impl(
                     (move || async move {
                         let output_ok =
                             crate::api::cloud_sync::cloud_remove_account(api_account_id).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__cloud_sync__cloud_set_download_root_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "cloud_set_download_root",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::cloud_sync::cloud_set_download_root(api_path).await?;
                         std::result::Result::Ok(output_ok)
                     })()
                     .await,
@@ -1282,6 +1319,7 @@ impl SseDecode for crate::api::cloud_sync::CloudAccountView {
         let mut var_active = <bool>::sse_decode(deserializer);
         let mut var_signedIn = <bool>::sse_decode(deserializer);
         let mut var_lastSyncMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_downloadRoot = <Option<String>>::sse_decode(deserializer);
         return crate::api::cloud_sync::CloudAccountView {
             account_id: var_accountId,
             endpoint: var_endpoint,
@@ -1290,6 +1328,7 @@ impl SseDecode for crate::api::cloud_sync::CloudAccountView {
             active: var_active,
             signed_in: var_signedIn,
             last_sync_ms: var_lastSyncMs,
+            download_root: var_downloadRoot,
         };
     }
 }
@@ -1360,6 +1399,7 @@ impl SseDecode for crate::api::cloud_sync::CloudStatusView {
         let mut var_boundCount = <u32>::sse_decode(deserializer);
         let mut var_uploadScope = <String>::sse_decode(deserializer);
         let mut var_uploadAlbums = <Vec<String>>::sse_decode(deserializer);
+        let mut var_downloadRoot = <Option<String>>::sse_decode(deserializer);
         let mut var_syncing = <bool>::sse_decode(deserializer);
         let mut var_activity =
             <crate::api::cloud_sync::CloudActivityView>::sse_decode(deserializer);
@@ -1381,6 +1421,7 @@ impl SseDecode for crate::api::cloud_sync::CloudStatusView {
             bound_count: var_boundCount,
             upload_scope: var_uploadScope,
             upload_albums: var_uploadAlbums,
+            download_root: var_downloadRoot,
             syncing: var_syncing,
             activity: var_activity,
             accounts: var_accounts,
@@ -1758,41 +1799,47 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__api__cloud_sync__cloud_set_upload_scope_impl(
+        11 => wire__crate__api__cloud_sync__cloud_set_download_root_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        12 => wire__crate__api__cloud_sync__cloud_status_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__cloud_sync__cloud_switch_account_impl(
+        12 => wire__crate__api__cloud_sync__cloud_set_upload_scope_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        14 => wire__crate__api__cloud_sync__cloud_sync_now_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__local_library__empty_trash_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__bootstrap__init_app_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__bootstrap__initialize_impl(port, ptr, rust_vec_len, data_len),
-        18 => {
+        13 => wire__crate__api__cloud_sync__cloud_status_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__cloud_sync__cloud_switch_account_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        15 => wire__crate__api__cloud_sync__cloud_sync_now_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__local_library__empty_trash_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__bootstrap__init_app_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__bootstrap__initialize_impl(port, ptr, rust_vec_len, data_len),
+        19 => {
             wire__crate__api__local_library__library_tools_impl(port, ptr, rust_vec_len, data_len)
         }
-        19 => wire__crate__api__local_library__list_albums_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__local_library__list_photos_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__local_library__open_library_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__local_library__purge_media_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__local_library__rename_media_impl(port, ptr, rust_vec_len, data_len),
-        24 => {
+        20 => wire__crate__api__local_library__list_albums_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__local_library__list_photos_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__local_library__open_library_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__local_library__purge_media_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__local_library__rename_media_impl(port, ptr, rust_vec_len, data_len),
+        25 => {
             wire__crate__api__local_library__restore_media_impl(port, ptr, rust_vec_len, data_len)
         }
-        25 => wire__crate__api__bootstrap__round_trip_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__local_library__save_edited_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__local_library__set_favorite_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__bootstrap__shutdown_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__local_library__thumbnail_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__local_library__trash_media_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__bootstrap__watch_runtime_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__bootstrap__round_trip_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__local_library__save_edited_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__local_library__set_favorite_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__bootstrap__shutdown_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__local_library__thumbnail_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__local_library__trash_media_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__bootstrap__watch_runtime_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1846,6 +1893,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::cloud_sync::CloudAccountView 
             self.active.into_into_dart().into_dart(),
             self.signed_in.into_into_dart().into_dart(),
             self.last_sync_ms.into_into_dart().into_dart(),
+            self.download_root.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1934,6 +1982,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::cloud_sync::CloudStatusView {
             self.bound_count.into_into_dart().into_dart(),
             self.upload_scope.into_into_dart().into_dart(),
             self.upload_albums.into_into_dart().into_dart(),
+            self.download_root.into_into_dart().into_dart(),
             self.syncing.into_into_dart().into_dart(),
             self.activity.into_into_dart().into_dart(),
             self.accounts.into_into_dart().into_dart(),
@@ -2219,6 +2268,7 @@ impl SseEncode for crate::api::cloud_sync::CloudAccountView {
         <bool>::sse_encode(self.active, serializer);
         <bool>::sse_encode(self.signed_in, serializer);
         <Option<i64>>::sse_encode(self.last_sync_ms, serializer);
+        <Option<String>>::sse_encode(self.download_root, serializer);
     }
 }
 
@@ -2268,6 +2318,7 @@ impl SseEncode for crate::api::cloud_sync::CloudStatusView {
         <u32>::sse_encode(self.bound_count, serializer);
         <String>::sse_encode(self.upload_scope, serializer);
         <Vec<String>>::sse_encode(self.upload_albums, serializer);
+        <Option<String>>::sse_encode(self.download_root, serializer);
         <bool>::sse_encode(self.syncing, serializer);
         <crate::api::cloud_sync::CloudActivityView>::sse_encode(self.activity, serializer);
         <Vec<crate::api::cloud_sync::CloudAccountView>>::sse_encode(self.accounts, serializer);

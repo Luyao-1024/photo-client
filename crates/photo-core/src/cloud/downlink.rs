@@ -2,7 +2,7 @@
 //! every referenced file before advancing the zone token.
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use syncserver_client as sdk;
@@ -16,6 +16,13 @@ enum DownloadOutcome {
     Gone,
 }
 
+/// Where this account's downloads publish: the user-chosen real root and the
+/// linked source row it is registered under.
+struct DownloadContext {
+    source_id: String,
+    download_root: PathBuf,
+}
+
 impl CloudEngine {
     pub(super) async fn downlink(
         &self,
@@ -23,7 +30,20 @@ impl CloudEngine {
         report: &mut CloudSyncReport,
     ) -> Result<(), String> {
         let account_id = session.account.account_id.clone();
-        let source_id = store(self.library.ensure_managed_cloud_source(&account_id))?;
+        let download_root = session
+            .account
+            .download_root
+            .clone()
+            .ok_or_else(|| "DownloadRootMissing".to_owned())?;
+        let download_root = PathBuf::from(download_root);
+        let source_id = self
+            .library
+            .add_source(&download_root)
+            .map_err(|_| "DownloadRootUnavailable".to_owned())?;
+        let context = DownloadContext {
+            source_id,
+            download_root,
+        };
         let state = store(self.library.cloud_sync_state(account_id.clone()))?.unwrap_or_default();
         let mut sync_token = state.sync_token;
         let mut snapshot_token = state.snapshot_token;
@@ -133,24 +153,12 @@ impl CloudEngine {
             ),
         )?;
 
-        // A photo that was downloaded before the album mapping existed still
-        // sits in the flat cloud album. It moves into the album of its path
-        // without being downloaded again.
-        let albums: Vec<(String, String)> = graph
-            .photos
-            .iter()
-            .map(|photo| {
-                (
-                    photo.relative_path.clone(),
-                    paths::virtual_album(&self.library.root, &account_id, &photo.relative_path)
-                        .to_string_lossy()
-                        .into_owned(),
-                )
-            })
-            .collect();
+        // The files mirror the cloud path inside the real download root: a
+        // rename or album move on the cloud side moves the local file too,
+        // without downloading it again.
         store(
             self.library
-                .cloud_reparent_media(account_id.clone(), albums),
+                .cloud_sync_remote_paths(account_id.clone(), context.download_root.clone()),
         )?;
 
         // A committed create can reach this graph before its response/binding
@@ -289,7 +297,7 @@ impl CloudEngine {
             if self.library.is_closed() {
                 return Err("LibraryClosed".into());
             }
-            match self.download_photo(session, &source_id, &photo).await? {
+            match self.download_photo(session, &context, &photo).await? {
                 DownloadOutcome::Downloaded => {
                     report.downloaded += 1;
                     self.admitted(false);
@@ -316,7 +324,7 @@ impl CloudEngine {
     async fn download_photo(
         &self,
         session: &CloudSession,
-        source_id: &str,
+        context: &DownloadContext,
         graph_photo: &sdk::RemotePhoto,
     ) -> Result<DownloadOutcome, String> {
         let photo = match session
@@ -329,20 +337,24 @@ impl CloudEngine {
             Err(error) => return Err(sdk_code(&error)),
         };
         let account_id = session.account.account_id.clone();
-        let directory = paths::media_dir(
-            &self.library.root,
-            &account_id,
-            &photo.photo_id,
-            &photo.content_generation,
-        )?;
-        paths::private_directory(&directory)?;
         let original_extension =
             paths::download_extension(&photo.relative_path, &photo.original.mime_type)
                 .ok_or("UnsupportedMedia")?;
         let thumbnail_extension =
             paths::thumbnail_extension(&photo.thumbnail.mime_type).ok_or("UnsupportedMedia")?;
-        let original_path = directory.join(format!("original.{original_extension}"));
-        let thumbnail_path = directory.join(format!("thumbnail.{thumbnail_extension}"));
+        // The original publishes as a real file of a real album directory
+        // inside the download root; the thumbnail stays in the private cache.
+        let placement = paths::download_placement(&context.download_root, &photo.relative_path);
+        fs::create_dir_all(&placement.directory)
+            .map_err(|_| "DownloadRootUnavailable".to_owned())?;
+        let thumbnail_directory = paths::thumbnail_cache_dir(
+            &self.library.root,
+            &account_id,
+            &photo.photo_id,
+            &photo.content_generation,
+        )?;
+        paths::private_directory(&thumbnail_directory)?;
+        let thumbnail_path = thumbnail_directory.join(format!("thumbnail.{thumbnail_extension}"));
 
         let original_descriptor = session
             .connection
@@ -359,6 +371,31 @@ impl CloudEngine {
             .map_err(|error| sdk_code(&error))?
             .hex()
             .to_owned();
+        let expected = original_descriptor
+            .digest()
+            .map_err(|error| sdk_code(&error))?;
+        let wanted = format!("{}.{original_extension}", placement.stem);
+        let mut original_path = placement.directory.join(&wanted);
+        if original_path.exists() {
+            // Verified bytes of an unclaimed file are reused; a name another
+            // photo of this account already owns gets a fresh spelling.
+            let verified = original_path.is_file()
+                && sdk::ContentDigest::from_file(&original_path)
+                    .await
+                    .is_ok_and(|actual| {
+                        actual.size() == expected.size() && actual.hex() == expected.hex()
+                    });
+            let claimed = verified
+                && store(self.library.cloud_path_claimed_by_other(
+                    account_id.clone(),
+                    photo.photo_id.clone(),
+                    original_path.to_string_lossy().into_owned(),
+                ))?;
+            if !verified || claimed {
+                original_path =
+                    crate::local_library::unique_destination(&placement.directory, &wanted)?;
+            }
+        }
         ensure_asset(&session.connection, &original_descriptor, &original_path).await?;
         ensure_asset(&session.connection, &thumbnail_descriptor, &thumbnail_path).await?;
 
@@ -415,24 +452,26 @@ impl CloudEngine {
                     )
                 }
             };
-        let display_name = Path::new(&photo.relative_path)
+        let display_name = original_path
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| "photo".into());
+        let parent_uri = original_path
+            .parent()
+            .map(|parent| parent.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let asset_date_ms = photo.asset_date_ms;
         let sort_time_ms = asset_date_ms
             .or(capture_time_ms)
             .unwrap_or(modified_ns / 1_000_000);
         let input = RemoteMediaInput {
-            source_id: source_id.to_owned(),
+            source_id: context.source_id.clone(),
             photo_id: photo.photo_id.clone(),
             master_id: photo.master_id.clone(),
             content_generation: photo.content_generation.clone(),
             relative_path: photo.relative_path.clone(),
             display_name,
-            parent_uri: paths::virtual_album(&self.library.root, &account_id, &photo.relative_path)
-                .to_string_lossy()
-                .into_owned(),
+            parent_uri,
             path: original_path.to_string_lossy().into_owned(),
             size_bytes,
             modified_ns,

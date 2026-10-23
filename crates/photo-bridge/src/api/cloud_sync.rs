@@ -34,6 +34,7 @@ pub struct CloudAccountView {
     pub active: bool,
     pub signed_in: bool,
     pub last_sync_ms: Option<i64>,
+    pub download_root: Option<String>,
 }
 
 pub struct CloudStatusView {
@@ -52,6 +53,7 @@ pub struct CloudStatusView {
     pub bound_count: u32,
     pub upload_scope: String,
     pub upload_albums: Vec<String>,
+    pub download_root: Option<String>,
     pub syncing: bool,
     pub activity: CloudActivityView,
     pub accounts: Vec<CloudAccountView>,
@@ -199,6 +201,7 @@ fn account_view(account: CloudAccountState) -> CloudAccountView {
         active: account.is_active,
         signed_in: account.signed_in,
         last_sync_ms: account.last_sync_ms,
+        download_root: account.download_root,
     }
 }
 
@@ -220,6 +223,7 @@ fn view(status: CloudStatus, accounts: Vec<CloudAccountState>) -> CloudStatusVie
         bound_count: status.bound_count,
         upload_scope: status.upload_scope,
         upload_albums: status.upload_albums,
+        download_root: status.download_root,
         syncing: activity.syncing,
         activity,
         accounts: accounts.into_iter().map(account_view).collect(),
@@ -450,6 +454,21 @@ pub async fn cloud_set_upload_scope(
     tokio::task::spawn_blocking(move || engine.set_upload_scope(&mode, albums))
         .await
         .map_err(join_error)??;
+    let engine = CloudEngine::new(service()?.store.clone());
+    current_status(&engine).await
+}
+
+/// Choose the real directory the active account's downloads mirror into.
+/// Syncing refuses to run until one is set, so the settings page asks for it
+/// before the first sync and on the `DownloadRootMissing` error.
+pub async fn cloud_set_download_root(path: String) -> Result<CloudStatusView, String> {
+    let _guard = lock().await;
+    let active = service()?;
+    let engine = CloudEngine::new(active.store.clone());
+    tokio::task::spawn_blocking(move || engine.set_download_root(&path))
+        .await
+        .map_err(join_error)??;
+    changed();
     let engine = CloudEngine::new(service()?.store.clone());
     current_status(&engine).await
 }

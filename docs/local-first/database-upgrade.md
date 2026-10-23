@@ -47,3 +47,9 @@ v6 补齐多账号与上传范围：`cloud_accounts` 增加 `upload_scope`、`is
 v7 补齐内容替换与永久删除义务：`media_sync_state` 增加 `path_dirty`、内容与删除各自的版本/确认版本/编辑时间/来源/事件列；`cloud_metadata_operations` 增加 `is_trashed`；新增 `cloud_content_operations`（冻结 generation、条件 revision、原图/缩略图摘要与捕获版本）和 `cloud_delete_operations`（冻结两记录 revision、删除事件与捕获版本）。元数据与内容共享 `dirty=2` 但版本独立，永久删除使用 `dirty=4` 并保留本地墓碑直到云端确认。
 
 升级继续先备份再在单个事务中执行表变更、数据迁移和外键校验。v6 已由真实图库升级验证：备份为 `backups/library-v5-before-v6-1792668540858-5e3e4b9b-6f23-41bf-b4b6-3ca4998bca26.sqlite`。v7 在真实图库启动 Release 时完成升级：`user_version=7`，新表存在，备份为 `backups/library-v6-before-v7-1792674724831-27b533e6-ab26-4f39-ae15-9f6ca055215f.sqlite`；原有照片、绑定和账号保留。定向迁移用例覆盖 v1/v2/v3/v4/v6 到 v7 的数据保留、备份与失败回滚，不运行全量用例。
+
+## 2026-10-24：v1–v7 → v8
+
+v8 为 `cloud_accounts` 增加 `download_root` 列：云同步下行改为把照片按云端相对路径下载进用户选择的真实目录，每个账号各自记录该目录（见[云同步 MVP](../cloud-sync-mvp.md)）。列可空，空值表示尚未选择下载目录，同步以稳定错误码 `DownloadRootMissing` 拒绝运行；选择后经 `set_download_root` 校验（绝对路径、可创建、不得位于应用数据根内）并注册为普通 `linked_directory` 来源。
+
+升级沿用同一模式：先以 SQLite backup API 写备份，再在单个事务中执行 `ALTER TABLE`、版本记录更新与外键校验，失败回滚。既有账号、绑定与同步状态原样保留；旧版受管 `cloud/` 布局中已下载的照片按开发阶段约定不做迁移，继续按原路径可浏览，直到执行“清理缓存与云端数据”一并移除。定向迁移用例覆盖 v7 → v8 加列、账号与数据保留、备份与回滚（`tests/local_library_migration.rs`），不运行全量用例。

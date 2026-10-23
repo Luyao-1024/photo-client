@@ -18,21 +18,78 @@ pub(super) fn is_uuid(value: &str) -> bool {
     Uuid::parse_str(value).is_ok()
 }
 
-pub(super) fn media_dir(
-    root: &Path,
-    account_id: &str,
-    photo_id: &str,
-    generation: &str,
-) -> Result<PathBuf, String> {
-    if !is_uuid(generation) {
-        return Err("GraphInvalid".into());
+/// Where a downloaded photo publishes inside the real download root the user
+/// chose: the album directory mirrors the cloud relative path, and the stem is
+/// the cloud file name without its extension, kept as the user will see it in
+/// a file manager. A path without a usable album segment lands in the flat
+/// `Cloud` album of the root.
+pub(crate) struct DownloadPlacement {
+    pub(crate) directory: PathBuf,
+    pub(crate) stem: String,
+}
+
+pub(crate) fn download_placement(download_root: &Path, relative_path: &str) -> DownloadPlacement {
+    let segments: Vec<&str> = relative_path.split('/').collect();
+    let file_name = segments.last().copied().unwrap_or_default();
+    let mut directory = download_root.to_path_buf();
+    let mut placed = false;
+    for segment in segments.iter().take(segments.len().saturating_sub(1)) {
+        if download_album_segment(segment) {
+            directory = directory.join(segment);
+            placed = true;
+        }
     }
-    Ok(root
-        .join("cloud")
-        .join(account_id)
-        .join("media")
-        .join(media_folder(photo_id)?)
-        .join(generation))
+    if !placed {
+        directory = download_root.join("Cloud");
+    }
+    DownloadPlacement {
+        directory,
+        stem: download_stem(file_name),
+    }
+}
+
+/// The cloud file name as a real local name. Uploaded paths already carry a
+/// safe, unique spelling that must survive the round trip; a foreign server
+/// may still send separators, control bytes or a leading dot, which the
+/// scanner would hide or the filesystem would reinterpret.
+fn download_stem(file_name: &str) -> String {
+    let stem = Path::new(file_name)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("");
+    let mut output = String::with_capacity(stem.len().min(200));
+    for character in stem.chars() {
+        let mapped =
+            if character == '/' || character == '\\' || character == '\0' || character.is_control()
+            {
+                '-'
+            } else {
+                character
+            };
+        output.push(mapped);
+        if output.len() >= 200 {
+            break;
+        }
+    }
+    let trimmed =
+        output.trim_matches(|character: char| character == '.' || character.is_whitespace());
+    if trimmed.is_empty() {
+        "photo".into()
+    } else {
+        trimmed.to_owned()
+    }
+}
+
+/// An album directory segment the scanner will actually visit: everything the
+/// wire accepts, minus dot-prefixed segments the local scan treats as hidden
+/// and the reserved service directories.
+fn download_album_segment(segment: &str) -> bool {
+    safe_segment(segment)
+        && !segment.starts_with('.')
+        && !matches!(
+            segment,
+            ".syncserver" | ".photoviewer-sync" | ".sync-staging"
+        )
 }
 
 /// The directory name of a photo inside the media folder.
@@ -74,37 +131,30 @@ fn digest(value: &str) -> u32 {
     hash
 }
 
-/// The album a downloaded photo belongs to.
-///
-/// The album mirrors the cloud relative path, so a photo that was uploaded
-/// from an album comes back into an album with the same name instead of one
-/// flat "Cloud" album. The path is virtual: the bytes stay in the per
-/// generation media folders.
-pub(super) fn virtual_album(root: &Path, account_id: &str, relative_path: &str) -> PathBuf {
-    let album = album_path(relative_path);
-    let base = root.join("cloud").join(account_id);
-    if album.is_empty() {
-        return base.join("Cloud");
+/// The private cache directory of a downloaded cloud thumbnail. It stays out
+/// of the download root so a real album folder only ever holds photo files.
+pub(super) fn thumbnail_cache_dir(
+    root: &Path,
+    account_id: &str,
+    photo_id: &str,
+    generation: &str,
+) -> Result<PathBuf, String> {
+    if !is_uuid(generation) {
+        return Err("GraphInvalid".into());
     }
-    let mut path = base;
-    for segment in album.split('/') {
-        path = path.join(segment);
+    if account_id.is_empty()
+        || !account_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err("Internal".into());
     }
-    path
-}
-
-/// The album directory of a cloud relative path: every segment except the
-/// file name. Unsafe segments are dropped, so the result can never escape
-/// the cloud folder.
-pub(super) fn album_path(relative_path: &str) -> String {
-    let segments: Vec<&str> = relative_path.split('/').collect();
-    let mut parts = Vec::new();
-    for segment in segments.iter().take(segments.len().saturating_sub(1)) {
-        if safe_segment(segment) {
-            parts.push(*segment);
-        }
-    }
-    parts.join("/")
+    Ok(root
+        .join("cache")
+        .join("cloud")
+        .join(account_id)
+        .join(media_folder(photo_id)?)
+        .join(generation))
 }
 
 /// A path segment that is safe on the wire and as a directory name.
@@ -136,7 +186,7 @@ pub(super) fn safe_album(album: &str) -> String {
     parts.join("/")
 }
 
-pub(super) fn download_extension(relative_path: &str, mime: &str) -> Option<String> {
+pub(crate) fn download_extension(relative_path: &str, mime: &str) -> Option<String> {
     let from_path = Path::new(relative_path)
         .extension()
         .and_then(|extension| extension.to_str())
@@ -319,22 +369,22 @@ mod tests {
     }
 
     #[test]
-    fn a_downloaded_photo_lands_in_the_album_of_its_path() {
-        let root = Path::new("/tmp/root");
-        assert_eq!(
-            virtual_album(root, "acct", "Camera/2026-09/IMG_1000.png"),
-            Path::new("/tmp/root/cloud/acct/Camera/2026-09")
-        );
-        assert_eq!(
-            virtual_album(root, "acct", "IMG_1000.png"),
-            Path::new("/tmp/root/cloud/acct/Cloud")
-        );
-        // An unsafe segment is dropped, so the album stays inside the cloud
-        // folder.
-        assert_eq!(
-            virtual_album(root, "acct", "../escape/IMG_1000.png"),
-            Path::new("/tmp/root/cloud/acct/escape")
-        );
+    fn a_download_lands_in_the_real_album_of_its_path() {
+        let root = Path::new("/tmp/downloads");
+        let camera = download_placement(root, "Camera/2026-09/IMG_1000.png");
+        assert_eq!(camera.directory, Path::new("/tmp/downloads/Camera/2026-09"));
+        // The cloud spelling, including its unique suffix, stays readable.
+        assert_eq!(camera.stem, "IMG_1000");
+        let unique = download_placement(root, "Camera/IMG_1000-01234567-fedcba98.jpg");
+        assert_eq!(unique.stem, "IMG_1000-01234567-fedcba98");
+        // A path without a usable album segment lands in the flat Cloud album.
+        let flat = download_placement(root, "IMG_1000.png");
+        assert_eq!(flat.directory, Path::new("/tmp/downloads/Cloud"));
+        // Unsafe and hidden segments are dropped, so the album stays inside
+        // the download root and the scanner keeps seeing it.
+        let hidden = download_placement(root, ".hidden/Camera/../IMG.png");
+        assert_eq!(hidden.directory, Path::new("/tmp/downloads/Camera"));
+        assert_eq!(hidden.stem, "IMG");
     }
 
     #[test]
@@ -373,8 +423,20 @@ mod tests {
             download_extension("album/noext", "application/x-test"),
             None
         );
-        // A non UUID generation is still refused: the generation is the
-        // content identity and must stay a UUID.
-        assert!(media_dir(Path::new("/tmp"), "acct", "not-a-uuid", "also-no").is_err());
+        // The thumbnail cache lives under the private data root, and the
+        // generation is the content identity and must stay a UUID.
+        let generation = "5c9d3d93-8870-4ac1-ac7d-c9da4c485358";
+        let cache_dir =
+            thumbnail_cache_dir(Path::new("/tmp"), "acct", "seed-photo-0", generation).unwrap();
+        assert!(cache_dir.ends_with(generation));
+        let folder = cache_dir.parent().unwrap();
+        assert_eq!(folder.parent().unwrap(), Path::new("/tmp/cache/cloud/acct"));
+        assert!(
+            folder
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("seed-photo-0-"))
+        );
+        assert!(thumbnail_cache_dir(Path::new("/tmp"), "acct", "p", "also-no").is_err());
     }
 }

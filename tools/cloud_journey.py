@@ -308,22 +308,30 @@ def parse_bindings(database: Path) -> list[dict]:
         connection.row_factory = sqlite3.Row
         rows = connection.execute(
             "SELECT b.photo_id, b.content_generation, b.media_id, b.relative_path, "
-            "b.cloud_favorite, b.favorite_dirty, b.thumbnail_path, b.thumbnail_sha256, "
+            "b.cloud_favorite, COALESCE(s.dirty,0) AS sync_dirty, "
+            "COALESCE(s.path_dirty,0) AS path_dirty, "
+            "b.thumbnail_path, b.thumbnail_sha256, "
             "m.source_uri, m.favorite AS local_favorite, m.state AS media_state "
             "FROM cloud_bindings b JOIN media m "
             "ON m.library_id=b.library_id AND m.media_id=b.media_id "
+            "LEFT JOIN media_sync_state s "
+            "ON s.library_id=b.library_id AND s.media_id=b.media_id "
             "ORDER BY b.relative_path"
         ).fetchall()
         return [dict(row) for row in rows]
 
 
 def downloaded_asset(root: Path, binding: dict, role: str) -> Path:
-    account, = _cloud_accounts(root)
-    directory = root / "cloud" / account / "media" / binding["photo_id"] / binding["content_generation"]
-    matches = sorted(directory.glob(f"{role}.*"))
-    if len(matches) != 1:
-        raise CloudJourneyError(f"expected one {role} under {directory}")
-    return matches[0]
+    # Downloads are real files: the original sits at its media row's path in
+    # the account's download directory, the thumbnail in the private cache.
+    field = "source_uri" if role == "original" else "thumbnail_path"
+    path = binding.get(field)
+    if not path:
+        raise CloudJourneyError(f"binding has no {role} path")
+    result = Path(path)
+    if not result.is_file():
+        raise CloudJourneyError(f"expected one {role} at {result}")
+    return result
 
 
 def _cloud_accounts(root: Path) -> list[str]:
@@ -341,7 +349,8 @@ def verify_client_files(root: Path, bindings: list[dict],
     checks = []
     for binding in bindings:
         # Upload bindings point at the local source and carry no downloaded
-        # thumbnail; only remote media has files under cloud/<account>/media.
+        # thumbnail; downloaded originals sit in the real download root and
+        # their thumbnails in the private cache.
         if not binding["thumbnail_sha256"]:
             continue
         original = downloaded_asset(root, binding, "original")
@@ -444,8 +453,9 @@ def verify_server(server: SyncServer, root_a: Path, root_b: Path) -> dict:
     ]
     if len(local_favorite) != 2:
         raise CloudJourneyError("the upload root did not apply the remote favorites")
-    if any(binding["favorite_dirty"] for binding in bindings_a + bindings_b):
-        raise CloudJourneyError("a favorite is still dirty after the final sync")
+    if any(binding["sync_dirty"] or binding["path_dirty"]
+           for binding in bindings_a + bindings_b):
+        raise CloudJourneyError("a sync obligation is still dirty after the final sync")
     return {
         "summary": summary,
         "storage": storage,

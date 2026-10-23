@@ -132,6 +132,33 @@ class _CloudSyncSettingsPageState extends ConsumerState<CloudSyncSettingsPage> {
           duration: const Duration(seconds: 4),
         ),
       );
+    // A sweep without a download folder asks for one instead of failing
+    // silently behind the error text.
+    if (code == 'DownloadRootMissing') {
+      unawaited(_chooseDownloadRoot());
+    }
+  }
+
+  Future<void> _chooseDownloadRoot() async {
+    final picker = ref.read(sourcePickerProvider);
+    if (picker == null) return;
+    final String? directory;
+    try {
+      directory = await picker.chooseDirectory();
+    } catch (_) {
+      return;
+    }
+    if (directory == null || !mounted) return;
+    final code = await ref
+        .read(cloudSyncProvider.notifier)
+        .setDownloadRoot(directory);
+    if (!mounted) return;
+    final strings = AppStrings.of(context);
+    _notify(
+      code == null
+          ? strings.cloudDownloadRootApplied
+          : strings.cloudError(code),
+    );
   }
 
   Future<void> _setUploadScope() async {
@@ -280,6 +307,29 @@ class _CloudSyncSettingsPageState extends ConsumerState<CloudSyncSettingsPage> {
               _accountTile(cloud, busy, strings, showLogin: !showSignIn)
             else
               _signedOutTile(busy, strings, showLogin: !showSignIn),
+            if (showAccount)
+              ListTile(
+                key: const ValueKey('cloud-download-root'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(strings.cloudDownloadRoot),
+                subtitle: Text(
+                  cloud.status.downloadRoot ?? strings.cloudDownloadRootMissing,
+                  style: cloud.status.downloadRoot == null
+                      ? TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        )
+                      : null,
+                ),
+                trailing: TextButton(
+                  key: const ValueKey('cloud-choose-download-root'),
+                  onPressed: busy
+                      ? null
+                      : () => unawaited(_chooseDownloadRoot()),
+                  child: Text(strings.cloudChooseFolder),
+                ),
+              ),
             SwitchListTile(
               key: const ValueKey('cloud-auto-sync'),
               contentPadding: EdgeInsets.zero,

@@ -208,6 +208,7 @@ pub struct Fixture {
     pub db: Connection,
     pub _root: TempDir,
     pub _originals: TempDir,
+    pub _downloads: TempDir,
     pub file: PathBuf,
     pub media_id: String,
     pub photo_id: String,
@@ -270,6 +271,11 @@ impl Fixture {
             .login(&server.endpoint, "review", &server.password)
             .await
             .unwrap();
+        // Syncing requires a real download root, exactly like the product.
+        let downloads = tempfile::tempdir().unwrap();
+        engine
+            .set_download_root(downloads.path().to_str().unwrap())
+            .unwrap();
         successful(&engine.sync_now().await.unwrap());
         let db = Connection::open(root.path().join("library.sqlite")).unwrap();
         let initial_token = db
@@ -325,6 +331,7 @@ impl Fixture {
             db,
             _root: root,
             _originals: originals,
+            _downloads: downloads,
             file,
             media_id,
             photo_id,

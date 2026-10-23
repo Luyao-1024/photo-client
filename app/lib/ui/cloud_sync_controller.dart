@@ -340,6 +340,28 @@ class CloudSyncController extends Notifier<CloudSyncState> {
     }
   }
 
+  /// Choose the real directory the active account's downloads mirror into.
+  /// Downloads refuse to run without one, so the first choice also unlocks
+  /// the next sweep.
+  Future<String?> setDownloadRoot(String path) async {
+    final gateway = _gateway;
+    if (gateway == null || _disposed || state.busy) return 'Internal';
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final status = await gateway.cloudSetDownloadRoot(path);
+      if (_disposed) return null;
+      state = state.copyWith(busy: false, status: status, clearError: true);
+      await _refreshLibrary();
+      return null;
+    } catch (error) {
+      final code = cloudErrorCode(error);
+      if (!_disposed) {
+        state = state.copyWith(busy: false, errorCode: code);
+      }
+      return code;
+    }
+  }
+
   Future<CloudSyncReport?> syncNow() async {
     final gateway = _gateway;
     if (gateway == null || _disposed || state.busy || !state.loggedIn) {

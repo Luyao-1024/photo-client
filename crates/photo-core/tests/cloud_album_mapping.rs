@@ -65,12 +65,17 @@ async fn a_photo_keeps_its_album_from_upload_to_download() {
     let server = Server::start().await;
     let originals = tempfile::tempdir().unwrap();
     let uploader_root = tempfile::tempdir().unwrap();
+    let uploader_downloads = tempfile::tempdir().unwrap();
     let (uploader, media_id) = library_with_album(&uploader_root, &originals).await;
 
     let engine = CloudEngine::new(uploader.clone());
     engine
         .login(&server.endpoint, "review", &server.password)
         .await
+        .unwrap();
+    // Every account names a real download root before its first sync.
+    engine
+        .set_download_root(uploader_downloads.path().to_str().unwrap())
         .unwrap();
     // An upload waits for its thumbnail, exactly like the product does.
     let thumbnails = photo_core::thumbnail_loader::ThumbnailLoader::new(uploader.clone(), 1);
@@ -97,26 +102,44 @@ async fn a_photo_keeps_its_album_from_upload_to_download() {
         "the cloud record lost the album: {relative_path}"
     );
 
-    // A second client downloads the photo into the album of the same name.
+    // A second client downloads the photo as a real file of a real album
+    // directory inside its own download root.
     let reader_root = tempfile::tempdir().unwrap();
+    let reader_downloads = tempfile::tempdir().unwrap();
     let reader = LocalLibrary::open(reader_root.path()).unwrap();
     let reader_engine = CloudEngine::new(reader.clone());
     reader_engine
         .login(&server.endpoint, "review", &server.password)
         .await
         .unwrap();
+    reader_engine
+        .set_download_root(reader_downloads.path().to_str().unwrap())
+        .unwrap();
     let report = reader_engine.sync_now().await.unwrap();
     assert_eq!(report.failed, 0, "{report:?}");
     assert_eq!(report.downloaded, 1, "{report:?}");
 
     let reader_db = rusqlite::Connection::open(reader_root.path().join("library.sqlite")).unwrap();
-    let parent: String = reader_db
-        .query_row("SELECT parent_uri FROM media", [], |r| r.get(0))
+    let (parent, path): (String, String) = reader_db
+        .query_row("SELECT parent_uri,source_uri FROM media", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
         .unwrap();
+    let album_directory = reader_downloads.path().join("Trip");
     assert!(
         parent.ends_with("/Trip"),
         "the downloaded photo is not in the album of its path: {parent}"
     );
+    assert_eq!(
+        std::path::Path::new(&path).parent().unwrap(),
+        album_directory,
+        "the original is not a real file of the album directory: {path}"
+    );
+    let file = std::path::Path::new(&path);
+    assert!(file.is_file(), "the original never landed on disk: {path}");
+    assert_eq!(file.extension().and_then(|e| e.to_str()), Some("jpg"));
+    // The bytes stay out of the private cloud folder of the data root.
+    assert!(!reader_root.path().join("cloud").join("media").exists());
     let albums = reader.list_albums().unwrap();
     assert!(
         albums
@@ -125,37 +148,8 @@ async fn a_photo_keeps_its_album_from_upload_to_download() {
         "the album of the downloaded photo is missing: {albums:?}"
     );
 
-    // A photo that was downloaded before the album mapping existed still sits
-    // in the flat cloud album. The next sync moves it into the album of its
-    // path, without downloading the bytes again.
-    let account = fs::read_dir(reader_root.path().join("cloud"))
-        .unwrap()
-        .next()
-        .unwrap()
-        .unwrap()
-        .path()
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
-    let flat = reader_root
-        .path()
-        .join("cloud")
-        .join(&account)
-        .join("Cloud")
-        .to_string_lossy()
-        .into_owned();
-    reader_db
-        .execute("UPDATE media SET parent_uri=?1", [&flat])
-        .unwrap();
+    // A settled download is not downloaded again.
     let report = reader_engine.sync_now().await.unwrap();
     assert_eq!(report.failed, 0, "{report:?}");
     assert_eq!(report.downloaded, 0, "the photo was downloaded again");
-    let parent: String = reader_db
-        .query_row("SELECT parent_uri FROM media", [], |r| r.get(0))
-        .unwrap();
-    assert!(
-        parent.ends_with("/Trip"),
-        "the photo did not move into the album of its path: {parent}"
-    );
 }

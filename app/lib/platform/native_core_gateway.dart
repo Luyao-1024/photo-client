@@ -382,6 +382,7 @@ final class NativeCoreGateway
         active: account.active,
         signedIn: account.signedIn,
         lastSyncMs: account.lastSyncMs?.toInt(),
+        downloadRoot: account.downloadRoot,
       );
 
   CloudActivity _cloudActivity(native_cloud.CloudActivityView activity) =>
@@ -417,6 +418,7 @@ final class NativeCoreGateway
     boundCount: status.boundCount,
     uploadScope: status.uploadScope,
     uploadAlbums: status.uploadAlbums,
+    downloadRoot: status.downloadRoot,
     syncing: status.syncing,
     activity: _cloudActivity(status.activity),
     accounts: [for (final account in status.accounts) _cloudAccount(account)],
@@ -490,4 +492,8 @@ final class NativeCoreGateway
   ) async => _cloudStatus(
     await native_cloud.cloudSetUploadScope(mode: mode, albums: albums),
   );
+
+  @override
+  Future<CloudStatus> cloudSetDownloadRoot(String path) async =>
+      _cloudStatus(await native_cloud.cloudSetDownloadRoot(path: path));
 }

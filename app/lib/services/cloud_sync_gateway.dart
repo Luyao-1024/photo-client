@@ -16,6 +16,10 @@ abstract interface class CloudSyncGateway {
   Future<CloudStatus> cloudSwitchAccount(String accountId);
   Future<CloudStatus> cloudRemoveAccount(String accountId);
   Future<CloudStatus> cloudSetUploadScope(String mode, List<String> albums);
+
+  /// The real directory the active account's downloads mirror into. Syncing
+  /// refuses to run until one is chosen.
+  Future<CloudStatus> cloudSetDownloadRoot(String path);
 }
 
 /// One saved account. Only the active account synchronizes.
@@ -28,12 +32,14 @@ class CloudAccount {
     this.active = false,
     this.signedIn = false,
     this.lastSyncMs,
+    this.downloadRoot,
   });
 
   final String accountId, endpoint, username;
   final String? userId;
   final bool active, signedIn;
   final int? lastSyncMs;
+  final String? downloadRoot;
 }
 
 /// Live sweep counters. The phase is `preparing`, `receiving`, `uploading`,
@@ -86,6 +92,7 @@ class CloudStatus {
     this.boundCount = 0,
     this.uploadScope = 'none',
     this.uploadAlbums = const [],
+    this.downloadRoot,
     this.syncing = false,
     this.activity = const CloudActivity(),
     this.accounts = const [],
@@ -99,6 +106,7 @@ class CloudStatus {
   final int pendingUploads, failedUploads, pendingFavorites, boundCount;
   final String uploadScope;
   final List<String> uploadAlbums;
+  final String? downloadRoot;
   final bool syncing;
   final CloudActivity activity;
   final List<CloudAccount> accounts;

@@ -16,6 +16,7 @@ pub struct CloudAccountState {
     pub is_active: bool,
     pub signed_in: bool,
     pub last_sync_ms: Option<i64>,
+    pub download_root: Option<String>,
 }
 
 pub(crate) struct CloudSession {
@@ -80,7 +81,6 @@ impl CloudEngine {
             .as_ref()
             .map(|account| account.device_id.clone())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
-        store(self.library.ensure_managed_cloud_source(&account_id))?;
         let path = token_path(&self.library.root, &account_id)?;
         write_token(&path, &session.access_token)?;
         let expires_at_ms = session.expires_at.saturating_mul(1000);
@@ -102,6 +102,9 @@ impl CloudEngine {
                 .map(|account| account.upload_scope.clone())
                 .unwrap_or_else(|| "none".into()),
             is_active: existing.as_ref().is_some_and(|account| account.is_active),
+            download_root: existing
+                .as_ref()
+                .and_then(|account| account.download_root.clone()),
         };
         if let Err(error) = store(self.library.cloud_upsert_account(account)) {
             let _ = fs::remove_file(&path);
@@ -175,6 +178,7 @@ impl CloudEngine {
                     && sync_state.status != "token_expired"
                     && !auth_failed,
                 last_sync_ms: sync_state.last_sync_ms.or(account.last_sync_ms),
+                download_root: account.download_root,
             });
         }
         Ok(states)
@@ -204,6 +208,31 @@ impl CloudEngine {
             self.library
                 .cloud_set_upload_scope(account.account_id, mode.to_owned(), albums),
         )?;
+        self.status()
+    }
+
+    /// Remember the real directory this account's downloads mirror into.
+    /// Validation errors keep their stable codes: the settings page tells the
+    /// user which part of the choice was rejected.
+    pub fn set_download_root(&self, path: &str) -> Result<CloudStatus, String> {
+        if self.library.is_closed() {
+            return Err("LibraryClosed".into());
+        }
+        let account = store(self.library.cloud_account())?.ok_or("AuthFailed")?;
+        self.library
+            .set_cloud_download_root(&account.account_id, path)?;
+        // The missing-folder failure is resolved by this choice; do not keep
+        // showing it in the status card until the next sweep.
+        let state = store(self.library.cloud_sync_state(account.account_id.clone()))?;
+        if state
+            .as_ref()
+            .is_some_and(|state| state.error_code.as_deref() == Some("DownloadRootMissing"))
+        {
+            store(
+                self.library
+                    .cloud_set_status(account.account_id, "idle".into(), None),
+            )?;
+        }
         self.status()
     }
 

@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `account_view`, `activity_view`, `activity`, `apply_progress`, `begin_activity`, `cloud_lock`, `current_status`, `end_activity`, `idle_activity`, `lock`, `now_ms`, `report_view`, `reset_activity`, `view`
+// These functions are ignored because they are not marked as `pub`: `account_view`, `activity_view`, `activity`, `apply_progress`, `begin_activity`, `cloud_lock`, `current_status`, `end_activity`, `idle_activity`, `lock`, `now_ms`, `report_view`, `reset_activity`, `run_auto_sync`, `view`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Activity`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`
 
@@ -66,6 +66,12 @@ Future<CloudStatusView> cloudSetUploadScope({
   albums: albums,
 );
 
+/// Choose the real directory the active account's downloads mirror into.
+/// Syncing refuses to run until one is set, so the settings page asks for it
+/// before the first sync and on the `DownloadRootMissing` error.
+Future<CloudStatusView> cloudSetDownloadRoot({required String path}) =>
+    RustLib.instance.api.crateApiCloudSyncCloudSetDownloadRoot(path: path);
+
 class CloudAccountView {
   final String accountId;
   final String endpoint;
@@ -74,6 +80,7 @@ class CloudAccountView {
   final bool active;
   final bool signedIn;
   final PlatformInt64? lastSyncMs;
+  final String? downloadRoot;
 
   const CloudAccountView({
     required this.accountId,
@@ -83,6 +90,7 @@ class CloudAccountView {
     required this.active,
     required this.signedIn,
     this.lastSyncMs,
+    this.downloadRoot,
   });
 
   @override
@@ -93,7 +101,8 @@ class CloudAccountView {
       userId.hashCode ^
       active.hashCode ^
       signedIn.hashCode ^
-      lastSyncMs.hashCode;
+      lastSyncMs.hashCode ^
+      downloadRoot.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -106,7 +115,8 @@ class CloudAccountView {
           userId == other.userId &&
           active == other.active &&
           signedIn == other.signedIn &&
-          lastSyncMs == other.lastSyncMs;
+          lastSyncMs == other.lastSyncMs &&
+          downloadRoot == other.downloadRoot;
 }
 
 class CloudActivityView {
@@ -216,6 +226,7 @@ class CloudStatusView {
   final int boundCount;
   final String uploadScope;
   final List<String> uploadAlbums;
+  final String? downloadRoot;
   final bool syncing;
   final CloudActivityView activity;
   final List<CloudAccountView> accounts;
@@ -236,6 +247,7 @@ class CloudStatusView {
     required this.boundCount,
     required this.uploadScope,
     required this.uploadAlbums,
+    this.downloadRoot,
     required this.syncing,
     required this.activity,
     required this.accounts,
@@ -258,6 +270,7 @@ class CloudStatusView {
       boundCount.hashCode ^
       uploadScope.hashCode ^
       uploadAlbums.hashCode ^
+      downloadRoot.hashCode ^
       syncing.hashCode ^
       activity.hashCode ^
       accounts.hashCode;
@@ -282,6 +295,7 @@ class CloudStatusView {
           boundCount == other.boundCount &&
           uploadScope == other.uploadScope &&
           uploadAlbums == other.uploadAlbums &&
+          downloadRoot == other.downloadRoot &&
           syncing == other.syncing &&
           activity == other.activity &&
           accounts == other.accounts;

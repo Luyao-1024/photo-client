@@ -5,7 +5,7 @@
 //! speaks HTTP itself.
 mod auth;
 mod downlink;
-mod paths;
+pub(crate) mod paths;
 mod records;
 mod uplink;
 
@@ -36,6 +36,7 @@ pub struct CloudStatus {
     pub bound_count: u32,
     pub upload_scope: String,
     pub upload_albums: Vec<String>,
+    pub download_root: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -284,6 +285,7 @@ impl CloudEngine {
             bound_count: counts.bound,
             upload_scope: account.upload_scope,
             upload_albums,
+            download_root: account.download_root,
         })
     }
 
@@ -609,6 +611,7 @@ mod scope_tests {
                 last_sync_ms: None,
                 upload_scope: "none".into(),
                 is_active: true,
+                download_root: None,
             })
             .unwrap();
         library.cloud_set_active_account("account".into()).unwrap();

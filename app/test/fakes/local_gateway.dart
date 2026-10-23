@@ -57,6 +57,7 @@ class FakeLocalGateway extends FakeGateway
   int cloudRemoveCalls = 0;
   int cloudScopeCalls = 0;
   (String, List<String>)? lastCloudScope;
+  final List<String> cloudDownloadRootCalls = [];
   final cloudUploadCalls = <List<String>>[];
   final cloudSeenPasswords = <String>[];
 
@@ -205,6 +206,7 @@ class FakeLocalGateway extends FakeGateway
             active: false,
             signedIn: account.signedIn,
             lastSyncMs: account.lastSyncMs,
+            downloadRoot: account.downloadRoot,
           ),
       CloudAccount(
         accountId: 'account-${cloudState.accounts.length + 1}',
@@ -225,6 +227,7 @@ class FakeLocalGateway extends FakeGateway
       boundCount: cloudBoundIds.length,
       uploadScope: cloudState.uploadScope,
       uploadAlbums: cloudState.uploadAlbums,
+      downloadRoot: active.downloadRoot,
       accounts: accounts,
     );
     return cloudState;
@@ -241,6 +244,7 @@ class FakeLocalGateway extends FakeGateway
       boundCount: cloudBoundIds.length,
       uploadScope: cloudState.uploadScope,
       uploadAlbums: cloudState.uploadAlbums,
+      downloadRoot: cloudState.downloadRoot,
       accounts: [
         for (final account in cloudState.accounts)
           CloudAccount(
@@ -251,6 +255,7 @@ class FakeLocalGateway extends FakeGateway
             active: account.active,
             signedIn: account.active ? false : account.signedIn,
             lastSyncMs: account.lastSyncMs,
+            downloadRoot: account.downloadRoot,
           ),
       ],
     );
@@ -277,6 +282,7 @@ class FakeLocalGateway extends FakeGateway
       boundCount: cloudBoundIds.length,
       uploadScope: cloudState.uploadScope,
       uploadAlbums: cloudState.uploadAlbums,
+      downloadRoot: cloudState.downloadRoot,
       activity: CloudActivity(
         phase: cloudReport.errorCode == null ? 'idle' : 'error',
         downloaded: cloudReport.downloaded,
@@ -316,6 +322,7 @@ class FakeLocalGateway extends FakeGateway
           active: account.accountId == accountId,
           signedIn: account.signedIn,
           lastSyncMs: account.lastSyncMs,
+          downloadRoot: account.downloadRoot,
         ),
     ];
     cloudState = CloudStatus(
@@ -329,6 +336,7 @@ class FakeLocalGateway extends FakeGateway
       boundCount: cloudBoundIds.length,
       uploadScope: cloudState.uploadScope,
       uploadAlbums: cloudState.uploadAlbums,
+      downloadRoot: target.downloadRoot,
       accounts: accounts,
     );
     return cloudState;
@@ -353,6 +361,7 @@ class FakeLocalGateway extends FakeGateway
       boundCount: cloudBoundIds.length,
       uploadScope: removedActive ? 'none' : cloudState.uploadScope,
       uploadAlbums: removedActive ? const [] : cloudState.uploadAlbums,
+      downloadRoot: removedActive ? null : cloudState.downloadRoot,
       accounts: accounts,
     );
     return cloudState;
@@ -378,6 +387,31 @@ class FakeLocalGateway extends FakeGateway
       boundCount: cloudState.boundCount,
       uploadScope: mode,
       uploadAlbums: albums,
+      downloadRoot: cloudState.downloadRoot,
+      syncing: cloudState.syncing,
+      activity: cloudState.activity,
+      accounts: cloudState.accounts,
+    );
+    return cloudState;
+  }
+
+  @override
+  Future<CloudStatus> cloudSetDownloadRoot(String path) async {
+    cloudDownloadRootCalls.add(path);
+    cloudState = CloudStatus(
+      loggedIn: cloudState.loggedIn,
+      accountId: cloudState.accountId,
+      endpoint: cloudState.endpoint,
+      username: cloudState.username,
+      state: cloudState.state,
+      errorCode: cloudState.errorCode,
+      lastSyncMs: cloudState.lastSyncMs,
+      pendingUploads: cloudState.pendingUploads,
+      pendingFavorites: cloudState.pendingFavorites,
+      boundCount: cloudState.boundCount,
+      uploadScope: cloudState.uploadScope,
+      uploadAlbums: cloudState.uploadAlbums,
+      downloadRoot: path,
       syncing: cloudState.syncing,
       activity: cloudState.activity,
       accounts: cloudState.accounts,

@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1909000180;
+  int get rustContentHash => -838267813;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -115,6 +115,10 @@ abstract class RustLibApi extends BaseApi {
 
   Future<CloudStatusView> crateApiCloudSyncCloudRemoveAccount({
     required String accountId,
+  });
+
+  Future<CloudStatusView> crateApiCloudSyncCloudSetDownloadRoot({
+    required String path,
   });
 
   Future<CloudStatusView> crateApiCloudSyncCloudSetUploadScope({
@@ -510,6 +514,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<CloudStatusView> crateApiCloudSyncCloudSetDownloadRoot({
+    required String path,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_cloud_status_view,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCloudSyncCloudSetDownloadRootConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCloudSyncCloudSetDownloadRootConstMeta =>
+      const TaskConstMeta(
+        debugName: "cloud_set_download_root",
+        argNames: ["path"],
+      );
+
+  @override
   Future<CloudStatusView> crateApiCloudSyncCloudSetUploadScope({
     required String mode,
     required List<String> albums,
@@ -523,7 +560,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 12,
             port: port_,
           );
         },
@@ -553,7 +590,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -583,7 +620,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 14,
             port: port_,
           );
         },
@@ -613,7 +650,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 15,
             port: port_,
           );
         },
@@ -640,7 +677,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 16,
             port: port_,
           );
         },
@@ -667,7 +704,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 17,
             port: port_,
           );
         },
@@ -701,7 +738,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 18,
             port: port_,
           );
         },
@@ -732,7 +769,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 19,
             port: port_,
           );
         },
@@ -759,7 +796,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 20,
             port: port_,
           );
         },
@@ -803,7 +840,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 21,
             port: port_,
           );
         },
@@ -852,7 +889,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 22,
             port: port_,
           );
         },
@@ -882,7 +919,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 23,
             port: port_,
           );
         },
@@ -914,7 +951,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 24,
             port: port_,
           );
         },
@@ -947,7 +984,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 25,
             port: port_,
           );
         },
@@ -975,7 +1012,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1007,7 +1044,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 27,
             port: port_,
           );
         },
@@ -1042,7 +1079,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 28,
             port: port_,
           );
         },
@@ -1072,7 +1109,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 29,
             port: port_,
           );
         },
@@ -1104,7 +1141,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1137,7 +1174,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1167,7 +1204,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 31,
+              funcId: 32,
               port: port_,
             );
           },
@@ -1256,8 +1293,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CloudAccountView dco_decode_cloud_account_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return CloudAccountView(
       accountId: dco_decode_String(arr[0]),
       endpoint: dco_decode_String(arr[1]),
@@ -1266,6 +1303,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       active: dco_decode_bool(arr[4]),
       signedIn: dco_decode_bool(arr[5]),
       lastSyncMs: dco_decode_opt_box_autoadd_i_64(arr[6]),
+      downloadRoot: dco_decode_opt_String(arr[7]),
     );
   }
 
@@ -1309,8 +1347,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CloudStatusView dco_decode_cloud_status_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 18)
-      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
+    if (arr.length != 19)
+      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
     return CloudStatusView(
       loggedIn: dco_decode_bool(arr[0]),
       accountId: dco_decode_opt_String(arr[1]),
@@ -1327,9 +1365,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       boundCount: dco_decode_u_32(arr[12]),
       uploadScope: dco_decode_String(arr[13]),
       uploadAlbums: dco_decode_list_String(arr[14]),
-      syncing: dco_decode_bool(arr[15]),
-      activity: dco_decode_cloud_activity_view(arr[16]),
-      accounts: dco_decode_list_cloud_account_view(arr[17]),
+      downloadRoot: dco_decode_opt_String(arr[15]),
+      syncing: dco_decode_bool(arr[16]),
+      activity: dco_decode_cloud_activity_view(arr[17]),
+      accounts: dco_decode_list_cloud_account_view(arr[18]),
     );
   }
 
@@ -1646,6 +1685,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_active = sse_decode_bool(deserializer);
     var var_signedIn = sse_decode_bool(deserializer);
     var var_lastSyncMs = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_downloadRoot = sse_decode_opt_String(deserializer);
     return CloudAccountView(
       accountId: var_accountId,
       endpoint: var_endpoint,
@@ -1654,6 +1694,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       active: var_active,
       signedIn: var_signedIn,
       lastSyncMs: var_lastSyncMs,
+      downloadRoot: var_downloadRoot,
     );
   }
 
@@ -1725,6 +1766,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_boundCount = sse_decode_u_32(deserializer);
     var var_uploadScope = sse_decode_String(deserializer);
     var var_uploadAlbums = sse_decode_list_String(deserializer);
+    var var_downloadRoot = sse_decode_opt_String(deserializer);
     var var_syncing = sse_decode_bool(deserializer);
     var var_activity = sse_decode_cloud_activity_view(deserializer);
     var var_accounts = sse_decode_list_cloud_account_view(deserializer);
@@ -1744,6 +1786,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       boundCount: var_boundCount,
       uploadScope: var_uploadScope,
       uploadAlbums: var_uploadAlbums,
+      downloadRoot: var_downloadRoot,
       syncing: var_syncing,
       activity: var_activity,
       accounts: var_accounts,
@@ -2157,6 +2200,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.active, serializer);
     sse_encode_bool(self.signedIn, serializer);
     sse_encode_opt_box_autoadd_i_64(self.lastSyncMs, serializer);
+    sse_encode_opt_String(self.downloadRoot, serializer);
   }
 
   @protected
@@ -2212,6 +2256,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.boundCount, serializer);
     sse_encode_String(self.uploadScope, serializer);
     sse_encode_list_String(self.uploadAlbums, serializer);
+    sse_encode_opt_String(self.downloadRoot, serializer);
     sse_encode_bool(self.syncing, serializer);
     sse_encode_cloud_activity_view(self.activity, serializer);
     sse_encode_list_cloud_account_view(self.accounts, serializer);

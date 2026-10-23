@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `background`, `changed`, `claim_scan`, `crop_rect`, `global`, `join_error`, `release_scan`, `root_path`, `scan_is_user`, `service`, `to_local_photo`, `user`
+// These functions are ignored because they are not marked as `pub`: `background`, `changed`, `claim_scan`, `crop_rect`, `default_source_dirs`, `global`, `join_error`, `local_changed`, `release_scan`, `root_path`, `scan_is_user`, `service`, `to_local_photo`, `user`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ScanGuard`, `Service`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`
 

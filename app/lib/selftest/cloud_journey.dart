@@ -112,6 +112,24 @@ extension CloudJourney on LocalJourney {
     return expected.isEmpty || expected.any(text.contains);
   }
 
+  /// Name the real directory downloads mirror into. It sits next to the
+  /// isolated data root, so it is a real, visible directory outside it.
+  Future<void> _chooseDownloadRoot() async {
+    final root = options.dataRoot;
+    if (root == null) throw JourneyFailure('cloud journeys need --data-root');
+    final downloads = Directory('$root-cloud-downloads');
+    if (!downloads.existsSync()) downloads.createSync(recursive: true);
+    final code = await _container!
+        .read(cloudSyncProvider.notifier)
+        .setDownloadRoot(downloads.path);
+    if (code != null) {
+      throw JourneyFailure('the download root was rejected: $code');
+    }
+    if (_cloud.status.downloadRoot == null) {
+      throw JourneyFailure('the accepted download root did not stick');
+    }
+  }
+
   Future<void> _loginSuccessfully() async {
     await _submitCloudLogin();
     await _waitCloud(
@@ -122,6 +140,8 @@ extension CloudJourney on LocalJourney {
     if (_elementByKey(const ValueKey('cloud-error')) != null) {
       throw JourneyFailure('a successful sign-in still shows an error');
     }
+    // Syncing needs a download root; choose one right after sign-in.
+    await _chooseDownloadRoot();
   }
 
   Future<void> _syncNow() async {
@@ -140,73 +160,82 @@ extension CloudJourney on LocalJourney {
 
   Future<void> _logout() async {
     await _openCloudSettings();
-    await _tapEnabled('cloud-logout');
-    await _waitCloud(
-      (state) => !state.loggedIn && !state.busy,
-      reason: 'cloud sign-out did not complete',
-    );
+    for (var attempt = 1; ; attempt += 1) {
+      await _tapEnabled('cloud-logout');
+      try {
+        await _waitCloud(
+          (state) => !state.loggedIn && !state.busy,
+          reason: 'cloud sign-out did not complete',
+        );
+        break;
+      } on JourneyFailure {
+        // An automatic sweep can flip the busy flag between the enabled
+        // check and the click, swallowing the sign-out; tap again once
+        // the sweep settles.
+        if (attempt == 3) rethrow;
+      }
+    }
   }
 
   Future<void> _expectCloudFiles(String accountId, int expected) async {
     final root = options.dataRoot;
     if (root == null) throw JourneyFailure('cloud journeys need --data-root');
-    final media = Directory('$root/cloud/$accountId/media');
-    if (!media.existsSync()) {
+    final downloadRoot = _cloud.status.downloadRoot;
+    if (downloadRoot == null) {
+      throw JourneyFailure('no download root was chosen');
+    }
+    // The originals are real files of the real album directories.
+    final originals = Directory(downloadRoot)
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where(
+          (file) => !file.path.split('/').last.startsWith('.'),
+        )
+        .toList();
+    if (originals.length != expected) {
       throw JourneyFailure(
-        'downloaded media directory is missing: ${media.path}',
+        'expected $expected downloaded originals under $downloadRoot, '
+        'found ${originals.length}',
       );
     }
-    final photos = media.listSync().whereType<Directory>().toList();
-    if (photos.length != expected) {
+    // The thumbnails stay in the private cache, one per downloaded photo.
+    final thumbnails = Directory('$root/cache/cloud/$accountId')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.contains('/thumbnail.'))
+        .toList();
+    if (thumbnails.length != expected) {
       throw JourneyFailure(
-        'expected $expected downloaded cloud photos, found ${photos.length}',
+        'expected $expected downloaded thumbnails, found ${thumbnails.length}',
       );
+    }
+    for (final original in originals) {
+      if (original.lengthSync() == 0) {
+        throw JourneyFailure('${original.path} is an empty original');
+      }
     }
     final facts = <String, Object?>{};
-    for (final photo in photos) {
-      final generations = photo.listSync().whereType<Directory>().toList();
-      if (generations.length != 1) {
-        throw JourneyFailure(
-          '${photo.path} has ${generations.length} generation directories',
-        );
+    for (final thumbnail in thumbnails) {
+      final size = thumbnail.lengthSync();
+      if (size == 0) {
+        throw JourneyFailure('${thumbnail.path} is empty');
       }
-      final files = generations.single.listSync().whereType<File>().toList();
-      final original = files
-          .where((file) => file.path.contains('/original.'))
-          .toList();
-      final thumbnail = files
-          .where((file) => file.path.contains('/thumbnail.'))
-          .toList();
-      if (original.length != 1 || thumbnail.length != 1) {
-        throw JourneyFailure(
-          '${photo.path} is missing its original or thumbnail file',
-        );
+      if (size > 2 * 1024 * 1024) {
+        throw JourneyFailure('${thumbnail.path} exceeds 2 MiB');
       }
-      final originalSize = original.single.lengthSync();
-      final thumbnailSize = thumbnail.single.lengthSync();
-      if (originalSize == 0 || thumbnailSize == 0) {
-        throw JourneyFailure('${photo.path} contains an empty downloaded file');
-      }
-      if (thumbnailSize > 2 * 1024 * 1024) {
-        throw JourneyFailure('${photo.path} thumbnail exceeds 2 MiB');
-      }
-      final thumbnailBytes = thumbnail.single.readAsBytesSync();
-      final codec = await ui.instantiateImageCodec(thumbnailBytes);
+      final bytes = thumbnail.readAsBytesSync();
+      final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       final image = frame.image;
       if (image.width == 0 || image.height == 0) {
-        throw JourneyFailure('${photo.path} thumbnail decoded empty');
+        throw JourneyFailure('${thumbnail.path} decoded empty');
       }
       final longest = image.width > image.height ? image.width : image.height;
       if (longest > 2048) {
-        throw JourneyFailure('${photo.path} thumbnail exceeds 2048 px');
+        throw JourneyFailure('${thumbnail.path} exceeds 2048 px');
       }
-      facts[photo.path
-          .split('/')
-          .skipWhile((part) => part != 'media')
-          .join('/')] = {
-        'original_bytes': originalSize,
-        'thumbnail_bytes': thumbnailSize,
+      facts[thumbnail.path] = {
+        'thumbnail_bytes': size,
         'thumbnail_width': image.width,
         'thumbnail_height': image.height,
       };
@@ -215,7 +244,8 @@ extension CloudJourney on LocalJourney {
     }
     this.facts['cloud_files'] = {
       'account_id': accountId,
-      'photos': photos.length,
+      'download_root': downloadRoot,
+      'photos': originals.length,
       'files': facts,
     };
   }
@@ -324,14 +354,13 @@ extension CloudJourney on LocalJourney {
   /// The albums that hold the downloaded photos.
   ///
   /// A downloaded photo lands in the album of its cloud path, so there is no
-  /// single flat cloud album any more. Every album under the managed cloud
-  /// source belongs to the download.
+  /// single flat cloud album any more. Every album under the account's real
+  /// download directory belongs to the download.
   List<LocalAlbum> _cloudAlbums() {
-    final root = options.dataRoot;
-    if (root == null) return const [];
-    final prefix = '$root/cloud/';
+    final downloadRoot = _cloud.status.downloadRoot;
+    if (downloadRoot == null) return const [];
     return _state.albums
-        .where((album) => album.path.startsWith(prefix))
+        .where((album) => album.path.startsWith('$downloadRoot/'))
         .toList(growable: false);
   }
 
@@ -735,7 +764,9 @@ extension CloudJourney on LocalJourney {
       if (account == null) {
         throw JourneyFailure('no account directory was created');
       }
-      // The download is a separate, explicitly triggered action.
+      // The download is a separate, explicitly triggered action, and it
+      // needs the real download directory first.
+      await _chooseDownloadRoot();
       await _tapEnabled('cloud-sync-now');
       await _waitCloud(
         (state) => !state.busy,
@@ -830,6 +861,9 @@ extension CloudJourney on LocalJourney {
         'bound': _cloud.status.boundCount,
       };
       await _screenshot('50-cloud-offline-startup');
+      // The dialog's barrier swallows sidebar clicks; close it before the
+      // next step walks the albums.
+      await _closeSettings();
     });
     await _step('cloud-offline-content-still-opens', () async {
       await _openCloudAlbum(options.cloudExpectedPhotos);
@@ -880,12 +914,7 @@ extension CloudJourney on LocalJourney {
       };
     });
     await _step('cloud-offline-sign-out-and-retry', () async {
-      await _openCloudSettings();
-      await _tapEnabled('cloud-logout');
-      await _waitCloud(
-        (state) => !state.loggedIn && !state.busy,
-        reason: 'offline sign-out did not complete',
-      );
+      await _logout();
       await _expectTokenAbsent();
       if (_cloud.status.pendingUploads < 1) {
         throw JourneyFailure('signing out discarded the queued offline upload');
@@ -1069,6 +1098,7 @@ extension CloudJourney on LocalJourney {
     // The photos the download brought in; their cached thumbnails must be
     // gone with them.
     final boundIds = <String>[];
+    final downloadedAlbumDirs = <String>[];
     await _step('cloud-clear-downloads-first', () async {
       await _openCloudSettings();
       await _loginSuccessfully();
@@ -1085,13 +1115,20 @@ extension CloudJourney on LocalJourney {
     await _step('cloud-clear-asks-before-removing', () async {
       final root = options.dataRoot;
       if (root == null) throw JourneyFailure('cloud journeys need --data-root');
-      if (!Directory('$root/cloud').existsSync()) {
-        throw JourneyFailure('the downloaded cloud folder is missing');
+      final downloadRoot = _cloud.status.downloadRoot;
+      if (downloadRoot == null) {
+        throw JourneyFailure('the download directory is missing');
+      }
+      if (!Directory(downloadRoot).existsSync()) {
+        throw JourneyFailure('the download directory is missing on disk');
       }
       final albums = _cloudAlbums();
       if (albums.isEmpty) {
         throw JourneyFailure('the downloaded cloud albums are missing');
       }
+      downloadedAlbumDirs.addAll(
+        albums.map((album) => album.path).toList(growable: false),
+      );
       final bytes = await _cloudDataUsage();
       if (bytes <= 0) {
         throw JourneyFailure('the cloud download reports no bytes');
@@ -1118,12 +1155,26 @@ extension CloudJourney on LocalJourney {
       final root = options.dataRoot!;
       await _waitFor(
         () => !Directory('$root/cloud').existsSync(),
-        reason: 'the downloaded cloud folder survived the cleanup',
+        reason: 'the private cloud folder survived the cleanup',
       );
       await _waitFor(
         () => _cloudAlbums().isEmpty,
         reason: 'the downloaded cloud albums survived the cleanup',
       );
+      // The downloaded files left the real album directories; the
+      // directories themselves may stay when the user keeps files in them.
+      for (final dir in downloadedAlbumDirs) {
+        final remaining = Directory(dir)
+            .listSync()
+            .whereType<File>()
+            .where((file) => !file.path.split('/').last.startsWith('.'))
+            .length;
+        if (remaining > 0) {
+          throw JourneyFailure(
+            'downloaded files survived the cleanup in $dir ($remaining)',
+          );
+        }
+      }
       await _waitCloud(
         (state) => !state.loggedIn && state.boundIds.isEmpty,
         reason: 'the cloud session survived the cleanup',
