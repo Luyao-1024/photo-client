@@ -85,6 +85,24 @@ void main() {
     // Selecting a thumbnail from the strip keeps the same invariant.
     await waitForFilmstripFrames(tester);
     await tester.pumpAndSettle();
+    // Desktop shares the square preview: 60dp, cropped to fill.
+    expect(
+      tester.getSize(find.byKey(const ValueKey('viewer-strip-image-p5'))),
+      const Size(60, 60),
+    );
+    expect(
+      tester
+          .widget<Image>(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey('viewer-strip-image-p5')),
+                  matching: find.byType(Image),
+                )
+                .first,
+          )
+          .fit,
+      BoxFit.cover,
+    );
     await tester.tap(find.byKey(const ValueKey('viewer-strip-p0')));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 420));

@@ -571,6 +571,22 @@ impl LocalLibrary {
         rollback.moves.push((old, new));
         let library = self.library_id.clone();
         self.execute(move|c|{let tx=c.transaction().map_err(error)?;
+            // The destination folder did not exist, so preferences or a source
+            // row still pointing there are remnants of an album that was removed
+            // from the library and whose folder was deleted outside the app.
+            tx.execute("DELETE FROM album_preferences WHERE library_id=?1 AND folder=?2",params![library,new_path]).map_err(error)?;
+            tx.execute("DELETE FROM excluded_paths WHERE library_id=?1 AND path=?2",params![library,new_path]).map_err(error)?;
+            let old_source:Option<String>=tx.query_row("SELECT source_id FROM sources WHERE library_id=?1 AND root_uri=?2",params![library,folder],|r|r.get(0)).optional().map_err(error)?;
+            let stale_source:Option<String>=tx.query_row("SELECT source_id FROM sources WHERE library_id=?1 AND root_uri=?2",params![library,new_path],|r|r.get(0)).optional().map_err(error)?;
+            if let (Some(old),Some(stale))=(old_source,stale_source){
+                // Fold the renamed album into the stale source row instead of
+                // colliding with the unique root_uri; its own media rows stay
+                // for whatever can still be restored.
+                tx.execute("UPDATE media SET source_id=?3 WHERE library_id=?1 AND source_id=?2",params![library,old,stale]).map_err(error)?;
+                tx.execute("UPDATE scan_runs SET source_id=?3 WHERE library_id=?1 AND source_id=?2",params![library,old,stale]).map_err(error)?;
+                tx.execute("DELETE FROM sources WHERE library_id=?1 AND source_id=?2",params![library,old]).map_err(error)?;
+                tx.execute("UPDATE sources SET enabled=1,availability='available' WHERE library_id=?1 AND source_id=?2",params![library,stale]).map_err(error)?;
+            }
             for(table,column)in [("sources","root_uri"),("media","source_uri"),("media","parent_uri"),("media","original_uri"),("album_preferences","folder"),("excluded_paths","path")]{
                 let sql=format!("UPDATE {table} SET {column}=?3||substr({column},length(?2)+1) WHERE library_id=?1 AND ({column}=?2 OR (substr({column},1,length(?2))=?2 AND substr({column},length(?2)+1,1)='/'))");
                 tx.execute(&sql,params![library,folder,new_path]).map_err(error)?;
@@ -606,8 +622,12 @@ impl LocalLibrary {
         let result = (|| {
             self.add_source(&path)?;
             self.execute(move |c| {
+                // The folder itself was just created, so any existing preference
+                // at this path is left over from a folder deleted outside the
+                // app; reclaim it instead of failing on the primary key.
                 c.execute(
-                    "INSERT INTO album_preferences(library_id,folder) VALUES(?1,?2)",
+                    "INSERT INTO album_preferences(library_id,folder) VALUES(?1,?2) \
+                     ON CONFLICT(library_id,folder) DO UPDATE SET cover_media_id=NULL",
                     params![library, value],
                 )
                 .map_err(error)?;

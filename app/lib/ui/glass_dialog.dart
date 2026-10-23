@@ -90,6 +90,7 @@ Future<T?> showGlassMenu<T>({
   required BuildContext context,
   required RelativeRect position,
   required List<PopupMenuEntry<T>> items,
+  BoxConstraints? constraints,
 }) => showMenu<T>(
   context: context,
   position: position,
@@ -98,6 +99,7 @@ Future<T?> showGlassMenu<T>({
   elevation: 0,
   menuPadding: EdgeInsets.zero,
   clipBehavior: Clip.none,
+  constraints: constraints,
   shape: RoundedRectangleBorder(
     borderRadius: BorderRadius.circular(GlassTheme.panelRadius),
   ),
@@ -105,11 +107,17 @@ Future<T?> showGlassMenu<T>({
 );
 
 class GlassMenuEntry<T> extends PopupMenuEntry<T> {
-  const GlassMenuEntry({super.key, required this.items});
+  const GlassMenuEntry({
+    super.key,
+    required this.items,
+    this.padding = const EdgeInsets.symmetric(vertical: 8),
+  });
   final List<PopupMenuEntry<T>> items;
+  final EdgeInsetsGeometry padding;
 
   @override
-  double get height => items.fold(16, (sum, item) => sum + item.height);
+  double get height =>
+      items.fold(padding.vertical, (sum, item) => sum + item.height);
 
   @override
   bool represents(T? value) => false;
@@ -123,7 +131,7 @@ class _GlassMenuEntryState<T> extends State<GlassMenuEntry<T>> {
   Widget build(BuildContext context) => GlassSurface(
     role: GlassRole.overlay,
     child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: widget.padding,
       child: Column(mainAxisSize: MainAxisSize.min, children: widget.items),
     ),
   );

@@ -20,10 +20,16 @@ import 'local_album_actions.dart';
 import 'local_library_controller.dart';
 import 'local_photo_viewer.dart';
 import 'mode_selector.dart';
+import 'mobile_pull_refresh.dart';
 import 'photos_grid.dart';
 import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
+import 'thumbnail_progress.dart';
+
+/// Phone photo grids either keep the date sections or pack every tile into one
+/// continuous grid. Search and the desktop workspace always use date sections.
+enum PhotoViewMode { date, compact }
 
 /// An unframed heading with independent circular actions above the photo grid.
 /// Date sections stay quiet; the short grouping lens floats over the photos.
@@ -39,6 +45,8 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
     this.onCloseSearch,
     this.mobile = false,
     this.groupMode,
+    this.viewMode = PhotoViewMode.date,
+    this.onViewModeChanged,
     this.searchRequest = 0,
     this.closeSearchRequest = 0,
     this.onSearchVisibilityChanged,
@@ -67,6 +75,10 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
   /// The phone shell owns its single cycling mode button.
   final GroupMode? groupMode;
 
+  /// Date sections or one continuous phone grid; the shell owns the choice.
+  final PhotoViewMode viewMode;
+  final ValueChanged<PhotoViewMode>? onViewModeChanged;
+
   /// Monotonic counters let the mobile shell open or close the inline search
   /// without exposing the pane's private state.
   final int searchRequest;
@@ -78,12 +90,40 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
 }
 
 class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
+  static const _compactDateFadeTail = 16.0;
+  bool get _showCompactDate =>
+      _compactHeader &&
+      _compactRangeStartMs != null &&
+      _compactRangeEndMs != null;
+  double get _compactDateExtra =>
+      _showCompactDate ? _compactDateLineHeight(context) : 0;
   double get _headerExtent =>
+      _chromeExtent + (_showHeaderInfo ? _infoPanelHeight : 0);
+  double get _chromeExtent =>
       _libraryHeaderHeight(context, mobile: widget.mobile) +
+      _compactDateExtra +
       ((_selectionMode || widget.trashMode) ? 52 : 0) +
       ((_searchOpen || widget.searchMode)
           ? _librarySearchHeight(context, widget.trashMode)
           : 0);
+  double get _infoPanelHeight {
+    // Text lines round up during layout; keep a pixel so the column never
+    // overflows by a fraction. The strip hugs the bar from above but keeps
+    // breathing room below so the first date header is not pulled into it.
+    final line = MediaQuery.textScalerOf(context).scale(12) * 1.33 + 1;
+    return 10 + line + (_cloudSyncOn ? line : 0);
+  }
+
+  bool get _showHeaderInfo =>
+      !widget.searchMode &&
+      !_searchOpen &&
+      !_selectionMode &&
+      (_headerInfoVisible || _choosingCover);
+  bool get _compactHeader =>
+      widget.mobile &&
+      widget.viewMode == PhotoViewMode.compact &&
+      !widget.searchMode &&
+      !_searchOpen;
   int _prewarmSizeClass = 512;
   final _scroll = ScrollController();
   ThumbnailPool? _decodedPool;
@@ -102,6 +142,11 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   bool _selectingAll = false;
   bool _overviewOpen = false;
   bool _viewerOpening = false;
+  bool _cloudSyncOn = false;
+  bool _headerInfoVisible = false;
+  int? _photoCount, _videoCount;
+  int _countsRevision = -1;
+  bool _countsLoading = false;
   final _scrollPositions = <String, double>{};
   String? _queryIdentity;
   double? _pendingOffset;
@@ -109,6 +154,12 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   int _visibleRank = 0, _renderedRevision = -1;
   double _withinRow = 0, _anchorStride = 1, _gridWidth = 0;
   List<_GridSectionGeometry> _geometry = [];
+  int _compactColumns = 3;
+  double _compactRowExtent = 0;
+  int? _compactRangeStartMs, _compactRangeEndMs;
+  int? _compactStartDay, _compactEndDay;
+  bool _compactRangeScheduled = false;
+  int _compactRangeRevision = -1;
   void _changeMode(GroupMode value) {
     if (value == _mode) return;
     _captureAnchor();
@@ -164,12 +215,212 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   }
 
   void _nearEnd() {
+    if (_headerInfoVisible &&
+        _scroll.hasClients &&
+        _scroll.positions.last.pixels > 4) {
+      setState(() => _headerInfoVisible = false);
+    }
     _captureAnchor();
     _trackBackdrop();
     _queueDecodedPrefetch();
+    if (_compactHeader) _updateCompactRange();
     if (_scroll.hasClients && _scroll.positions.last.extentAfter < 600) {
       unawaited(ref.read(localLibraryProvider.notifier).loadNext());
     }
+  }
+
+  void _revealHeaderInfo() {
+    if (!mounted) return;
+    if (!_headerInfoVisible) setState(() => _headerInfoVisible = true);
+    _scheduleCounts();
+  }
+
+  void _scheduleCounts() {
+    final state = ref.read(localLibraryProvider);
+    if (state.loading || state.info == null) return;
+    if (_countsRevision == state.revision) return;
+    unawaited(_loadCounts());
+  }
+
+  void _hideHeaderInfo() {
+    if (mounted && _headerInfoVisible) {
+      setState(() => _headerInfoVisible = false);
+    }
+  }
+
+  Future<void> _loadCounts() async {
+    if (!mounted || _countsLoading) return;
+    final state = ref.read(localLibraryProvider);
+    final gateway = ref.read(coreGatewayProvider);
+    if (state.loading || state.info == null) return;
+    final revision = state.revision;
+    if (_countsRevision == revision && _photoCount != null) return;
+    if (state.mediaKind != null) {
+      final total = state.total;
+      setState(() {
+        _photoCount = state.mediaKind == 'video' ? 0 : total;
+        _videoCount = state.mediaKind == 'video' ? total : 0;
+        _countsRevision = revision;
+      });
+      return;
+    }
+    if (gateway is! LocalLibraryCountsGateway) {
+      setState(() => _countsRevision = revision);
+      return;
+    }
+    _countsLoading = true;
+    try {
+      final videos = await (gateway as LocalLibraryCountsGateway).countVideos(
+        favoritesOnly: state.favoritesOnly,
+        search: state.search,
+        searchScope: state.searchScope,
+        folder: state.folder,
+        trashed: state.trashed,
+      );
+      if (!mounted) return;
+      setState(() {
+        _videoCount = videos;
+        _photoCount = math.max(0, state.total - videos);
+        _countsRevision = revision;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _countsRevision = revision);
+    } finally {
+      _countsLoading = false;
+    }
+  }
+
+  void _scheduleCompactRange() {
+    if (_compactRangeScheduled) return;
+    _compactRangeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _compactRangeScheduled = false;
+      _updateCompactRange();
+    });
+  }
+
+
+  void _updateCompactRange() {
+    if (!mounted || !_compactHeader || !_scroll.hasClients) return;
+    final library = ref.read(localLibraryProvider);
+    final extent = library.extent;
+    if (extent <= 0 || _compactColumns <= 0 || _compactRowExtent <= 0) {
+      return;
+    }
+    final position = _scroll.positions.last;
+    final rows = (extent / _compactColumns).ceil();
+    final top = math.max(0.0, position.pixels);
+    final visibleBottom = math.max(
+      top,
+      position.pixels + position.viewportDimension - _headerExtent,
+    );
+    final firstRow = (top / _compactRowExtent).floor().clamp(0, rows - 1);
+    final lastRow = (visibleBottom / _compactRowExtent).floor().clamp(
+      firstRow,
+      rows - 1,
+    );
+    final firstRank = math.min(firstRow * _compactColumns, extent - 1);
+    final lastRank = math.min((lastRow + 1) * _compactColumns - 1, extent - 1);
+    final first = library.photoAt(firstRank);
+    final last = library.photoAt(lastRank) ?? first;
+    final startMs =
+        first?.sortTimeMs ?? first?.captureTimeMs ?? first?.modifiedMs;
+    final endMs = last?.sortTimeMs ?? last?.captureTimeMs ?? last?.modifiedMs;
+    if (startMs == null || endMs == null) return;
+    _visibleRank = firstRank;
+    final startDay = _localDayKey(startMs);
+    final endDay = _localDayKey(endMs);
+    if (startDay == _compactStartDay && endDay == _compactEndDay) return;
+    setState(() {
+      _compactRangeStartMs = startMs;
+      _compactRangeEndMs = endMs;
+      _compactStartDay = startDay;
+      _compactEndDay = endDay;
+    });
+  }
+
+  Widget _headerInfoPanel(
+    BuildContext context,
+    AppStrings strings,
+    LibraryViewState state,
+  ) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall?.copyWith(
+      fontSize: 12,
+      height: 1.33,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    if (_choosingCover) {
+      return Center(
+        child: Text(
+          strings.pick('选择一张照片作为相册封面', 'Choose a photo for the album cover'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: style,
+        ),
+      );
+    }
+    final countText = state.loading
+        ? null
+        : _photoCount != null && _videoCount != null
+        ? strings.libraryMediaCounts(_photoCount!, _videoCount!)
+        : strings.pick('${state.extent} 项', '${state.extent} items');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 2, 12, 8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ThumbnailProgress(
+            idle: Text(
+              countText ?? '',
+              key: const ValueKey('library-header-count'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: style,
+            ),
+            padding: EdgeInsets.zero,
+            textAlign: TextAlign.center,
+          ),
+          if (_cloudSyncOn) _MobileCloudSyncLine(strings: strings),
+        ],
+      ),
+    );
+  }
+
+  int _localDayKey(int ms) {
+    final date = DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
+    return DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
+  }
+
+  String? _compactRangeLabel(BuildContext context, AppStrings strings) {
+    final startMs = _compactRangeStartMs;
+    final endMs = _compactRangeEndMs;
+    if (startMs == null || endMs == null) return null;
+    final localizations = MaterialLocalizations.of(context);
+    final start = DateTime.fromMillisecondsSinceEpoch(startMs).toLocal();
+    final end = DateTime.fromMillisecondsSinceEpoch(endMs).toLocal();
+    final startDay = DateTime(start.year, start.month, start.day);
+    final endDay = DateTime(end.year, end.month, end.day);
+    if (startDay == endDay) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      if (startDay == today) return strings.today;
+      if (startDay == today.subtract(const Duration(days: 1))) {
+        return strings.yesterday;
+      }
+      return localizations.formatFullDate(startDay);
+    }
+    final startText = localizations.formatFullDate(startDay);
+    final sameMonth = start.year == end.year && start.month == end.month;
+    final endText = sameMonth
+        ? strings.pick('${end.day}日', localizations.formatMediumDate(endDay))
+        : start.year == end.year
+        ? localizations.formatMediumDate(endDay)
+        : localizations.formatFullDate(endDay);
+    return strings.dateRangeLabel(startText, endText);
   }
 
   void _queueDecodedPrefetch() {
@@ -391,6 +642,11 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     super.didUpdateWidget(oldWidget);
     if (widget.groupMode != null && widget.groupMode != oldWidget.groupMode) {
       _changeMode(widget.groupMode!);
+    }
+    if (widget.viewMode != oldWidget.viewMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+      });
     }
     if (widget.searchMode && !oldWidget.searchMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1121,6 +1377,9 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       );
     }
     final state = ref.watch(localLibraryProvider);
+    _cloudSyncOn = ref.watch(
+      cloudSyncProvider.select((sync) => sync.available && sync.loggedIn),
+    );
     final controller = ref.read(localLibraryProvider.notifier);
     final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
     final queryKey =
@@ -1140,6 +1399,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       _selectionSnapshots.clear();
       _pendingOffset = _scrollPositions[queryKey] ?? 0;
       _pendingRank = null;
+      _headerInfoVisible = false;
       if (_search.text != state.search) _search.text = state.search;
     } else if (_renderedRevision >= 0 &&
         _renderedRevision != state.revision &&
@@ -1148,6 +1408,19 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     }
     _queryIdentity = queryKey;
     _renderedRevision = state.revision;
+    if (_headerInfoVisible &&
+        !state.loading &&
+        _countsRevision != state.revision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _headerInfoVisible) _scheduleCounts();
+      });
+    }
+    if (_compactHeader &&
+        (_compactRangeStartMs == null ||
+            _compactRangeRevision != state.revision)) {
+      _compactRangeRevision = state.revision;
+      _scheduleCompactRange();
+    }
     final hasContent = state.extent > 0 || state.hasNext;
     final title = widget.searchMode
         ? strings.search
@@ -1164,7 +1437,10 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
         : state.mediaKind == 'motion'
         ? strings.motionPhotos
         : strings.library;
-    return Stack(
+    final compactDate = _showCompactDate
+        ? _compactRangeLabel(context, strings)
+        : null;
+    final page = Stack(
       children: [
         Positioned.fill(
           child: Padding(
@@ -1176,37 +1452,54 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           top: 0,
           left: 0,
           right: 0,
-          height: _headerExtent + 24,
+          height: widget.mobile
+              ? _chromeExtent +
+                    (_showCompactDate ? _compactDateFadeTail : 0)
+              : _headerExtent + 24,
           child: IgnorePointer(
             child: ListenableBuilder(
               listenable: _scroll,
               builder: (context, _) {
-                final progress = _scroll.hasClients
-                    ? (_scroll.positions.last.pixels / 48).clamp(0.0, 1.0)
+                final pixels = _scroll.hasClients
+                    ? _scroll.positions.last.pixels
                     : 0.0;
+                final progress = (pixels / 48).clamp(0.0, 1.0);
                 final background = Theme.of(context).scaffoldBackgroundColor;
+                if (widget.mobile) {
+                  // The bar always fades into whatever sits below it. In
+                  // compact view the date lives inside the bar, so keep the
+                  // whole strip opaque and fade only in the tail beneath it.
+                  // The backdrop never includes the info panel.
+                  final solidStop = _showCompactDate
+                      ? (_chromeExtent /
+                                (_chromeExtent + _compactDateFadeTail))
+                            .clamp(0.0, .98)
+                      : .82;
+                  return DecoratedBox(
+                    key: const ValueKey('mobile-library-header-backdrop'),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0, solidStop, 1],
+                        colors: [
+                          background.withValues(alpha: .98),
+                          background.withValues(alpha: .96),
+                          background.withValues(alpha: 0),
+                        ],
+                      ),
+                    ),
+                  );
+                }
                 return DecoratedBox(
-                  key: widget.mobile
-                      ? const ValueKey('mobile-library-header-backdrop')
-                      : null,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      // Keep the phone title and status bar readable even when
-                      // bright thumbnails scroll underneath. Only the lower
-                      // edge fades back into the grid; no extra live blur.
-                      stops: widget.mobile ? const [0, .82, 1] : null,
-                      colors: widget.mobile
-                          ? [
-                              background.withValues(alpha: .98),
-                              background.withValues(alpha: .96),
-                              background.withValues(alpha: 0),
-                            ]
-                          : [
-                              background.withValues(alpha: progress * .65),
-                              background.withValues(alpha: 0),
-                            ],
+                      colors: [
+                        background.withValues(alpha: progress * .65),
+                        background.withValues(alpha: 0),
+                      ],
                     ),
                   ),
                 );
@@ -1218,6 +1511,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           title: title,
           itemCount: state.loading ? null : state.extent,
           mobile: widget.mobile,
+          compactDate: compactDate,
           onBack: widget.onBack,
           trashMode: widget.trashMode,
           searchMode: widget.searchMode,
@@ -1245,6 +1539,8 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
               : null,
           onSort: _showSort,
           onOpenSettings: widget.onOpenSettings,
+          viewMode: widget.viewMode,
+          onViewModeChanged: widget.onViewModeChanged,
           hasContent: hasContent,
           choosingCover: _choosingCover,
           onCancelCover: _cancelCover,
@@ -1260,6 +1556,16 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           emptyTrashEnabled: state.extent > 0 || state.hasNext,
           strings: strings,
         ),
+        if (widget.mobile && _showHeaderInfo)
+          Positioned(
+            top: _chromeExtent,
+            left: 0,
+            right: 0,
+            height: _infoPanelHeight,
+            child: IgnorePointer(
+              child: _headerInfoPanel(context, strings, state),
+            ),
+          ),
         if (hasContent && !widget.searchMode && !widget.mobile)
           Align(
             alignment: Alignment.bottomCenter,
@@ -1270,6 +1576,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           ),
       ],
     );
+    return page;
   }
 
   Widget _body(
@@ -1294,28 +1601,23 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       if (widget.searchMode && !_selectionMode && !_choosingCover)
         const SingleActivator(LogicalKeyboardKey.escape): _closeSearch,
     };
-    return CallbackShortcuts(
+    final body = CallbackShortcuts(
       bindings: bindings,
       child: Focus(
         // Tab skips this wrapper, but it holds initial focus so Ctrl+A works
         // before any tile is focused; key events from tiles bubble up here.
         autofocus: true,
         skipTraversal: true,
-        child: widget.mobile
-            ? RefreshIndicator(
-                key: const ValueKey('mobile-photos-refresh'),
-                edgeOffset: _headerExtent,
-                onRefresh: () => controller.refresh(force: true),
-                child: _scrollBody(
-                  strings,
-                  state,
-                  controller,
-                  gateway,
-                  preferences,
-                ),
-              )
-            : _scrollBody(strings, state, controller, gateway, preferences),
+        child: _scrollBody(strings, state, controller, gateway, preferences),
       ),
+    );
+    if (!widget.mobile) return body;
+    return MobilePullRefresh(
+      key: const ValueKey('mobile-photos-refresh'),
+      onRefresh: () => controller.refresh(force: true),
+      onPullDown: _revealHeaderInfo,
+      onPullUp: _hideHeaderInfo,
+      child: body,
     );
   }
 
@@ -1338,8 +1640,19 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
         ],
       );
     }
-    final sections = widget.searchMode
+    // Inline search (the search field inside the library pane) must use the
+    // same media-type sections as the dedicated search page. Falling back to
+    // date sections would turn the backend's -1/-2 media-kind sentinels into
+    // 1969/1970 group headers.
+    final searchView = widget.searchMode || state.search.isNotEmpty;
+    final compactView =
+        widget.mobile &&
+        !searchView &&
+        widget.viewMode == PhotoViewMode.compact;
+    final sections = searchView
         ? _searchSections(state, strings)
+        : compactView
+        ? const <PhotoSection>[]
         : _sections(state);
     return NotificationListener<ScrollNotification>(
       onNotification: (event) {
@@ -1379,21 +1692,24 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 1.0,
                 double.infinity,
               );
+              final searchLayoutMode = searchView ? GroupMode.day : _mode;
               final columns = widget.mobile
                   ? mobileGridColumns(
-                      widget.searchMode ? GroupMode.day : _mode,
+                      compactView ? GroupMode.day : searchLayoutMode,
                       preferences.dayColumns,
                     )
-                  : _mode == GroupMode.day && !widget.searchMode
+                  : _mode == GroupMode.day && !searchView
                   ? preferences.dayColumns
                   : (available /
                             gridMaxCrossAxisExtent(
-                              widget.searchMode ? GroupMode.year : _mode,
+                              searchView ? GroupMode.year : _mode,
                             ))
                         .ceil()
                         .clamp(1, 100);
-              final spacing = widget.mobile
-                  ? switch (_mode) {
+              final spacing = compactView
+                  ? 2.0
+                  : widget.mobile
+                  ? switch (searchLayoutMode) {
                       GroupMode.year => 2.0,
                       GroupMode.month => 3.0,
                       GroupMode.day => 4.0,
@@ -1407,6 +1723,37 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 ThumbnailPool.forGateway(
                   gateway,
                 ).viewport(state.photoAt(_visibleRank)?.id, _prewarmSizeClass);
+              }
+              if (compactView) {
+                final rowExtent = side + spacing;
+                if (_compactColumns != columns ||
+                    (_compactRowExtent - rowExtent).abs() > .01) {
+                  _compactColumns = columns;
+                  _compactRowExtent = rowExtent;
+                  _scheduleCompactRange();
+                }
+                // One continuous grid: no section headers and no partially
+                // filled day rows, so the photos pack the width.
+                return SliverPadding(
+                  padding: EdgeInsets.only(
+                    bottom: widget.mobile
+                        ? 100 + MediaQuery.paddingOf(context).bottom
+                        : 90,
+                  ),
+                  sliver: SliverGrid(
+                    key: const ValueKey('photo-grid-compact'),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      mainAxisSpacing: spacing,
+                      crossAxisSpacing: spacing,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, rank) =>
+                          _rankTile(rank, state, controller, gateway),
+                      childCount: state.extent,
+                    ),
+                  ),
+                );
               }
               final previewCounts = {
                 for (final section in sections)
@@ -1526,13 +1873,14 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                             Expanded(
                               child: Text(
                                 section.label ??
-                                    (widget.searchMode
+                                    (searchView
                                         ? ''
                                         : sectionLabel(
                                             context,
                                             section,
                                             _mode,
                                           )),
+                                key: const ValueKey('library-date-header'),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.titleLarge
@@ -1632,14 +1980,55 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
         child: const Center(child: Icon(Icons.photo_outlined)),
       );
     }
+    return _photoTile(photo, rank, state, controller, gateway);
+  }
+
+  Widget _rankTile(
+    int rank,
+    LibraryViewState state,
+    LocalLibraryController controller,
+    LocalLibraryGateway gateway,
+  ) {
+    _ensureNear(rank);
+    final photo = state.photoAt(rank);
+    if (photo == null) {
+      return SizedBox(
+        key: ValueKey('photo-placeholder-$rank'),
+        child: const Center(child: Icon(Icons.photo_outlined)),
+      );
+    }
+    return _photoTile(
+      photo,
+      rank,
+      state,
+      controller,
+      gateway,
+      compactView: true,
+    );
+  }
+
+  Widget _photoTile(
+    LocalPhoto photo,
+    int rank,
+    LibraryViewState state,
+    LocalLibraryController controller,
+    LocalLibraryGateway gateway, {
+    bool compactView = false,
+  }) {
     final item = SectionItem(photo, rank);
     final cloudBound = ref.watch(cloudSyncProvider).isBound(item.photo.id);
     return PhotoTile(
       key: ValueKey('photo-${item.photo.id}'),
       photo: item.photo,
       gateway: gateway,
-      radius: widget.mobile ? 4 : GlassTheme.photoRadius,
-      compact: widget.mobile && !widget.searchMode && _mode != GroupMode.day,
+      radius: compactView
+          ? 0
+          : widget.mobile
+          ? 4
+          : GlassTheme.photoRadius,
+      compact:
+          compactView ||
+          (widget.mobile && !widget.searchMode && _mode != GroupMode.day),
       selected: _selected.contains(item.photo.id),
       multiSelect: _selectionMode,
       cloudBound: cloudBound,
@@ -1938,11 +2327,14 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
 double _librarySearchHeight(BuildContext context, bool trashMode) =>
     MediaQuery.sizeOf(context).width < 1000 && !trashMode ? 100 : 52;
 
+double _compactDateLineHeight(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(16) * 1.27 + 6;
+
 double _libraryHeaderHeight(BuildContext context, {bool mobile = false}) {
   final scale = MediaQuery.textScalerOf(context);
   if (mobile) {
-    return math.max(104, scale.scale(32) * 1.2 + scale.scale(13) * 1.4 + 38) +
-        MediaQuery.paddingOf(context).top;
+    final titleRow = math.max(48.0, scale.scale(32) * 1.15 + 8);
+    return math.max(64.0, 16 + titleRow) + MediaQuery.paddingOf(context).top;
   }
   return math.max(92, scale.scale(24) * 1.2 + scale.scale(12) * 1.4 + 35);
 }
@@ -1952,6 +2344,7 @@ class _Header extends StatelessWidget {
     required this.title,
     required this.itemCount,
     required this.mobile,
+    this.compactDate,
     this.onBack,
     required this.trashMode,
     required this.searchMode,
@@ -1973,6 +2366,8 @@ class _Header extends StatelessWidget {
     required this.onChooseCover,
     required this.onSort,
     required this.onOpenSettings,
+    required this.viewMode,
+    required this.onViewModeChanged,
     required this.hasContent,
     required this.choosingCover,
     required this.onCancelCover,
@@ -1992,6 +2387,7 @@ class _Header extends StatelessWidget {
   final String title;
   final int? itemCount;
   final bool mobile;
+  final String? compactDate;
   final VoidCallback? onBack;
   final bool trashMode;
   final bool searchMode;
@@ -2010,6 +2406,8 @@ class _Header extends StatelessWidget {
   final VoidCallback onDeselectAll;
   final VoidCallback onExitSelection, onStartSelection, onSort, onCancelCover;
   final VoidCallback? onChooseCover, onOpenSettings;
+  final PhotoViewMode viewMode;
+  final ValueChanged<PhotoViewMode>? onViewModeChanged;
   final bool hasContent, choosingCover;
   final List<LocalPhoto> selectedPhotos;
   final VoidCallback onBatchFavorite;
@@ -2029,8 +2427,12 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final topInset = mobile ? MediaQuery.paddingOf(context).top : 0.0;
-    final mainHeight =
+    final titleRowHeight =
         _libraryHeaderHeight(context, mobile: mobile) - 16 - topInset;
+    final compactDateHeight = mobile && compactDate != null
+        ? _compactDateLineHeight(context)
+        : 0.0;
+    final mainHeight = titleRowHeight + compactDateHeight;
     final countText = itemCount == null
         ? null
         : strings.pick(
@@ -2051,34 +2453,30 @@ class _Header extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           );
-    final leading = Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontSize: mobile ? 32 : 24,
-            height: mobile ? 1.15 : 1.2,
-            fontWeight: mobile ? FontWeight.w700 : FontWeight.w600,
-            letterSpacing: mobile ? -.8 : -.5,
-          ),
-        ),
-        if (subtitle != null || mobile) ...[
-          const SizedBox(height: 3),
-          if (mobile && !choosingCover)
-            LibraryActivityProgress(
-              compact: true,
-              textAlign: TextAlign.start,
-              idle: subtitleWidget,
-            )
-          else
-            subtitleWidget,
-        ],
-      ],
+    final titleWidget = Text(
+      title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.titleLarge?.copyWith(
+        fontSize: mobile ? 32 : 24,
+        height: mobile ? 1.15 : 1.2,
+        fontWeight: mobile ? FontWeight.w700 : FontWeight.w600,
+        letterSpacing: mobile ? -.8 : -.5,
+      ),
     );
+    final leading = mobile
+        ? titleWidget
+        : Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleWidget,
+              if (subtitle != null) ...[
+                const SizedBox(height: 3),
+                subtitleWidget,
+              ],
+            ],
+          );
     final actions = <Widget>[
       if (_showField)
         _PageIconSurface(
@@ -2105,17 +2503,11 @@ class _Header extends StatelessWidget {
       ] else ...[
         const SizedBox(width: 8),
         if (mobile)
-          _PageIconSurface(
-            child: IconButton(
-              key: const ValueKey('library-options'),
-              tooltip: strings.settings,
-              onPressed: onOpenSettings,
-              icon: const Icon(Icons.more_vert),
-              style: IconButton.styleFrom(
-                fixedSize: const Size(48, 48),
-                shape: const CircleBorder(),
-              ),
-            ),
+          _MobilePageMenuButton(
+            viewMode: viewMode,
+            onViewModeChanged: onViewModeChanged,
+            onSelect: hasContent && !selectionMode ? onStartSelection : null,
+            onSettings: onOpenSettings,
           )
         else
           _PageMenuButton(
@@ -2142,41 +2534,85 @@ class _Header extends StatelessWidget {
           children: [
             SizedBox(
               height: mainHeight,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final showActivity = !mobile && constraints.maxWidth >= 480;
-                  return Row(
-                    children: [
-                      if (mobile && onBack != null)
-                        IconButton(
-                          key: const ValueKey('mobile-album-back'),
-                          tooltip: strings.pick('返回相册', 'Back to albums'),
-                          onPressed: onBack,
-                          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-                          style: IconButton.styleFrom(
-                            fixedSize: const Size(40, 48),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ),
-                      Expanded(child: leading),
-                      if (showActivity)
-                        Expanded(
-                          child: Center(child: const LibraryActivityProgress()),
-                        ),
-                      if (mobile)
-                        ...actions
-                      else
-                        Expanded(
-                          flex: 1,
+              child: mobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          height: titleRowHeight,
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: actions,
+                            children: [
+                              if (onBack != null)
+                                IconButton(
+                                  key: const ValueKey('mobile-album-back'),
+                                  tooltip: strings.pick(
+                                    '返回相册',
+                                    'Back to albums',
+                                  ),
+                                  onPressed: onBack,
+                                  icon: const Icon(
+                                    Icons.arrow_back_ios_new,
+                                    size: 20,
+                                  ),
+                                  style: IconButton.styleFrom(
+                                    fixedSize: const Size(40, 48),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                ),
+                              Expanded(
+                                child: Align(
+                                  alignment: AlignmentDirectional.centerStart,
+                                  child: leading,
+                                ),
+                              ),
+                              ...actions,
+                            ],
                           ),
                         ),
-                    ],
-                  );
-                },
-              ),
+                        if (compactDateHeight > 0)
+                          SizedBox(
+                            height: compactDateHeight,
+                            child: Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Text(
+                                compactDate!,
+                                key: const ValueKey('library-header-range'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.start,
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                  height: 1.27,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    )
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final showActivity = constraints.maxWidth >= 480;
+                        return Row(
+                          children: [
+                            Expanded(child: leading),
+                            if (showActivity)
+                              Expanded(
+                                child: Center(
+                                  child: const LibraryActivityProgress(),
+                                ),
+                              ),
+                            Expanded(
+                              flex: 1,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: actions,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
             ),
             if (_showField)
               SizedBox(
@@ -2410,6 +2846,66 @@ class _Header extends StatelessWidget {
 }
 
 /// All / Name / Date segmented scope control for the search field.
+class _MobileCloudSyncLine extends ConsumerWidget {
+  const _MobileCloudSyncLine({required this.strings});
+
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sync = ref.watch(cloudSyncProvider);
+    if (!sync.available || !sync.loggedIn) return const SizedBox.shrink();
+    if (sync.syncRunning || sync.status.syncing) {
+      return const CloudSyncProgress(textAlign: TextAlign.center);
+    }
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall?.copyWith(
+      fontSize: 12,
+      height: 1.33,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final status = sync.status;
+    final error = sync.errorCode ?? status.errorCode;
+    final IconData icon;
+    final String text;
+    if (error != null) {
+      icon = Icons.cloud_off_outlined;
+      text = strings.cloudSyncNeedsAttention;
+    } else if (status.lastSyncMs != null) {
+      final at = DateTime.fromMillisecondsSinceEpoch(status.lastSyncMs!)
+          .toLocal();
+      final justNow =
+          DateTime.now().difference(at) < const Duration(minutes: 2);
+      icon = Icons.cloud_done_outlined;
+      text = justNow
+          ? strings.cloudSyncJustCompleted
+          : strings.cloudSyncLastSyncShort(
+              MaterialLocalizations.of(context).formatMediumDate(at),
+            );
+    } else {
+      icon = Icons.cloud_queue_outlined;
+      text = strings.cloudSyncReady;
+    }
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            text,
+            key: const ValueKey('cloud-sync-summary'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: style,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ScopeSelector extends StatelessWidget {
   const _ScopeSelector({required this.scope, required this.onChanged});
 
@@ -2644,6 +3140,162 @@ class _AlbumTargetTileState extends ConsumerState<_AlbumTargetTile> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+enum _MobilePageAction { select, view, settings }
+
+class _MobilePageMenuButton extends StatefulWidget {
+  const _MobilePageMenuButton({
+    required this.viewMode,
+    required this.onViewModeChanged,
+    required this.onSelect,
+    required this.onSettings,
+  });
+
+  final PhotoViewMode viewMode;
+  final ValueChanged<PhotoViewMode>? onViewModeChanged;
+  final VoidCallback? onSelect;
+  final VoidCallback? onSettings;
+
+  @override
+  State<_MobilePageMenuButton> createState() => _MobilePageMenuButtonState();
+}
+
+class _MobilePageMenuButtonState extends State<_MobilePageMenuButton> {
+  Future<void> _pickView(BuildContext context) async {
+    final button = context.findRenderObject();
+    final overlay =
+        Navigator.of(context).overlay?.context.findRenderObject() as RenderBox?;
+    if (button is! RenderBox || overlay == null) return;
+    final origin = button.localToGlobal(Offset.zero, ancestor: overlay);
+    final size = overlay.size;
+    final top = origin.dy + button.size.height + 4;
+    final choice = await showGlassMenu<PhotoViewMode>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        origin.dx,
+        top,
+        size.width - origin.dx - button.size.width,
+        size.height - top,
+      ),
+      constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
+      items: _viewModeItems(context),
+    );
+    if (choice != null) widget.onViewModeChanged?.call(choice);
+  }
+
+  List<PopupMenuEntry<PhotoViewMode>> _viewModeItems(BuildContext context) {
+    final strings = AppStrings.of(context);
+    PopupMenuItem<PhotoViewMode> option({
+      required Key key,
+      required PhotoViewMode mode,
+      required IconData icon,
+      required String title,
+    }) => PopupMenuItem<PhotoViewMode>(
+      key: key,
+      value: mode,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon),
+        title: Text(title),
+        trailing: widget.viewMode == mode ? const Icon(Icons.check) : null,
+      ),
+    );
+    return [
+      option(
+        key: const ValueKey('view-mode-date'),
+        mode: PhotoViewMode.date,
+        icon: Icons.calendar_view_day_outlined,
+        title: strings.pick('日期视图', 'Date view'),
+      ),
+      option(
+        key: const ValueKey('view-mode-compact'),
+        mode: PhotoViewMode.compact,
+        icon: Icons.grid_on,
+        title: strings.pick('紧凑视图', 'Compact view'),
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return _PageIconSurface(
+      child: PopupMenuButton<_MobilePageAction>(
+        key: const ValueKey('library-options'),
+        tooltip: strings.pick('更多选项', 'More options'),
+        icon: const Icon(Icons.more_vert),
+        style: IconButton.styleFrom(
+          fixedSize: const Size(48, 48),
+          shape: const CircleBorder(),
+          padding: EdgeInsets.zero,
+        ),
+        color: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        menuPadding: EdgeInsets.zero,
+        clipBehavior: Clip.none,
+        position: PopupMenuPosition.under,
+        padding: EdgeInsets.zero,
+        offset: const Offset(0, 4),
+        constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(GlassTheme.panelRadius),
+        ),
+        onSelected: (action) {
+          switch (action) {
+            case _MobilePageAction.select:
+              widget.onSelect?.call();
+            case _MobilePageAction.view:
+              unawaited(_pickView(context));
+            case _MobilePageAction.settings:
+              widget.onSettings?.call();
+          }
+        },
+        itemBuilder: (context) => [
+          GlassMenuEntry<_MobilePageAction>(
+            items: [
+              PopupMenuItem(
+                key: const ValueKey('library-menu-select'),
+                value: _MobilePageAction.select,
+                enabled: widget.onSelect != null,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  enabled: widget.onSelect != null,
+                  leading: const Icon(Icons.checklist),
+                  title: Text(strings.pick('选择', 'Select')),
+                ),
+              ),
+              PopupMenuItem(
+                key: const ValueKey('library-menu-view'),
+                value: _MobilePageAction.view,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.grid_view_outlined),
+                  title: Text(strings.pick('视图', 'View')),
+                ),
+              ),
+              PopupMenuItem(
+                key: const ValueKey('library-menu-settings'),
+                value: _MobilePageAction.settings,
+                enabled: widget.onSettings != null,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  enabled: widget.onSettings != null,
+                  leading: const Icon(Icons.settings_outlined),
+                  title: Text(strings.settings),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

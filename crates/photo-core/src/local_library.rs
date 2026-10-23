@@ -1084,7 +1084,10 @@ fn copy_file(source: &Path, destination: &Path) -> Result<(), String> {
     result
 }
 fn move_file(source: &Path, destination: &Path) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
+    // Android shares the Linux rename semantics. The old non-Linux fallback
+    // used hard_link, which never works for directories, so renaming an album
+    // failed with "operation failed" on devices.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         use std::os::unix::ffi::OsStrExt;
         let from = std::ffi::CString::new(source.as_os_str().as_bytes()).map_err(error)?;
@@ -1097,7 +1100,7 @@ fn move_file(source: &Path, destination: &Path) -> Result<(), String> {
                 from.as_ptr(),
                 libc::AT_FDCWD,
                 to.as_ptr(),
-                libc::RENAME_NOREPLACE,
+                libc::RENAME_NOREPLACE as libc::c_uint,
             )
         };
         if result == 0 {
@@ -1108,7 +1111,7 @@ fn move_file(source: &Path, destination: &Path) -> Result<(), String> {
             return Err(error(failure));
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(all(not(target_os = "linux"), not(target_os = "android")))]
     {
         if fs::hard_link(source, destination).is_ok() {
             return fs::remove_file(source).map_err(error);

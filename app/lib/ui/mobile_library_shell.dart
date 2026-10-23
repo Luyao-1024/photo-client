@@ -29,6 +29,7 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
   _MobileTab _tab = _MobileTab.photos;
   bool _albumDetail = false;
   GroupMode _groupMode = GroupMode.day;
+  PhotoViewMode _photoViewMode = PhotoViewMode.date;
   int _searchRequest = 0;
   int _closeSearchRequest = 0;
   bool _searchVisible = false;
@@ -162,6 +163,9 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
                   child: LocalLibraryPane(
                     mobile: true,
                     groupMode: _groupMode,
+                    viewMode: _photoViewMode,
+                    onViewModeChanged: (mode) =>
+                        setState(() => _photoViewMode = mode),
                     trashMode: state.trashed,
                     onOpenSettings: _openSettings,
                     onBack: _tab == _MobileTab.albums && _albumDetail
@@ -219,7 +223,8 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
                                 onAlbums: _showAlbums,
                               ),
                             ),
-                            if (_tab == _MobileTab.photos || _albumDetail)
+                            if (_tab == _MobileTab.photos &&
+                                _photoViewMode == PhotoViewMode.date)
                               Positioned(
                                 left:
                                     (constraints.maxWidth - capsuleWidth) / 2 -

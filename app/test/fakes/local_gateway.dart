@@ -7,7 +7,10 @@ import 'package:photo_client/services/local_library_tools.dart';
 import '../presentation_test.dart' show FakeGateway;
 
 class FakeLocalGateway extends FakeGateway
-    implements LocalLibraryGateway, CloudSyncGateway {
+    implements
+        LocalLibraryGateway,
+        LocalLibraryCountsGateway,
+        CloudSyncGateway {
   FakeLocalGateway({required this.imagePath, int count = 0}) {
     photos = List.generate(count, (index) => photo(index));
   }
@@ -157,6 +160,30 @@ class FakeLocalGateway extends FakeGateway
       DateTime.fromMillisecondsSinceEpoch(
         photo.captureTimeMs ?? photo.modifiedMs,
       ).toIso8601String().substring(0, 10);
+
+  @override
+  Future<int> countVideos({
+    bool favoritesOnly = false,
+    String search = '',
+    SearchScope searchScope = SearchScope.all,
+    String? folder,
+    bool trashed = false,
+  }) async {
+    final needle = search.toLowerCase();
+    return photos
+        .where(
+          (photo) =>
+              (trashed ? photo.state == 'trashed' : photo.state == 'active') &&
+              (!favoritesOnly || photo.favorite) &&
+              photo.mediaKind == 'video' &&
+              (folder == null || photo.parent == folder) &&
+              (needle.isEmpty ||
+                  (searchScope == SearchScope.date
+                      ? _dateKey(photo).contains(needle)
+                      : photo.name.toLowerCase().contains(needle))),
+        )
+        .length;
+  }
 
   @override
   Future<CloudStatus> cloudLogin({
@@ -694,6 +721,51 @@ class FakeToolsGateway extends FakeLocalGateway implements LocalLibraryTools {
     'duration_ms': photo.durationMs,
     'motion_offset': photo.motionOffset,
   };
+}
+
+/// Search windows carry media-kind sentinels (-2 image / -1 video) as group
+/// keys, matching the native query. Renderers must never treat them as dates.
+class FakeSearchGroupsGateway extends FakeToolsGateway {
+  FakeSearchGroupsGateway({required super.imagePath, super.count});
+
+  @override
+  Future<Object?> localCommand(Map<String, Object?> command) async {
+    final filter = command['filter'] as Map?;
+    final search = filter?['search'] as String? ?? '';
+    if (command['op'] == 'window' && search.isNotEmpty) {
+      final page = await listPhotos(
+        limit: 1 << 20,
+        favoritesOnly: filter?['favorites_only'] == true,
+        search: search,
+        searchScope: SearchScope.values.firstWhere(
+          (scope) => scope.wire == filter?['search_scope'],
+          orElse: () => SearchScope.all,
+        ),
+        folder: filter?['folder'] as String?,
+        mediaKind: filter?['media_kind'] as String?,
+        trashed: filter?['trashed'] == true,
+      );
+      final start = command['start'] as int? ?? 0;
+      final count = command['count'] as int? ?? page.total;
+      final kinds = <int, int>{};
+      for (final photo in page.items) {
+        final kind = photo.mediaKind == 'video' ? -1 : -2;
+        kinds[kind] = (kinds[kind] ?? 0) + 1;
+      }
+      return <String, Object?>{
+        'items': [
+          for (final photo in page.items.skip(start).take(count))
+            FakeToolsGateway._photoJson(photo),
+        ],
+        'total': page.total,
+        'revision': page.revision,
+        'groups': [
+          for (final entry in kinds.entries) <Object?>[entry.key, entry.value],
+        ],
+      };
+    }
+    return super.localCommand(command);
+  }
 }
 
 class FakePicker implements LocalSourcePicker {

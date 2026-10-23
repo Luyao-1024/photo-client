@@ -337,7 +337,15 @@ flutter test test/viewer_playback_test.dart
 flutter test test/progressive_media_test.dart
 ```
 
-仓库没有 Android instrumentation 或端到端 UI 用例；组件测试使用 fake gateway，只能证明界面逻辑正确，不能代替真机验收。按 [AGENTS.md](../../AGENTS.md) 只运行与本次改动直接相关的用例，禁止全量测试。
+Flutter 组件测试使用 fake gateway，只能证明界面逻辑正确。设备侧的组件级验收使用 [tests/android/test_ui_components.py](../../tests/android/test_ui_components.py)：它通过 `uiautomator dump` 读取 Flutter 语义节点（content-desc、text、bounds）并点击这些节点，不做截图比对。运行前需已安装 Release APK、图库已索引真实素材，并显式开启：
+
+```bash
+PHOTO_ANDROID_UI=1 ANDROID_SERIAL=emulator-5554 \
+  PHOTO_ANDROID_APK=app/build/app/outputs/flutter-apk/app-release.apk \
+  python3 -B -m unittest discover -s tests/android -p 'test_ui_components.py' -v
+```
+
+覆盖图库渲染、查看器翻页与控件/胶片条、收藏往返与强制停止后保留、内联搜索分组、回收站恢复、网格行布局与惯性滚动、视频拖动进度条、编辑旋转保存副本、相册创建/重命名/移除、Activity 重建后复用原会话；设置 `PHOTO_ANDROID_APK` 时验证覆盖安装后的重启，设置 `PHOTO_ANDROID_DESTRUCTIVE=1` 时额外验证清空数据后的权限门。未设置 `PHOTO_ANDROID_UI=1` 时整组用例跳过，不影响主机侧测试。按 [AGENTS.md](../../AGENTS.md) 只运行与本次改动直接相关的用例，禁止全量测试。
 
 ### 6.3 手工验收清单
 
@@ -352,7 +360,7 @@ flutter test test/progressive_media_test.dart
 | 视频 | 打开 `clip.mp4` | 点按只出现播放/时间/进度条；控件显示时拖动进度条不翻页；约 3 秒自动隐藏后左右滑动可翻页 |
 | 相册 | 收藏、回收站、搜索 | 收藏与回收站位于相册页内；创建、重命名、排序、搜索可用 |
 | 编辑 | 裁剪/旋转并保存副本 | 保存副本成功；返回时未保存修改有确认 |
-| 重启 | 强制停止后重新打开 | 图库、收藏、相册和数据库版本保持；已授权时不再拦截 |
+| 重启 | 返回退出后重新打开 / 强制停止后重新打开 | 图库、收藏、相册和数据库版本保持；已授权时不再拦截；同一进程重建 Flutter 引擎后直接复用原会话，不出现“照片加载失败” |
 
 视觉是否完全一致受 GPU 与驱动影响；功能和布局以本文固定 AVD 的截图做对照。
 
@@ -491,7 +499,7 @@ allprojects {
 
 两个只在这台机器的时序下出现、但同样会在别处复现的故障，都由 `tools/run_app android` 处理：
 
-1. **双 Flutter 引擎**：对正在运行的应用执行 `adb install -r`，Android 会自行重launch它；脚本的 `am start` 与之叠加，同一进程里出现两个 Flutter 引擎。原生运行时是进程级单例，第二次初始化返回 `AlreadyInitialized`，界面停在"照片加载失败"；界面上的"重试"无效，只有杀掉进程重开才能恢复。脚本在安装后先 `am force-stop` 再启动。
+1. **双 Flutter 引擎**：对正在运行的应用执行 `adb install -r`，Android 会自行重launch它；脚本的 `am start` 与之叠加，同一进程里出现两个 Flutter 引擎。原生运行时是进程级单例，后续初始化现在直接复用现有会话，因此覆盖安装不会再卡在"照片加载失败"；脚本仍先 `am force-stop`，保证安装后只有一次启动和一个引擎。
 2. **AVD 锁未释放**：`adb emu kill` 后模拟器优雅关闭需要约 20 秒，期间新实例拿不到 AVD 锁会静默退出，日志里也看不出原因。脚本会等待上一实例退出，并在引导失败时重试一次。
 
 ### 9.5 素材命令在本机的差异

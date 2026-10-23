@@ -33,13 +33,13 @@ async fn async_round_trip_and_events_use_the_same_runtime() {
 }
 
 #[test]
-fn duplicate_bootstrap_is_rejected_and_shutdown_is_idempotent() {
+fn duplicate_bootstrap_reuses_the_process_session_and_shutdown_is_idempotent() {
     let runtime = BootstrapRuntime::default();
     let first = runtime.initialize(profile()).unwrap();
-    assert_eq!(
-        runtime.initialize(profile()).unwrap_err(),
-        RuntimeError::AlreadyInitialized
-    );
+    // A recreated Flutter engine in the same process attaches to the session
+    // that already owns the library lock.
+    let second = runtime.initialize(profile()).unwrap();
+    assert_eq!(second.session_id, first.session_id);
     runtime.shutdown().unwrap();
     runtime.shutdown().unwrap();
     assert_ne!(

@@ -37,6 +37,10 @@ void main() {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
     tester.platformDispatcher.localeTestValue = const Locale('en');
+    // Earlier tests can leave decoded thumbnails pinning the shared cache,
+    // which makes later precacheImage calls wait indefinitely.
+    imageCache.clear();
+    imageCache.clearLiveImages();
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
@@ -166,6 +170,102 @@ void main() {
     },
   );
 
+  testWidgets('phone menus open under their buttons with compact rows', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 8);
+    await mount(tester, gateway);
+
+    final options = find.byKey(const ValueKey('library-options'));
+    final button = tester.getRect(options);
+    await tester.tap(options);
+    await tester.pumpAndSettle();
+
+    final viewRow = tester.getRect(
+      find.byKey(const ValueKey('library-menu-view')),
+    );
+    expect(viewRow.height, closeTo(48, .5));
+    expect(viewRow.top, greaterThanOrEqualTo(button.bottom));
+    expect(
+      tester.getRect(find.byKey(const ValueKey('library-menu-select'))).height,
+      closeTo(48, .5),
+    );
+    // The parent row no longer advertises the active view mode.
+    expect(find.text('Date view'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('library-menu-view')));
+    await tester.pumpAndSettle();
+    final dateOption = tester.getRect(
+      find.byKey(const ValueKey('view-mode-date')),
+    );
+    expect(dateOption.height, closeTo(48, .5));
+    expect(dateOption.top, greaterThanOrEqualTo(button.bottom));
+    expect(
+      tester.getRect(find.byKey(const ValueKey('view-mode-compact'))).height,
+      closeTo(48, .5),
+    );
+    await tester.tap(find.byKey(const ValueKey('view-mode-compact')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('photo-grid-compact')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('mobile-nav-albums')));
+    await tester.pumpAndSettle();
+    final albumsOptions = find.byKey(const ValueKey('mobile-albums-options'));
+    final albumsButton = tester.getRect(albumsOptions);
+    await tester.tap(albumsOptions);
+    await tester.pumpAndSettle();
+    final settings = tester.getRect(
+      find.byKey(const ValueKey('mobile-albums-menu-settings')),
+    );
+    expect(settings.height, closeTo(48, .5));
+    expect(settings.top, greaterThanOrEqualTo(albumsButton.bottom));
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('phone photo menu selects and switches between the two views', (
+    tester,
+  ) async {    final gateway = FakeLocalGateway(imagePath: image, count: 8);
+    await mount(tester, gateway);
+
+    await tester.tap(find.byKey(const ValueKey('library-options')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('library-menu-select')), findsOneWidget);
+    expect(find.byKey(const ValueKey('library-menu-view')), findsOneWidget);
+    expect(find.byKey(const ValueKey('library-menu-settings')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('library-menu-view')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('view-mode-date')), findsOneWidget);
+    expect(find.byKey(const ValueKey('view-mode-compact')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('view-mode-compact')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('photo-grid-compact')), findsOneWidget);
+    // Grouping has no meaning in the packed grid.
+    expect(find.byKey(const ValueKey('mobile-group-mode')), findsNothing);
+    final first = tester.getRect(find.byKey(const ValueKey('photo-p0')));
+    final second = tester.getRect(find.byKey(const ValueKey('photo-p1')));
+    final nextRow = tester.getRect(find.byKey(const ValueKey('photo-p5')));
+    expect(second.left - first.right, closeTo(2, .5));
+    expect(nextRow.top - first.bottom, closeTo(2, .5));
+
+    await tester.tap(find.byKey(const ValueKey('library-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('library-menu-view')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('view-mode-date')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('photo-grid-compact')), findsNothing);
+    expect(find.byKey(const ValueKey('mobile-group-mode')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('library-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('library-menu-select')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('exit-selection')), findsOneWidget);
+    expect(find.byKey(const ValueKey('select-all')), findsOneWidget);
+    await disposeApp(tester, gateway);
+  });
+
   testWidgets('phone settings use grouped rows, sheets and system back', (
     tester,
   ) async {
@@ -173,6 +273,8 @@ void main() {
     await mount(tester, gateway);
     final container = containerOf(tester);
     await tester.tap(find.byKey(const ValueKey('library-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('library-menu-settings')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('mobile-settings-page')), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
@@ -263,6 +365,8 @@ void main() {
     final gateway = FakeLocalGateway(imagePath: image, count: 0);
     await mount(tester, gateway);
     await tester.tap(find.byKey(const ValueKey('library-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('library-menu-settings')));
     await tester.pumpAndSettle();
     tester.view.physicalSize = const Size(320, 640);
     tester.platformDispatcher.textScaleFactorTestValue = 1.8;
@@ -388,6 +492,132 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
+  testWidgets('phone header stays fixed and reveals its info below on pull', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 9);
+    await mount(tester, gateway);
+    final grid = find.byKey(const ValueKey('local-photo-grid'));
+    final barTitle = headerText('Photos');
+    final barTop = tester.getTopLeft(barTitle).dy;
+    final count = find.byKey(const ValueKey('library-header-count'));
+    final range = find.byKey(const ValueKey('library-header-range'));
+    final backdrop = find.byKey(
+      const ValueKey('mobile-library-header-backdrop'),
+    );
+    List<Color> backdropColors() =>
+        ((tester.widget<DecoratedBox>(backdrop).decoration as BoxDecoration)
+                    .gradient
+                as LinearGradient)
+            .colors;
+    final barHeight = tester.getSize(backdrop).height;
+    expect(count, findsNothing);
+    expect(range, findsNothing);
+    // The bar keeps its fading edge whether or not anything scrolls.
+    expect(backdropColors().last.a, 0);
+
+    await tester.drag(grid, const Offset(0, 80));
+    await tester.pumpAndSettle();
+    expect(count, findsOneWidget);
+    expect(find.text('9 photos'), findsOneWidget);
+    // Date view has no visible date span; only the count belongs here.
+    expect(range, findsNothing);
+    // Showing the info does not stretch the bar or its background.
+    expect(tester.getSize(backdrop).height, barHeight);
+    expect(backdropColors().last.a, 0);
+    expect(
+      tester.getTopLeft(count).dy,
+      greaterThan(tester.getBottomLeft(backdrop).dy),
+    );
+    // The info strip hugs the bar instead of leaving an empty band.
+    expect(
+      tester.getTopLeft(count).dy - tester.getBottomLeft(backdrop).dy,
+      lessThan(4.5),
+    );
+    expect(tester.getTopLeft(barTitle).dy, barTop);
+
+    // The bar never scrolls away, and dragging up retracts the panel even
+    // though a short grid has no scroll extent of its own.
+    await tester.drag(grid, const Offset(0, -80));
+    await tester.pumpAndSettle();
+    expect(count, findsNothing);
+    expect(tester.getTopLeft(barTitle).dy, barTop);
+
+    await tester.tap(find.byKey(const ValueKey('library-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('library-menu-view')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('view-mode-compact')));
+    await tester.pumpAndSettle();
+    // The compact date is part of the header before any pull.
+    expect(range, findsOneWidget);
+    await tester.drag(grid, const Offset(0, 80));
+    await tester.pumpAndSettle();
+    expect(range, findsOneWidget);
+    expect(count, findsOneWidget);
+    expect(find.text('9 photos'), findsOneWidget);
+    expect(tester.getTopLeft(barTitle).dy, barTop);
+    await tester.drag(grid, const Offset(0, -80));
+    await tester.pumpAndSettle();
+    expect(count, findsNothing);
+    // Retracting the info leaves the header's compact date in place.
+    expect(range, findsOneWidget);
+    expect(
+      tester.getRect(range).bottom,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(const ValueKey('library-header'))).bottom,
+      ),
+    );
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('phone compact view keeps the visible date in the header', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 80);
+    await mount(tester, gateway);
+    final sectionTitle = tester.widget<Text>(
+      find.byKey(const ValueKey('library-date-header')).first,
+    );
+    await tester.tap(find.byKey(const ValueKey('library-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('library-menu-view')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('view-mode-compact')));
+    await tester.pumpAndSettle();
+
+    final grid = find.byKey(const ValueKey('local-photo-grid'));
+    final header = find.byKey(const ValueKey('library-header'));
+    final range = find.byKey(const ValueKey('library-header-range'));
+    expect(range, findsOneWidget);
+    final headerRect = tester.getRect(header);
+    // The compact date is part of the fixed header, not the scroll content.
+    expect(tester.getRect(range).top, greaterThan(headerRect.top));
+    expect(tester.getRect(range).bottom, lessThanOrEqualTo(headerRect.bottom));
+    expect(tester.widget<Text>(range).data, isNotEmpty);
+    // It matches the date-view section headers and lines up with the title.
+    final rangeText = tester.widget<Text>(range);
+    expect(rangeText.style?.fontSize, sectionTitle.style?.fontSize);
+    expect(rangeText.style?.fontWeight, sectionTitle.style?.fontWeight);
+    expect(rangeText.textAlign, TextAlign.start);
+    expect(
+      tester.getTopLeft(range).dx,
+      tester.getTopLeft(headerText('Photos')).dx,
+    );
+
+    await tester.drag(grid, const Offset(0, -240));
+    await tester.pumpAndSettle();
+    expect(range, findsOneWidget);
+    expect(tester.getRect(header), headerRect);
+    expect(tester.widget<Text>(range).data, isNotEmpty);
+
+    // The pull-revealed info no longer repeats the compact range.
+    await tester.drag(grid, const Offset(0, 1200));
+    await tester.pumpAndSettle();
+    expect(range, findsOneWidget);
+    await disposeApp(tester, gateway);
+  });
+
   testWidgets('touch viewer swipes between photos without desktop chrome', (
     tester,
   ) async {
@@ -455,6 +685,64 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('3 / 6'), findsOneWidget);
 
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('touch viewer header clears the status bar', (tester) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 6);
+    tester.view.padding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.resetPadding);
+    await mount(tester, gateway);
+    await tester.tap(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+
+    final header = tester.getRect(find.byKey(const ValueKey('viewer-header')));
+    expect(header.top, 32);
+    expect(header.left, 12);
+    expect(header.right, 390 - 12);
+    // The pill hugs its controls instead of carrying the status-bar inset.
+    expect(header.height, lessThan(60));
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('phone filmstrip uses uniform square thumbnails', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image);
+    gateway.photos = [
+      for (var i = 0; i < 2; i++) gateway.photo(i, width: 300, height: 400),
+      for (var i = 2; i < 6; i++) gateway.photo(i, width: 400, height: 300),
+    ];
+    await mount(tester, gateway);
+    await tester.tap(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+
+    // p0 is drawn at the selected scale, so compare the two following items.
+    final first = tester.getRect(
+      find.byKey(const ValueKey('viewer-strip-image-p1')),
+    );
+    final second = tester.getRect(
+      find.byKey(const ValueKey('viewer-strip-image-p2')),
+    );
+    expect(first.size, const Size(48, 48));
+    expect(second.center.dx - first.center.dx, closeTo(56, .5));
+    expect(second.left - first.right, closeTo(8, .5));
+    // Landscape and portrait sources both fill the same tile by cropping.
+    expect(
+      tester.getSize(find.byKey(const ValueKey('viewer-strip-image-p2'))),
+      const Size(48, 48),
+    );
+    final thumbnail = tester.widget<Image>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('viewer-strip-image-p1')),
+            matching: find.byType(Image),
+          )
+          .first,
+    );
+    expect(thumbnail.fit, BoxFit.cover);
     await disposeApp(tester, gateway);
   });
 
@@ -526,6 +814,8 @@ void main() {
     expect(find.byKey(const ValueKey('mobile-albums-page')), findsNothing);
     expect(find.byKey(const ValueKey('mobile-nav-albums')), findsOneWidget);
     expect(find.byKey(const ValueKey('mobile-album-back')), findsOneWidget);
+    // The year/month/day switch belongs to the Photos page only.
+    expect(find.byKey(const ValueKey('mobile-group-mode')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('mobile-album-back')));
     await tester.pumpAndSettle();
     expect(container.read(localLibraryProvider).favoritesOnly, isFalse);
@@ -537,6 +827,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(localLibraryProvider).folder, '/local/photos');
     expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mobile-group-mode')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('mobile-nav-albums')));
     await tester.pumpAndSettle();
 
@@ -564,6 +855,12 @@ void main() {
 
     expect(find.byKey(const ValueKey('mobile-nav-more')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('mobile-albums-options')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('mobile-albums-menu-settings')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('mobile-albums-menu-settings')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('mobile-settings-page')), findsOneWidget);
     await tester.binding.handlePopRoute();

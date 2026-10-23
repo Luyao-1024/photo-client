@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -49,7 +50,8 @@ Future<String?> createLocalAlbum(BuildContext context, WidgetRef ref) async {
     }) as String?;
     await controller.refresh(force: true);
     return folder;
-  } catch (_) {
+  } catch (error) {
+    debugPrint('LOCAL_ALBUM_CREATE_FAILED: $error');
     if (context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(strings.actionFailed)));

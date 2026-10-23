@@ -38,6 +38,12 @@ class AppStrings {
   String get openSettings => pick('打开设置', 'Open settings');
   String get scanFolders => pick('扫描目录', 'Scan folders');
   String photosCountLabel(int n) => pick('$n 张照片', '$n photos');
+  String libraryMediaCounts(int photos, int videos) {
+    if (videos == 0) return photosCountLabel(photos);
+    if (photos == 0) return pick('$videos 个视频', '$videos videos');
+    return pick('$photos 张照片、$videos 个视频', '$photos photos · $videos videos');
+  }
+
   String positionLabel(int cur, int total) => '$cur / $total';
   String get libraryFailed => pick('照片加载失败', 'Photos failed to load');
   String get libraryFailedBody => pick(
@@ -269,6 +275,11 @@ class AppStrings {
   String get cloudSyncUploading => pick('正在上传本地照片…', 'Uploading local photos…');
   String get cloudSyncFinalizing => pick('正在完成同步…', 'Finishing sync…');
   String get cloudSyncReady => pick('云同步已就绪', 'Cloud sync is ready');
+  String get cloudSyncJustCompleted => pick('刚刚同步完成', 'Sync complete');
+  String cloudSyncLastSyncShort(String date) =>
+      pick('上次同步：$date', 'Last sync: $date');
+  String dateRangeLabel(String start, String end) =>
+      pick('$start至$end', '$start – $end');
   String get cloudSyncNeedsAttention => pick('需要处理', 'Needs attention');
   String cloudSyncPendingSummary(int uploads, int favorites) => pick(
     '待上传 $uploads 张照片，待同步收藏 $favorites 项',

@@ -22,6 +22,7 @@ final class NativeCoreGateway
     implements
         CoreGateway,
         LocalLibraryGateway,
+        LocalLibraryCountsGateway,
         LocalLibraryTools,
         ThumbnailPipelineGateway,
         CloudSyncGateway {
@@ -128,6 +129,26 @@ final class NativeCoreGateway
       count: info.count.toInt(),
       revision: info.revision.toInt(),
     );
+  }
+
+  @override
+  Future<int> countVideos({
+    bool favoritesOnly = false,
+    String search = '',
+    SearchScope searchScope = SearchScope.all,
+    String? folder,
+    bool trashed = false,
+  }) async {
+    final page = await native_library.listPhotos(
+      limit: 1,
+      favoritesOnly: favoritesOnly,
+      search: search,
+      searchScope: searchScope.wire,
+      folder: folder,
+      mediaKind: 'video',
+      trashed: trashed,
+    );
+    return page.total.toInt();
   }
 
   @override

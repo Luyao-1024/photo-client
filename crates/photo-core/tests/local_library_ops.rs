@@ -361,6 +361,75 @@ fn reordered_empty_album_keeps_its_sidebar_position() {
 }
 
 #[test]
+fn create_album_reclaims_a_preference_left_by_a_deleted_folder() {
+    let parent = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let library = LocalLibrary::open(root.path()).unwrap();
+    let folder = library
+        .create_album(parent.path().to_path_buf(), "Album".into())
+        .unwrap();
+    fs::remove_dir_all(&folder).unwrap();
+    let folder = library
+        .create_album(parent.path().to_path_buf(), "Album".into())
+        .unwrap();
+    assert!(Path::new(&folder).is_dir());
+    let albums = library.list_albums().unwrap();
+    assert_eq!(albums.len(), 1);
+    assert_eq!(albums[0].path, folder);
+}
+
+#[test]
+fn rename_album_folds_in_a_source_left_by_a_removed_album() {
+    let parent = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let library = LocalLibrary::open(root.path()).unwrap();
+    let first = library
+        .create_album(parent.path().to_path_buf(), "First".into())
+        .unwrap();
+    let second = library
+        .create_album(parent.path().to_path_buf(), "Second".into())
+        .unwrap();
+    let source = library.add_source(Path::new(&first)).unwrap();
+    library
+        .upsert_batch(source, vec![write_photo(Path::new(&first), "one.png", 4, 4)])
+        .unwrap();
+    library.remove_album(second.clone()).unwrap();
+    fs::remove_dir_all(&second).unwrap();
+    library
+        .rename_album(first.clone(), "Second".into())
+        .unwrap();
+    let renamed = parent.path().join("Second");
+    assert!(renamed.is_dir());
+    let albums = library.list_albums().unwrap();
+    assert_eq!(albums.len(), 1);
+    assert_eq!(albums[0].path, renamed.to_str().unwrap());
+    assert_eq!(albums[0].count, 1);
+}
+
+#[test]
+fn rename_album_moves_the_folder_and_keeps_media_visible() {
+    let parent = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let library = LocalLibrary::open(root.path()).unwrap();
+    let folder = parent.path().join("Album");
+    fs::create_dir(&folder).unwrap();
+    let source = library.add_source(&folder).unwrap();
+    library
+        .upsert_batch(source, vec![write_photo(&folder, "one.png", 4, 4)])
+        .unwrap();
+    library
+        .rename_album(folder.to_string_lossy().into_owned(), "Renamed".into())
+        .unwrap();
+    assert!(!folder.exists());
+    let renamed = parent.path().join("Renamed");
+    assert!(renamed.is_dir());
+    let albums = library.list_albums().unwrap();
+    assert_eq!(albums.len(), 1);
+    assert_eq!(albums[0].path, renamed.canonicalize().unwrap().to_string_lossy());
+    assert_eq!(albums[0].count, 1);
+}
+
+#[test]
 fn batch_upsert_keeps_trashed_media_trashed() {
     let photos = TempDir::new().unwrap();
     let root = TempDir::new().unwrap();

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -77,8 +75,7 @@ class _PhotoClientScrollBehavior extends MaterialScrollBehavior {
   }
 }
 
-class _ApplicationState extends ConsumerState<_Application>
-    with WidgetsBindingObserver {
+class _ApplicationState extends ConsumerState<_Application> {
   static String? _lastQualityReport;
 
   /// The effective tier is what the frame budget allowed, which is not always
@@ -99,7 +96,6 @@ class _ApplicationState extends ConsumerState<_Application>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     WindowController.instance.initialize();
     PaintingBinding.instance.imageCache.maximumSizeBytes = 128 * 1024 * 1024;
     WindowController.instance.confirmLibraryClose = () async {
@@ -140,18 +136,13 @@ class _ApplicationState extends ConsumerState<_Application>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) {
-      unawaited(ref.read(runtimeProvider.notifier).shutdown());
-    }
-  }
-
-  @override
   void dispose() {
     WindowController.instance.confirmLibraryClose = null;
     WindowController.instance.prepareClose = null;
-    WidgetsBinding.instance.removeObserver(this);
     // ProviderScope owns subscription cancellation and native session cleanup.
+    // The native session itself is process-scoped: Android may destroy and
+    // recreate the Flutter engine without ending the process, and the next
+    // engine must attach to the library that is still open.
     super.dispose();
   }
 

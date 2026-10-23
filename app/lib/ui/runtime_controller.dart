@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/core_gateway.dart';
@@ -128,7 +129,8 @@ class RuntimeController extends Notifier<RuntimeViewState> {
         onDone: () => _streamFailed(generation),
         cancelOnError: true,
       );
-    } catch (_) {
+    } catch (error) {
+      debugPrint('RUNTIME_INIT_FAILED: $error');
       if (_disposed || _stopping || generation != _generation) return;
       state = const RuntimeViewState(
         phase: ConnectionPhase.failed,

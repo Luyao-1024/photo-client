@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
@@ -480,7 +481,8 @@ class LocalLibraryController extends Notifier<LibraryViewState> {
         hasNext: page.nextCursor != null,
         albums: albums,
       );
-    } catch (_) {
+    } catch (error) {
+      debugPrint('LOCAL_LIBRARY_LOAD_FAILED: $error');
       if (!_disposed && generation == _generation) {
         state = state.copyWith(loading: false, problem: LibraryProblem.load);
       }

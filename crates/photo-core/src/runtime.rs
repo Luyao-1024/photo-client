@@ -21,8 +21,6 @@ pub struct RuntimeEvent {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RuntimeError {
-    #[error("AlreadyInitialized: the native bootstrap is already active")]
-    AlreadyInitialized,
     #[error("NotInitialized: the native bootstrap is closed")]
     NotInitialized,
     #[error("Internal: runtime state is unavailable")]
@@ -57,8 +55,11 @@ impl Default for BootstrapRuntime {
 impl BootstrapRuntime {
     pub fn initialize(&self, profile: ValidatedProfile) -> Result<BootstrapSnapshot, RuntimeError> {
         let mut state = self.state.lock().map_err(|_| RuntimeError::Internal)?;
-        if state.active.is_some() {
-            return Err(RuntimeError::AlreadyInitialized);
+        // The native session is process-scoped. A recreated Flutter engine in
+        // the same process must attach to it instead of failing, otherwise the
+        // library stays locked but the UI can never read it.
+        if let Some(active) = &state.active {
+            return Ok(active.clone());
         }
         let snapshot = BootstrapSnapshot {
             profile_id: profile.profile().profile_id.clone(),

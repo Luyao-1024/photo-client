@@ -54,9 +54,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
   // (fit); declaring a lower floor would leave zoom-out enabled but inert.
   static const double _minScale = 1;
   static const double _maxScale = 8;
-  // Compact phone chrome keeps the image prominent and the touch target
-  // at least 48 logical pixels. Desktop geometry stays unchanged.
+  // One square preview per photo on both platforms: following the source
+  // aspect made wide photos look much larger than tall ones. The phone keeps
+  // the compact 48dp tile and tighter 8dp gap; desktop uses 60dp and 12dp.
   double get _stripThumb => _mobileLayout ? 48 : 60;
+  double get _stripGap => _mobileLayout ? 8 : ViewerFilmstripLayout.defaultGap;
   double get _stripHeight => _mobileLayout ? 64 : 84;
   double get _navigationBottom => _stripHeight + 28;
   double get _videoControlsInset => _stripHeight + 20;
@@ -68,43 +70,17 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
   ViewerFilmstripLayout? _stripLayout;
   (int, int, double)? _stripLayoutKey;
 
-  void _updateStripLayout(LibraryViewState library, int? index) {
-    final previous = _stripLayout;
-    final position = _strip.hasClients ? _strip.position : null;
-    final wasCentered =
-        previous == null ||
-        index == null ||
-        index >= previous.count ||
-        position == null ||
-        !position.hasContentDimensions ||
-        _stripPendingCenter ||
-        (previous.centeredOffset(index, position.viewportDimension) -
-                    position.pixels)
-                .abs() <
-            2;
+  void _updateStripLayout(LibraryViewState library) {
     final key = (library.queryEpoch, library.revision, _stripThumb);
     if (_stripLayoutKey != key || _stripLayout?.count != library.total) {
       _stripLayoutKey = key;
       _stripLayout = ViewerFilmstripLayout(
         count: library.total,
         height: _stripThumb,
+        gap: _stripGap,
       );
       _stripCentered = null;
     }
-    final layout = _stripLayout!;
-    final revision = layout.revision;
-    for (final page in library.pages.entries) {
-      for (var item = 0; item < page.value.length; item++) {
-        layout.update(
-          page.key * LocalLibraryController.pageSize + item,
-          page.value[item],
-        );
-      }
-    }
-    // Loading a distant page while the user browses the strip must not pull
-    // the list back to the displayed photo. Correct the centre only when it
-    // was already following that photo; a new selection centres separately.
-    if (layout.revision != revision && wasCentered) _stripCentered = null;
   }
 
   late LocalPhoto _photo = widget.photo;
@@ -1063,7 +1039,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
       _scheduledPages.clear();
       _stripCentered = null;
     }
-    _updateStripLayout(library, index);
+    _updateStripLayout(library);
     if (index != null && (_stripCentered != photo.id || !_strip.hasClients)) {
       _stripCentered = photo.id;
       _stripPendingCenter = true;
@@ -1347,9 +1323,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                     ),
                   Positioned(
                     key: const ValueKey('viewer-header-position'),
-                    top: 8,
-                    left: 8,
-                    right: 8,
+                    // Keep the floating glass below the status bar instead of
+                    // stretching into it with the safe area inside the pill.
+                    top: mobile ? MediaQuery.paddingOf(context).top + 8 : 8,
+                    left: mobile ? 12 : 8,
+                    right: mobile ? 12 : 8,
                     child: _RevealRegion(
                       revealed: !_chromeHidden,
                       foldOffset: const Offset(0, -.35),
@@ -1763,6 +1741,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
         live: true,
         radius: GlassTheme.panelRadius,
         child: SafeArea(
+          top: false,
           bottom: false,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -2091,7 +2070,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
         : layout.count == 0
         ? 0.0
         : math.max(0.0, layout.centeredOffset(index ?? 0, width));
-    // Prepare only the variable-width visible strip and its neighbours.
+    // Prepare only the visible strip and its neighbours.
     final first = layout.indexAt(offset - inset);
     final last = layout.count == 0
         ? 0
@@ -2100,7 +2079,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
     final pool = ThumbnailPool.forGateway(gateway);
     final key =
         '${library.queryEpoch}:${library.revision}:${pool.epoch.value}:'
-        '${layout.height}:${layout.count}:${layout.revision}:$first:$last:$dpr:'
+        '${layout.height}:${layout.count}:$first:$last:$dpr:'
         '${[for (var i = first; i < last; i++) '${library.photoAt(i)?.id}:${library.photoAt(i)?.contentVersion}'].join(',')}';
     if (_stripWarmKey == key) return _stripWarmFuture!;
     _stripWarmKey = key;
@@ -2127,7 +2106,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                   photo == null) {
                 return;
               }
-              final size = layout.sizeFor(photo);
+              final size = layout.sizeAt(i);
               request = pool.acquire(
                 photo,
                 thumbnailSizeClassFor(size.longestSide * dpr),
@@ -2135,6 +2114,8 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
               _stripWarmRequests.add(request);
               final path = await request.future;
               if (!mounted || generation != _stripWarmGeneration) return;
+              // A stale decoder must not pin strip preparation forever; the
+              // strip already reveals itself after a short deadline.
               await precacheImage(
                 ThumbnailImage.file(
                   path,
@@ -2143,6 +2124,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                 ),
                 context,
                 onError: (_, _) {},
+              ).timeout(
+                const Duration(milliseconds: 400),
+                onTimeout: () {},
               );
             } catch (_) {
               // Failed cells settle to their existing unavailable-thumbnail tile.
@@ -2240,8 +2224,8 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                               child: Semantics(
                                 selected: active,
                                 child: SizedBox(
-                                  width: math.max(48, size.width),
-                                  height: math.max(48, size.height),
+                                  width: size.width,
+                                  height: size.height,
                                   child: Center(
                                     child: AnimatedScale(
                                       scale: active
@@ -3108,7 +3092,7 @@ class _FilmstripThumbState extends State<_FilmstripThumb> {
                       photo,
                       use: ThumbnailUse.embedded,
                     ),
-                    fit: BoxFit.contain,
+                    fit: BoxFit.cover,
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
           );
@@ -3118,7 +3102,7 @@ class _FilmstripThumbState extends State<_FilmstripThumb> {
         );
         return Image(
           image: ThumbnailImage.file(path, photo, width: target),
-          fit: BoxFit.contain,
+          fit: BoxFit.cover,
           excludeFromSemantics: true,
           errorBuilder: (context, error, stack) => const Center(
             child: Icon(

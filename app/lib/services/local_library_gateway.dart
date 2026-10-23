@@ -36,6 +36,18 @@ abstract interface class LocalLibraryGateway {
   Stream<void> watchLibrary();
 }
 
+/// Optional count query used by the phone header without disturbing the
+/// paged/grid request stream.
+abstract interface class LocalLibraryCountsGateway {
+  Future<int> countVideos({
+    bool favoritesOnly = false,
+    String search = '',
+    SearchScope searchScope = SearchScope.all,
+    String? folder,
+    bool trashed = false,
+  });
+}
+
 abstract interface class LocalSourcePicker {
   Future<List<String>> chooseFiles();
   Future<String?> chooseDirectory();

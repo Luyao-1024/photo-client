@@ -284,6 +284,29 @@ void main() {
   );
 
   testWidgets(
+    'inline search uses media-type sections, not media-kind sentinel dates',
+    (tester) async {
+      final gateway = FakeSearchGroupsGateway(imagePath: image, count: 2);
+      await mount(tester, gateway);
+      await tester.tap(find.byKey(const ValueKey('library-search')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Photo');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('local-photo-grid')),
+          matching: find.text('Images'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('1970'), findsNothing);
+      expect(find.textContaining('1969'), findsNothing);
+      await disposeApp(tester, gateway);
+    },
+  );
+
+  testWidgets(
     'load failure shows a safe error, retry succeeds without pretending library is empty',
     (tester) async {
       final gateway = FakeLocalGateway(imagePath: image)..failOpen = true;

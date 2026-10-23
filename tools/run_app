@@ -389,8 +389,8 @@ if [ "$mode" = "android" ]; then
   "$ANDROID_ADB" -s "$serial" install -r "$ANDROID_APK"
   # Installing over a running app makes Android relaunch it on its own. That
   # second launch races with ours and leaves two Flutter engines in one
-  # process, where the native runtime refuses to initialize twice and the
-  # library comes up empty. Stop the package so exactly one launch happens.
+  # process. The native runtime is process-scoped and reuses its session, but
+  # stopping the package keeps exactly one launch and one engine.
   "$ANDROID_ADB" -s "$serial" shell am force-stop "$ANDROID_PACKAGE"
   sleep 1
   # The library is path-based like the desktop build, so it needs the all-files

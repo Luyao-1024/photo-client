@@ -13,6 +13,7 @@ import 'glass_theme.dart';
 import 'local_album_actions.dart';
 import 'library_activity_progress.dart';
 import 'local_library_controller.dart';
+import 'mobile_pull_refresh.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
 
@@ -114,10 +115,8 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
           children: [
             _header(context, strings, albums.length),
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: () => ref
-                    .read(localLibraryProvider.notifier)
-                    .refresh(force: true),
+              child: MobilePullRefresh(
+                key: const ValueKey('mobile-albums-pull'),
                 child: CustomScrollView(
                   key: const ValueKey('mobile-albums-scroll'),
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -250,11 +249,9 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
             onPressed: widget.onSearch,
           ),
           const SizedBox(width: 8),
-          _CircleAction(
-            key: const ValueKey('mobile-albums-options'),
-            tooltip: strings.settings,
-            icon: Icons.more_vert,
-            onPressed: widget.onOpenSettings,
+          _AlbumsOptionsButton(
+            tooltip: strings.pick('更多选项', 'More options'),
+            onOpenSettings: widget.onOpenSettings,
           ),
         ],
       ),
@@ -395,7 +392,8 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
     setState(() => _busy = true);
     try {
       await action();
-    } catch (_) {
+    } catch (error) {
+      debugPrint('ALBUM_ACTION_FAILED: $error');
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(strings.actionFailed)));
@@ -791,6 +789,70 @@ class _RenameAlbumDialogState extends State<_RenameAlbumDialog> {
           child: Text(strings.rename),
         ),
       ],
+    );
+  }
+}
+
+class _AlbumsOptionsButton extends StatelessWidget {
+  const _AlbumsOptionsButton({
+    required this.tooltip,
+    required this.onOpenSettings,
+  });
+
+  final String tooltip;
+  final VoidCallback onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return SizedBox.square(
+      dimension: 46,
+      child: GlassSurface(
+        role: GlassRole.raised,
+        live: true,
+        radius: 23,
+        child: PopupMenuButton<int>(
+          key: const ValueKey('mobile-albums-options'),
+          tooltip: tooltip,
+          icon: const Icon(Icons.more_vert, size: 22),
+          style: IconButton.styleFrom(
+            fixedSize: const Size(46, 46),
+            padding: EdgeInsets.zero,
+            shape: const CircleBorder(),
+          ),
+          color: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          menuPadding: EdgeInsets.zero,
+          clipBehavior: Clip.none,
+          position: PopupMenuPosition.under,
+          padding: EdgeInsets.zero,
+          offset: const Offset(0, 4),
+          constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(GlassTheme.panelRadius),
+          ),
+          onSelected: (_) => onOpenSettings(),
+          itemBuilder: (context) => [
+            GlassMenuEntry<int>(
+              padding: EdgeInsets.zero,
+              items: [
+                PopupMenuItem(
+                  key: const ValueKey('mobile-albums-menu-settings'),
+                  value: 0,
+                  height: 48,
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.settings_outlined),
+                    title: Text(strings.settings),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
