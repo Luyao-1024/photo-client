@@ -83,11 +83,11 @@ void main() {
     for (final key in [
       'mobile-nav-photos',
       'mobile-nav-albums',
-      'mobile-nav-favorites',
       'mobile-nav-more',
     ]) {
       expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
     }
+    expect(find.byKey(const ValueKey('mobile-nav-favorites')), findsNothing);
     expect(headerText('Photos'), findsOneWidget);
 
     // Three tiles fill the phone width; the fourth wraps to the next row.
@@ -103,17 +103,12 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
-  testWidgets('bottom navigation reaches albums, favorites, trash and search', (
+  testWidgets('albums page owns favorites, videos, trash and search', (
     tester,
   ) async {
     final gateway = FakeLocalGateway(imagePath: image, count: 4);
     await mount(tester, gateway);
     final container = containerOf(tester);
-
-    await tester.tap(find.byKey(const ValueKey('mobile-nav-favorites')));
-    await tester.pumpAndSettle();
-    expect(container.read(localLibraryProvider).favoritesOnly, isTrue);
-    expect(headerText('Favorites'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('mobile-nav-albums')));
     await tester.pumpAndSettle();
@@ -126,16 +121,31 @@ void main() {
       find.byKey(const ValueKey('mobile-smart-album-trash')),
       findsOneWidget,
     );
+
+    // Favorites is an album detail, not a bottom tab.
+    await tester.tap(
+      find.byKey(const ValueKey('mobile-smart-album-favorites')),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(localLibraryProvider).favoritesOnly, isTrue);
+    expect(headerText('Favorites'), findsOneWidget);
+    expect(find.byKey(const ValueKey('mobile-albums-page')), findsNothing);
+    expect(find.byKey(const ValueKey('mobile-nav-albums')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mobile-album-back')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('mobile-album-back')));
+    await tester.pumpAndSettle();
+    expect(container.read(localLibraryProvider).favoritesOnly, isFalse);
+    expect(find.byKey(const ValueKey('mobile-albums-page')), findsOneWidget);
+
     final album = find.byKey(const ValueKey('mobile-album-/local/photos'));
-    expect(album, findsOneWidget);
     await tester.ensureVisible(album);
     await tester.tap(album);
     await tester.pumpAndSettle();
     expect(container.read(localLibraryProvider).folder, '/local/photos');
     expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
-
     await tester.tap(find.byKey(const ValueKey('mobile-nav-albums')));
     await tester.pumpAndSettle();
+
     final videos = find.byKey(const ValueKey('mobile-smart-album-videos'));
     await tester.ensureVisible(videos);
     await tester.tap(videos);
@@ -143,17 +153,29 @@ void main() {
     expect(container.read(localLibraryProvider).mediaKind, 'video');
     expect(headerText('Videos'), findsOneWidget);
     expect(find.text('No matching photos'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('mobile-nav-more')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('mobile-more-trash')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('mobile-more-trash')));
-    await tester.pumpAndSettle();
-    expect(container.read(localLibraryProvider).trashed, isTrue);
-    expect(find.textContaining('Trash is empty'), findsOneWidget);
-
     await tester.tap(find.byKey(const ValueKey('mobile-nav-albums')));
     await tester.pumpAndSettle();
+
+    final trash = find.byKey(const ValueKey('mobile-smart-album-trash'));
+    await tester.ensureVisible(trash);
+    await tester.tap(trash);
+    await tester.pumpAndSettle();
+    expect(container.read(localLibraryProvider).trashed, isTrue);
+    expect(headerText('Trash'), findsOneWidget);
+    expect(find.textContaining('Trash is empty'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('mobile-album-back')));
+    await tester.pumpAndSettle();
+    expect(container.read(localLibraryProvider).trashed, isFalse);
+    expect(find.byKey(const ValueKey('mobile-albums-page')), findsOneWidget);
+
+    // More no longer proves a second path to trash.
+    await tester.tap(find.byKey(const ValueKey('mobile-nav-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('mobile-more-trash')), findsNothing);
+    expect(find.byKey(const ValueKey('mobile-more-refresh')), findsOneWidget);
+    await tester.tapAt(const Offset(20, 100));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const ValueKey('mobile-albums-search')));
     await tester.pumpAndSettle();
     expect(container.read(localLibraryProvider).favoritesOnly, isFalse);
@@ -220,19 +242,28 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
-  testWidgets('system back clears search and filtered destinations first', (
+  testWidgets('back walks album detail, albums list and search', (
     tester,
   ) async {
     final gateway = FakeLocalGateway(imagePath: image, count: 2);
     await mount(tester, gateway);
     final container = containerOf(tester);
 
-    await tester.tap(find.byKey(const ValueKey('mobile-nav-favorites')));
+    await tester.tap(find.byKey(const ValueKey('mobile-nav-albums')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('mobile-smart-album-favorites')),
+    );
     await tester.pumpAndSettle();
     expect(container.read(localLibraryProvider).favoritesOnly, isTrue);
+
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(container.read(localLibraryProvider).favoritesOnly, isFalse);
+    expect(find.byKey(const ValueKey('mobile-albums-page')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
     expect(headerText('Photos'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('library-search')));

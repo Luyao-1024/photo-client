@@ -55,7 +55,6 @@ class MobileAlbumsPage extends ConsumerStatefulWidget {
     required this.onOpenSmartAlbum,
     required this.onOpenAlbum,
     required this.onSearch,
-    required this.onOpenTrash,
     required this.onOpenSettings,
     required this.onAdd,
   });
@@ -63,7 +62,6 @@ class MobileAlbumsPage extends ConsumerStatefulWidget {
   final ValueChanged<MobileSmartAlbum> onOpenSmartAlbum;
   final ValueChanged<LocalAlbum> onOpenAlbum;
   final VoidCallback onSearch;
-  final VoidCallback onOpenTrash;
   final VoidCallback onOpenSettings;
   final VoidCallback onAdd;
 
@@ -132,9 +130,7 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
                         coverMediaId: page?.items.firstOrNull?.id,
                         revision: library.revision,
                         fallbackIcon: icon,
-                        onTap: () => kind == MobileSmartAlbum.trash
-                            ? widget.onOpenTrash()
-                            : widget.onOpenSmartAlbum(kind),
+                        onTap: () => widget.onOpenSmartAlbum(kind),
                       );
                     },
                   ),
@@ -256,12 +252,6 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
             onTap: () => Navigator.of(context).pop('refresh'),
           ),
           ListTile(
-            key: const ValueKey('mobile-albums-trash'),
-            leading: const Icon(Icons.delete_outline),
-            title: Text(strings.trash),
-            onTap: () => Navigator.of(context).pop('trash'),
-          ),
-          ListTile(
             key: const ValueKey('mobile-albums-settings'),
             leading: const Icon(Icons.settings_outlined),
             title: Text(strings.settings),
@@ -276,8 +266,6 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
         widget.onAdd();
       case 'refresh':
         await ref.read(localLibraryProvider.notifier).refresh(force: true);
-      case 'trash':
-        widget.onOpenTrash();
       case 'settings':
         widget.onOpenSettings();
     }

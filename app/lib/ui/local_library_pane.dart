@@ -32,6 +32,7 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
     super.key,
     this.onOpenSettings,
     this.onRequestSearch,
+    this.onBack,
     this.trashMode = false,
     this.searchMode = false,
     this.searchDetail = false,
@@ -49,6 +50,10 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
   /// Asks the shell to switch to the dedicated search destination. When null
   /// the pane falls back to an inline search field.
   final VoidCallback? onRequestSearch;
+
+  /// Returns from a phone album detail to the albums page. Desktop keeps the
+  /// sidebar and leaves this null.
+  final VoidCallback? onBack;
   final bool trashMode;
   final bool searchMode;
   final bool searchDetail;
@@ -1192,6 +1197,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
           title: title,
           itemCount: state.loading ? null : state.extent,
           mobile: widget.mobile,
+          onBack: widget.onBack,
           trashMode: widget.trashMode,
           searchMode: widget.searchMode,
           scope: state.searchScope,
@@ -1893,6 +1899,7 @@ class _Header extends StatelessWidget {
     required this.title,
     required this.itemCount,
     required this.mobile,
+    this.onBack,
     required this.trashMode,
     required this.searchMode,
     required this.scope,
@@ -1931,6 +1938,7 @@ class _Header extends StatelessWidget {
   final String title;
   final int? itemCount;
   final bool mobile;
+  final VoidCallback? onBack;
   final bool trashMode;
   final bool searchMode;
   final SearchScope scope;
@@ -2063,6 +2071,17 @@ class _Header extends StatelessWidget {
                   final showActivity = !mobile && constraints.maxWidth >= 480;
                   return Row(
                     children: [
+                      if (mobile && onBack != null)
+                        IconButton(
+                          key: const ValueKey('mobile-album-back'),
+                          tooltip: strings.pick('返回相册', 'Back to albums'),
+                          onPressed: onBack,
+                          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                          style: IconButton.styleFrom(
+                            fixedSize: const Size(40, 48),
+                            padding: EdgeInsets.zero,
+                          ),
+                        ),
                       Expanded(child: leading),
                       if (showActivity)
                         Expanded(

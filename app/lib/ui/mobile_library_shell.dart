@@ -12,7 +12,7 @@ import 'local_settings_dialog.dart';
 import 'mobile_albums_page.dart';
 import 'strings.dart';
 
-enum _MobileTab { photos, favorites, albums }
+enum _MobileTab { photos, albums }
 
 /// The phone workspace: the photo grid and a dedicated albums page under one
 /// floating navigation bar. The desktop sidebar is never built here.
@@ -25,6 +25,7 @@ class MobileLibraryShell extends ConsumerStatefulWidget {
 
 class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
   _MobileTab _tab = _MobileTab.photos;
+  bool _albumDetail = false;
   int _searchRequest = 0;
   int _closeSearchRequest = 0;
   bool _searchVisible = false;
@@ -49,34 +50,38 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
 
   void _showPhotos() {
     _closeSearch();
-    setState(() => _tab = _MobileTab.photos);
+    setState(() {
+      _tab = _MobileTab.photos;
+      _albumDetail = false;
+    });
     unawaited(_controller.showDestination());
-  }
-
-  void _showFavorites() {
-    _closeSearch();
-    setState(() => _tab = _MobileTab.favorites);
-    unawaited(_controller.showDestination(favorites: true));
   }
 
   void _showAlbums() {
     _closeSearch();
-    setState(() => _tab = _MobileTab.albums);
+    final wasDetail = _albumDetail;
+    setState(() {
+      _tab = _MobileTab.albums;
+      _albumDetail = false;
+    });
+    if (wasDetail) unawaited(_controller.showDestination());
   }
 
   void _openAlbum(LocalAlbum album) {
     _closeSearch();
-    setState(() => _tab = _MobileTab.photos);
+    setState(() {
+      _tab = _MobileTab.albums;
+      _albumDetail = true;
+    });
     unawaited(_controller.showDestination(folder: album.path));
   }
 
   void _openSmartAlbum(MobileSmartAlbum album) {
     _closeSearch();
-    setState(
-      () => _tab = album == MobileSmartAlbum.favorites
-          ? _MobileTab.favorites
-          : _MobileTab.photos,
-    );
+    setState(() {
+      _tab = _MobileTab.albums;
+      _albumDetail = true;
+    });
     switch (album) {
       case MobileSmartAlbum.favorites:
         unawaited(_controller.showDestination(favorites: true));
@@ -87,19 +92,14 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
       case MobileSmartAlbum.motion:
         unawaited(_controller.showDestination(kind: 'motion'));
       case MobileSmartAlbum.trash:
-        _openTrash();
+        unawaited(_controller.showDestination(trash: true));
     }
-  }
-
-  void _openTrash() {
-    _closeSearch();
-    setState(() => _tab = _MobileTab.photos);
-    unawaited(_controller.showDestination(trash: true));
   }
 
   void _openSearch() {
     setState(() {
       _tab = _MobileTab.photos;
+      _albumDetail = false;
       _searchVisible = true;
       _searchRequest++;
     });
@@ -129,12 +129,6 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 ListTile(
-                  key: const ValueKey('mobile-more-trash'),
-                  leading: const Icon(Icons.delete_outline),
-                  title: Text(strings.trash),
-                  onTap: () => Navigator.of(context).pop('trash'),
-                ),
-                ListTile(
                   key: const ValueKey('mobile-more-refresh'),
                   leading: const Icon(Icons.refresh),
                   title: Text(strings.refresh),
@@ -154,8 +148,6 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
     );
     if (!mounted || action == null) return;
     switch (action) {
-      case 'trash':
-        _openTrash();
       case 'refresh':
         await _controller.refresh(force: true);
       case 'settings':
@@ -178,7 +170,13 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
         if (didPop) return;
         if (_searchVisible) {
           _closeSearch();
-        } else if (_tab != _MobileTab.photos || filtered) {
+        } else if (_tab == _MobileTab.albums) {
+          if (_albumDetail) {
+            _showAlbums();
+          } else {
+            _showPhotos();
+          }
+        } else if (filtered) {
           _showPhotos();
         }
       },
@@ -191,12 +189,15 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
           children: [
             IndexedStack(
               sizing: StackFit.expand,
-              index: _tab == _MobileTab.albums ? 1 : 0,
+              index: _tab == _MobileTab.albums && !_albumDetail ? 1 : 0,
               children: [
                 LocalLibraryPane(
                   mobile: true,
                   trashMode: state.trashed,
                   onOpenSettings: _openSettings,
+                  onBack: _tab == _MobileTab.albums && _albumDetail
+                      ? _showAlbums
+                      : null,
                   searchRequest: _searchRequest,
                   closeSearchRequest: _closeSearchRequest,
                   onSearchVisibilityChanged: _onSearchVisibilityChanged,
@@ -205,7 +206,6 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
                   onOpenSmartAlbum: _openSmartAlbum,
                   onOpenAlbum: _openAlbum,
                   onSearch: _openSearch,
-                  onOpenTrash: _openTrash,
                   onOpenSettings: _openSettings,
                   onAdd: _openSettings,
                 ),
@@ -223,7 +223,6 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
                     tab: _tab,
                     onPhotos: _showPhotos,
                     onAlbums: _showAlbums,
-                    onFavorites: _showFavorites,
                     onMore: () => unawaited(_showMore()),
                   ),
                 ),
@@ -240,12 +239,11 @@ class _MobileNavigationBar extends StatelessWidget {
     required this.tab,
     required this.onPhotos,
     required this.onAlbums,
-    required this.onFavorites,
     required this.onMore,
   });
 
   final _MobileTab tab;
-  final VoidCallback onPhotos, onAlbums, onFavorites, onMore;
+  final VoidCallback onPhotos, onAlbums, onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -271,13 +269,6 @@ class _MobileNavigationBar extends StatelessWidget {
               label: strings.albums,
               selected: tab == _MobileTab.albums,
               onTap: onAlbums,
-            ),
-            _MobileNavItem(
-              key: const ValueKey('mobile-nav-favorites'),
-              icon: Icons.favorite_border,
-              label: strings.albumFavorites,
-              selected: tab == _MobileTab.favorites,
-              onTap: onFavorites,
             ),
             _MobileNavItem(
               key: const ValueKey('mobile-nav-more'),
@@ -325,6 +316,7 @@ class _MobileNavItem extends StatelessWidget {
               duration: MediaQuery.disableAnimationsOf(context)
                   ? Duration.zero
                   : const Duration(milliseconds: 180),
+              margin: const EdgeInsets.symmetric(horizontal: 24),
               decoration: BoxDecoration(
                 color: selected ? glass.selection : Colors.transparent,
                 borderRadius: BorderRadius.circular(22),
