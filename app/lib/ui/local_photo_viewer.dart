@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,7 @@ import '../services/window_controller.dart';
 import 'glass_dialog.dart';
 import 'glass_surface.dart';
 import 'glass_theme.dart';
+import 'library_layout.dart';
 import 'local_animated_stage.dart';
 import 'local_library_controller.dart';
 import 'local_photo_editor.dart';
@@ -44,7 +46,8 @@ class LocalPhotoViewer extends ConsumerStatefulWidget {
   ConsumerState<LocalPhotoViewer> createState() => _LocalPhotoViewerState();
 }
 
-class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
+class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
+    with SingleTickerProviderStateMixin {
   // InteractiveViewer's child fills the viewport, so it clamps scale at 1.0
   // (fit); declaring a lower floor would leave zoom-out enabled but inert.
   static const double _minScale = 1;
@@ -77,6 +80,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   bool _editing = false, _showMotion = false, _animated = false;
   bool _hasMotion = false, _motionHeld = false;
   bool _playbackActive = false;
+  bool _videoControlsVisible = false;
   final _editorKey = GlobalKey<LocalPhotoEditorState>();
   // Keyed per media identity: during the stage cross-fade the outgoing video
   // is still mounted, so a single shared key would be registered twice.
@@ -97,17 +101,35 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   // Wheel and pinch zoom bypass _applyZoom's setState, so the label needs its
   // own rebuild whenever the rendered percentage actually changes.
   int _zoomPercent = 100;
+  final _swipe = ValueNotifier<double>(0);
+  late final AnimationController _swipeReturn;
+  double _swipeReturnStart = 0;
+  int? _swipePointer;
+  Offset? _swipeStart;
+  bool _swipeHorizontal = false;
+  VelocityTracker? _swipeVelocity;
+  int _navDirection = 1;
   @override
   void initState() {
     super.initState();
     _transform.addListener(_boundTransform);
+    _swipeReturn =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 180),
+        )..addListener(() {
+          final t = Curves.easeOutCubic.transform(_swipeReturn.value);
+          _swipe.value = _swipeReturnStart * (1 - t);
+        });
   }
 
   void _boundTransform() {
     final percent = (_scale * 100).round();
     if (percent != _zoomPercent) {
       _zoomPercent = percent;
-      if (mounted) setState(() {});
+      // Touch layouts hide the percentage label; let the gesture own the
+      // transform without rebuilding the chrome on every pinch frame.
+      if (mounted && !_mobileLayout) setState(() {});
     }
     if (_bounding || _viewport.isEmpty) return;
     final photo = _photo;
@@ -181,6 +203,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     for (final request in _neighborThumbnails.values) {
       request.release();
     }
+    _swipePointer = null;
+    _swipeReturn.dispose();
+    _swipe.dispose();
     _decodeDebounce?.cancel();
     _transform.dispose();
     _strip.dispose();
@@ -188,6 +213,12 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   }
 
   double get _scale => _transform.value.getMaxScaleOnAxis();
+
+  bool get _mobileLayout =>
+      ref.read(libraryLayoutProvider) == LibraryLayout.mobile;
+
+  /// Top edge just below the touch header, including its status-bar inset.
+  double get _mobileHeaderBottom => MediaQuery.paddingOf(context).top + 66;
 
   /// Zoom about the viewport centre so keyboard zoom matches the pointer
   /// gesture bounds enforced by [InteractiveViewer].
@@ -211,6 +242,8 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     if (_editing) return;
     final library = ref.read(localLibraryProvider);
     if (target < 0 || target >= library.total) return;
+    final current = library.indexOf(_photo.id) ?? _resolvedIndex;
+    _navDirection = target >= current ? 1 : -1;
     final generation = ++_navGeneration;
     _pendingIndex = target;
     _navigationThumbnail?.release();
@@ -257,6 +290,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     setState(() {
       _navigating = false;
       _pendingIndex = null;
+      _videoControlsVisible = false;
       if (photo != null &&
           ref.read(localLibraryProvider).queryEpoch == library.queryEpoch) {
         _photo = photo;
@@ -272,6 +306,122 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
         ref.read(localLibraryProvider).indexOf(_photo.id) ??
         _resolvedIndex;
     await _jumpTo(index + delta);
+  }
+
+  void _toggleMobileChrome() {
+    if (_editing) return;
+    if (_detailsOpen) {
+      setState(() => _detailsOpen = false);
+      return;
+    }
+    setState(() => _chromeHidden = !_chromeHidden);
+  }
+
+  bool _swipeAllowed(LocalPhoto photo) {
+    if (!_mobileLayout || _editing || _detailsOpen || _navigating) {
+      return false;
+    }
+    if (_showMotion) return false;
+    if (photo.mediaKind == 'video' && _videoControlsVisible) {
+      // Let the seek bar own horizontal drags while the player chrome is up.
+      return false;
+    }
+    return _scale <= _minScale + .01;
+  }
+
+  void _videoControlsChanged(bool visible) {
+    if (!mounted || _videoControlsVisible == visible) return;
+    setState(() => _videoControlsVisible = visible);
+  }
+
+  /// One-finger horizontal swipe. It deliberately uses a raw [Listener] so a
+  /// zoomed [InteractiveViewer] keeps its pan gesture; navigation is disabled
+  /// while the image is scaled above fit.
+  void _swipeDown(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse) return;
+    final photo = _currentPhoto;
+    if (!_swipeAllowed(photo)) return;
+    if (_swipePointer != null) {
+      // A second finger means pinch, never a page turn.
+      _cancelSwipe();
+      return;
+    }
+    _swipePointer = event.pointer;
+    _swipeStart = event.localPosition;
+    _swipeHorizontal = false;
+    _swipeVelocity = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.localPosition);
+    _swipeReturn.stop();
+    _swipe.value = 0;
+  }
+
+  void _swipeMove(PointerMoveEvent event) {
+    if (event.pointer != _swipePointer) return;
+    final start = _swipeStart;
+    if (start == null) return;
+    final delta = event.localPosition - start;
+    if (!_swipeHorizontal) {
+      if (delta.dx.abs() > 14 && delta.dx.abs() > delta.dy.abs() * 1.15) {
+        _swipeHorizontal = true;
+      } else if (delta.dy.abs() > 14) {
+        _cancelSwipe();
+        return;
+      }
+    }
+    if (!_swipeHorizontal) return;
+    _swipeVelocity?.addPosition(event.timeStamp, event.localPosition);
+    final limit = MediaQuery.sizeOf(context).width * .42;
+    _swipe.value = delta.dx.clamp(-limit, limit);
+  }
+
+  void _swipeUp(PointerUpEvent event) {
+    if (event.pointer != _swipePointer) return;
+    final horizontal = _swipeHorizontal;
+    final dx = _swipe.value;
+    _swipeVelocity?.addPosition(event.timeStamp, event.localPosition);
+    final velocity = _swipeVelocity?.getVelocity().pixelsPerSecond.dx ?? 0;
+    _swipePointer = null;
+    _swipeStart = null;
+    _swipeVelocity = null;
+    _swipeHorizontal = false;
+    if (!horizontal) {
+      _settleSwipe();
+      return;
+    }
+    final width = MediaQuery.sizeOf(context).width;
+    final library = ref.read(localLibraryProvider);
+    final index = library.indexOf(_photo.id) ?? _resolvedIndex;
+    final fast = velocity.abs() >= 350;
+    final forward = fast ? velocity < 0 : dx < 0;
+    final target = index + (forward ? 1 : -1);
+    final commit =
+        (fast || dx.abs() >= math.max(56.0, width * .16)) &&
+        target >= 0 &&
+        target < library.total;
+    if (!commit) {
+      _settleSwipe();
+      return;
+    }
+    _swipe.value = 0;
+    unawaited(_move(forward ? 1 : -1));
+  }
+
+  void _cancelSwipe() {
+    _swipePointer = null;
+    _swipeStart = null;
+    _swipeVelocity = null;
+    _swipeHorizontal = false;
+    _settleSwipe();
+  }
+
+  void _settleSwipe() {
+    if (_swipe.value.abs() < .5) {
+      _swipeReturn.stop();
+      _swipe.value = 0;
+      return;
+    }
+    _swipeReturnStart = _swipe.value;
+    _swipeReturn.forward(from: 0);
   }
 
   Future<void> _prefetchNeighbors(int index, String identity) async {
@@ -346,12 +496,115 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
 
   void _toggleDetails() => setState(() => _detailsOpen = !_detailsOpen);
 
+  Future<void> _showMobileActions() async {
+    final strings = AppStrings.of(context);
+    final motion = _hasMotion && !_showMotion;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: .5),
+      builder: (sheetContext) {
+        Widget tile({
+          required Key key,
+          required IconData icon,
+          required String label,
+          required String value,
+          bool enabled = true,
+          Color? color,
+        }) => ListTile(
+          key: key,
+          enabled: enabled,
+          leading: Icon(
+            icon,
+            color: enabled ? (color ?? Colors.white70) : Colors.white24,
+          ),
+          title: Text(
+            label,
+            style: TextStyle(
+              color: enabled ? (color ?? Colors.white) : Colors.white38,
+            ),
+          ),
+          onTap: enabled ? () => Navigator.of(sheetContext).pop(value) : null,
+        );
+        return SafeArea(
+          top: false,
+          minimum: const EdgeInsets.only(bottom: 8),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: GlassSurface(
+                  key: const ValueKey('viewer-more-sheet'),
+                  role: GlassRole.overlay,
+                  radius: GlassTheme.panelRadius,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (motion)
+                        tile(
+                          key: const ValueKey('viewer-more-motion'),
+                          icon: Icons.play_circle_outline,
+                          label: strings.pick('播放动态照片', 'Play motion photo'),
+                          value: 'motion',
+                        ),
+                      tile(
+                        key: const ValueKey('viewer-more-edit'),
+                        icon: Icons.edit_outlined,
+                        label: strings.edit,
+                        value: 'edit',
+                        enabled: _editAllowed,
+                      ),
+                      tile(
+                        key: const ValueKey('viewer-more-details'),
+                        icon: Icons.info_outline,
+                        label: strings.details,
+                        value: 'details',
+                      ),
+                      const Divider(height: 1),
+                      tile(
+                        key: const ValueKey('viewer-more-trash'),
+                        icon: Icons.delete_outline,
+                        label: strings.moveToTrash,
+                        value: 'trash',
+                        color: const Color(0xffff6b6b),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'motion':
+        setState(() {
+          _videoControlsVisible = false;
+          _showMotion = true;
+        });
+      case 'edit':
+        unawaited(_openEditor());
+      case 'details':
+        setState(() => _detailsOpen = true);
+      case 'trash':
+        unawaited(_deleteCurrent());
+    }
+  }
+
   void _toast(String text, {Future<void> Function()? undo}) {
     if (!mounted) return;
-    // Keep the toast clear of the bottom nav pair instead of spanning the
+    // Keep the toast clear of the bottom chrome instead of spanning the
     // whole stage.
     final width = MediaQuery.sizeOf(context).width;
     final side = width < 392 ? 16.0 : (width - 360) / 2;
+    final bottom = _mobileLayout
+        ? math.max(16.0, MediaQuery.paddingOf(context).bottom + 12)
+        : _stripHeight + 28;
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
@@ -361,7 +614,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
           // SnackBars with an action default to persistent in this SDK; an
           // undo toast must still expire so it cannot cover the chrome.
           persist: false,
-          margin: EdgeInsets.fromLTRB(side, 8, side, _stripHeight + 28),
+          margin: EdgeInsets.fromLTRB(side, 8, side, bottom),
           duration: Duration(seconds: undo == null ? 3 : 6),
           action: undo == null
               ? null
@@ -382,7 +635,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   void _startMotionHold() {
     if (!_hasMotion || _showMotion) return;
     _motionHeld = true;
-    setState(() => _showMotion = true);
+    setState(() {
+      _videoControlsVisible = false;
+      _showMotion = true;
+    });
   }
 
   /// Live-photo style hold: releasing ends the clip once it is actually
@@ -395,6 +651,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     setState(() {
       _showMotion = false;
       _playbackActive = false;
+      _videoControlsVisible = false;
     });
   }
 
@@ -532,6 +789,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     setState(() {
       _photo = next;
       _resolvedIndex = targetIndex;
+      _videoControlsVisible = false;
       _transform.value = Matrix4.identity();
     });
   }
@@ -684,6 +942,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     _photo = photo;
     final controller = ref.read(localLibraryProvider.notifier);
     final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
+    final mobile = ref.watch(libraryLayoutProvider) == LibraryLayout.mobile;
     final canPrevious = !_navigating && index != null && index > 0;
     final canNext = !_navigating && index != null && index + 1 < library.total;
 
@@ -711,6 +970,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       _hasMotion = false;
       _motionHeld = false;
       _playbackActive = false;
+      _videoControlsVisible = false;
       _animated = photo.mimeType == 'image/gif';
       _details = MediaMetadataCache.load(
         gateway,
@@ -741,6 +1001,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                 data['motion_offset'] == null;
             // The pre-refactor client could start the clip right away when the
             // preference was on.
+            _videoControlsVisible = false;
             if (motion && autoPlay) _showMotion = true;
           });
         }
@@ -826,12 +1087,25 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                     // briefly expose the dark scaffold (a visible blink).
                     transitionBuilder: (child, animation) => AnimatedBuilder(
                       animation: animation,
-                      builder: (context, child) => Opacity(
-                        opacity: animation.status == AnimationStatus.reverse
-                            ? 1
-                            : animation.value,
-                        child: child,
-                      ),
+                      builder: (context, child) {
+                        final outgoing =
+                            animation.status == AnimationStatus.reverse;
+                        // Touch pages slide with the swipe; desktop keeps its
+                        // existing cross-fade.
+                        final shift = mobile
+                            ? (outgoing ? -1.0 : 1.0) *
+                                  _navDirection *
+                                  .10 *
+                                  (1 - animation.value)
+                            : 0.0;
+                        return Opacity(
+                          opacity: outgoing ? 1 : animation.value,
+                          child: FractionalTranslation(
+                            translation: Offset(shift, 0),
+                            child: child,
+                          ),
+                        );
+                      },
                       child: child,
                     ),
                     // The photo, its blurred fill, and its frame all live in
@@ -844,68 +1118,96 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                       key: ValueKey(
                         'viewer-stage-${photo.id}-${photo.contentVersion}',
                       ),
-                      // A click anywhere on the stage leaves immersive
-                      // browsing; primary-button and touch long-press both
-                      // play the motion photo while held.
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _immersive ? _toggleImmersive : null,
-                        onLongPressStart: _hasMotion
-                            ? (_) => _startMotionHold()
-                            : null,
-                        onLongPressEnd: _hasMotion
-                            ? (_) => _endMotionHold()
-                            : null,
-                        child: _stage(context, strings, photo, scheme),
+                      child: Builder(
+                        builder: (context) {
+                          final videoStage =
+                              photo.mediaKind == 'video' || _showMotion;
+                          Widget stage = GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            // Tap reveals/hides the touch chrome; desktop keeps
+                            // click-to-leave-immersive. Video taps belong to
+                            // the player's own touch controls.
+                            onTap: mobile
+                                ? (videoStage ? null : _toggleMobileChrome)
+                                : (_immersive ? _toggleImmersive : null),
+                            onLongPressStart: _hasMotion
+                                ? (_) => _startMotionHold()
+                                : null,
+                            onLongPressEnd: _hasMotion
+                                ? (_) => _endMotionHold()
+                                : null,
+                            child: _stage(context, strings, photo, scheme),
+                          );
+                          if (mobile) {
+                            stage = Listener(
+                              behavior: HitTestBehavior.opaque,
+                              onPointerDown: _swipeDown,
+                              onPointerMove: _swipeMove,
+                              onPointerUp: _swipeUp,
+                              onPointerCancel: (_) => _cancelSwipe(),
+                              child: ValueListenableBuilder<double>(
+                                valueListenable: _swipe,
+                                builder: (context, offset, child) =>
+                                    Transform.translate(
+                                      offset: Offset(offset, 0),
+                                      child: child,
+                                    ),
+                                child: stage,
+                              ),
+                            );
+                          }
+                          return stage;
+                        },
                       ),
                     ),
                   ),
                   ..._notices(strings, library, index),
                   // Zoom lives in the stage's top-right corner, just below
-                  // the header; the details panel slides over that corner.
-                  Positioned(
-                    top: _headerInset + 8,
-                    right: 16,
-                    child: _RevealRegion(
-                      revealed:
-                          !_chromeHidden &&
-                          !_editing &&
-                          !_detailsOpen &&
-                          photo.mediaKind == 'image' &&
-                          !_showMotion,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            key: const ValueKey('viewer-zoom-out'),
-                            tooltip: strings.pick('缩小', 'Zoom out'),
-                            style: _chromeStyle,
-                            onPressed: _scale <= _minScale + .001
-                                ? null
-                                : () => _applyZoom(.8),
-                            icon: const Icon(Icons.remove, size: 20),
-                          ),
-                          IconButton(
-                            key: const ValueKey('viewer-zoom-in'),
-                            tooltip: strings.pick('放大', 'Zoom in'),
-                            style: _chromeStyle,
-                            onPressed: _scale >= _maxScale - .001
-                                ? null
-                                : () => _applyZoom(1.25),
-                            icon: const Icon(Icons.add, size: 20),
-                          ),
-                          TextButton(
-                            key: const ValueKey('viewer-zoom-reset'),
-                            onPressed: _resetZoom,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.white,
+                  // the header; touch layouts use pinch instead.
+                  if (!mobile)
+                    Positioned(
+                      top: _headerInset + 8,
+                      right: 16,
+                      child: _RevealRegion(
+                        revealed:
+                            !_chromeHidden &&
+                            !_editing &&
+                            !_detailsOpen &&
+                            photo.mediaKind == 'image' &&
+                            !_showMotion,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              key: const ValueKey('viewer-zoom-out'),
+                              tooltip: strings.pick('缩小', 'Zoom out'),
+                              style: _chromeStyle,
+                              onPressed: _scale <= _minScale + .001
+                                  ? null
+                                  : () => _applyZoom(.8),
+                              icon: const Icon(Icons.remove, size: 20),
                             ),
-                            child: Text('$_zoomPercent%'),
-                          ),
-                        ],
+                            IconButton(
+                              key: const ValueKey('viewer-zoom-in'),
+                              tooltip: strings.pick('放大', 'Zoom in'),
+                              style: _chromeStyle,
+                              onPressed: _scale >= _maxScale - .001
+                                  ? null
+                                  : () => _applyZoom(1.25),
+                              icon: const Icon(Icons.add, size: 20),
+                            ),
+                            TextButton(
+                              key: const ValueKey('viewer-zoom-reset'),
+                              onPressed: _resetZoom,
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                              ),
+                              child: Text('$_zoomPercent%'),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
                   Positioned(
                     key: const ValueKey('viewer-header-position'),
                     top: 8,
@@ -920,52 +1222,55 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                         index: index,
                         library: library,
                         controller: controller,
+                        mobile: mobile,
                       ),
                     ),
                   ),
-                  Positioned(
-                    key: const ValueKey('viewer-filmstrip-position'),
-                    bottom: 12,
-                    left: 12,
-                    right: 12,
-                    child: _RevealRegion(
-                      revealed: !_chromeHidden,
-                      foldOffset: const Offset(0, .35),
-                      child: _filmstrip(
-                        library: library,
-                        index: index,
-                        gateway: gateway,
+                  if (!mobile)
+                    Positioned(
+                      key: const ValueKey('viewer-filmstrip-position'),
+                      bottom: 12,
+                      left: 12,
+                      right: 12,
+                      child: _RevealRegion(
+                        revealed: !_chromeHidden,
+                        foldOffset: const Offset(0, .35),
+                        child: _filmstrip(
+                          library: library,
+                          index: index,
+                          gateway: gateway,
+                        ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    key: const ValueKey('viewer-navigation-position'),
-                    right: 16,
-                    bottom: _navigationBottom,
-                    child: _RevealRegion(
-                      revealed: !_chromeHidden,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _navArrow(
-                            key: const ValueKey('viewer-previous'),
-                            tooltip: strings.previous,
-                            icon: Icons.chevron_left,
-                            enabled: canPrevious,
-                            onPressed: () => _move(-1),
-                          ),
-                          const SizedBox(width: 4),
-                          _navArrow(
-                            key: const ValueKey('viewer-next'),
-                            tooltip: strings.next,
-                            icon: Icons.chevron_right,
-                            enabled: canNext,
-                            onPressed: () => _move(1),
-                          ),
-                        ],
+                  if (!mobile)
+                    Positioned(
+                      key: const ValueKey('viewer-navigation-position'),
+                      right: 16,
+                      bottom: _navigationBottom,
+                      child: _RevealRegion(
+                        revealed: !_chromeHidden,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _navArrow(
+                              key: const ValueKey('viewer-previous'),
+                              tooltip: strings.previous,
+                              icon: Icons.chevron_left,
+                              enabled: canPrevious,
+                              onPressed: () => _move(-1),
+                            ),
+                            const SizedBox(width: 4),
+                            _navArrow(
+                              key: const ValueKey('viewer-next'),
+                              tooltip: strings.next,
+                              icon: Icons.chevron_right,
+                              enabled: canNext,
+                              onPressed: () => _move(1),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
                   if (_detailsOpen && index != null)
                     _detailsPanel(strings, photo),
                   if (_editing)
@@ -1025,6 +1330,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     ColorScheme scheme,
   ) {
     final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
+    final videoInset = _chromeHidden
+        ? 0.0
+        : (_mobileLayout
+              ? math.max(16.0, MediaQuery.paddingOf(context).bottom + 12)
+              : _videoControlsInset);
     void playbackChanged(bool active) {
       if (mounted &&
           _detailsIdentity == '${photo.id}:${photo.contentVersion}' &&
@@ -1064,8 +1374,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
               key: _videoKey,
               path: photo.path,
               placeholder: thumbnail(),
-              bottomInset: _chromeHidden ? 0 : _videoControlsInset,
+              bottomInset: videoInset,
               onPlaybackActiveChanged: playbackChanged,
+              onControlsVisibilityChanged: _videoControlsChanged,
             ),
           ),
         ),
@@ -1084,13 +1395,17 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                     key: _videoKey,
                     path: snapshot.data as String,
                     placeholder: still(),
-                    bottomInset: _chromeHidden ? 0 : _videoControlsInset,
+                    bottomInset: videoInset,
                     onPlaybackActiveChanged: playbackChanged,
+                    onControlsVisibilityChanged: _videoControlsChanged,
                     onCompleted: () {
                       if (mounted &&
                           _detailsIdentity ==
                               '${photo.id}:${photo.contentVersion}') {
-                        setState(() => _showMotion = false);
+                        setState(() {
+                          _showMotion = false;
+                          _videoControlsVisible = false;
+                        });
                       }
                     },
                   ),
@@ -1257,7 +1572,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
     if (notices.isEmpty) return const [];
     return [
       Positioned(
-        top: _immersive ? 12 : _headerInset + 8,
+        top: _immersive
+            ? 12
+            : (_mobileLayout ? _mobileHeaderBottom + 4 : _headerInset + 8),
         left: 16,
         right: 16,
         child: IgnorePointer(
@@ -1287,6 +1604,44 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
   }
 
   Widget _header({
+    required AppStrings strings,
+    required LocalPhoto photo,
+    required int? index,
+    required LibraryViewState library,
+    required LocalLibraryController controller,
+    required bool mobile,
+  }) {
+    if (mobile) {
+      return GlassSurface(
+        key: const ValueKey('viewer-header'),
+        role: GlassRole.raised,
+        live: true,
+        radius: GlassTheme.panelRadius,
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: _mobileHeader(
+              strings: strings,
+              photo: photo,
+              index: index,
+              library: library,
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+    }
+    return _headerDesktop(
+      strings: strings,
+      photo: photo,
+      index: index,
+      library: library,
+      controller: controller,
+    );
+  }
+
+  Widget _headerDesktop({
     required AppStrings strings,
     required LocalPhoto photo,
     required int? index,
@@ -1403,7 +1758,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                     style: actionStyle,
                     tooltip: strings.pick('播放动态照片', 'Play motion photo'),
                     icon: const Icon(Icons.play_circle_outline),
-                    onPressed: () => setState(() => _showMotion = true),
+                    onPressed: () => setState(() {
+                      _videoControlsVisible = false;
+                      _showMotion = true;
+                    }),
                   ),
                 IconButton(
                   key: const ValueKey('viewer-favorite'),
@@ -1460,6 +1818,99 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
       ),
     ),
   );
+
+  Widget _mobileHeader({
+    required AppStrings strings,
+    required LocalPhoto photo,
+    required int? index,
+    required LibraryViewState library,
+    required LocalLibraryController controller,
+  }) {
+    final actionStyle = _compactChromeStyle;
+    final motionToggle = _hasMotion && !_showMotion;
+    final date = _dateLabel(
+      context,
+      strings,
+      photo.captureTimeMs ?? photo.modifiedMs,
+    );
+    final position = index != null && library.total > 0
+        ? strings.positionLabel(index + 1, library.total)
+        : null;
+    return Row(
+      children: [
+        IconButton(
+          key: const ValueKey('viewer-close'),
+          style: actionStyle,
+          tooltip: strings.back,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                photo.name,
+                key: const ValueKey('viewer-name'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                position == null ? date : '$date · $position',
+                key: const ValueKey('viewer-mobile-meta'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: .62),
+                  fontSize: 12,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (motionToggle)
+          IconButton(
+            key: const ValueKey('viewer-motion-toggle'),
+            style: actionStyle,
+            tooltip: strings.pick('播放动态照片', 'Play motion photo'),
+            icon: const Icon(Icons.play_circle_outline),
+            onPressed: () => setState(() {
+              _videoControlsVisible = false;
+              _showMotion = true;
+            }),
+          ),
+        IconButton(
+          key: const ValueKey('viewer-favorite'),
+          style: actionStyle,
+          tooltip: photo.favorite
+              ? strings.unmarkFavorite
+              : strings.markFavorite,
+          isSelected: photo.favorite,
+          selectedIcon: const Icon(Icons.favorite, color: Color(0xffff5c72)),
+          icon: const Icon(Icons.favorite_border),
+          onPressed: library.favoritePending.contains(photo.id)
+              ? null
+              : () => controller.setFavorite(photo),
+        ),
+        IconButton(
+          key: const ValueKey('viewer-more'),
+          style: actionStyle,
+          tooltip: strings.pick('更多', 'More'),
+          icon: const Icon(Icons.more_horiz),
+          onPressed: () => unawaited(_showMobileActions()),
+        ),
+      ],
+    );
+  }
 
   /// Bare bottom-right pair: no capsule container, each arrow draws its own
   /// glass only on hover/focus; the arrow with nowhere to go dims to 0.32
@@ -1683,7 +2134,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
         .toLocal();
     final localizations = MaterialLocalizations.of(context);
     return Positioned(
-      top: _headerInset,
+      top: _mobileLayout ? _mobileHeaderBottom : _headerInset,
       bottom: 8,
       right: 8,
       left: 8,
@@ -1774,9 +2225,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer> {
                                           icon: const Icon(
                                             Icons.play_circle_outline,
                                           ),
-                                          onPressed: () => setState(
-                                            () => _showMotion = true,
-                                          ),
+                                          onPressed: () => setState(() {
+                                            _videoControlsVisible = false;
+                                            _showMotion = true;
+                                          }),
                                           tooltip: strings.pick(
                                             '播放动态照片',
                                             'Play motion photo',

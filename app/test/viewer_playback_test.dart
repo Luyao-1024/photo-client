@@ -50,8 +50,10 @@ class _Video implements VideoPlaybackSession {
   @override
   Duration get position => Duration.zero;
   @override
-  Widget buildVideo(GlobalKey<VideoState> key) =>
-      const ColoredBox(color: Colors.blue);
+  Widget buildVideo(
+    GlobalKey<VideoState> key, {
+    ValueChanged<bool>? onControlsVisibilityChanged,
+  }) => const ColoredBox(color: Colors.blue);
 }
 
 class _Gateway extends FakeToolsGateway {

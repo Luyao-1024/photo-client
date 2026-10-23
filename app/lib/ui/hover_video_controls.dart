@@ -15,6 +15,7 @@ class HoverVideoControls extends StatefulWidget {
     this.seekBarOffset = 16,
     this.horizontalMargin = const EdgeInsets.symmetric(horizontal: 16),
     this.touchAutoHide,
+    this.onVisibilityChanged,
   });
   final double bottomInset;
   final Widget child;
@@ -25,6 +26,10 @@ class HoverVideoControls extends StatefulWidget {
   /// hover-driven timer, so the host supplies the same duration the desktop
   /// controls use. Null keeps the desktop behavior.
   final Duration? touchAutoHide;
+
+  /// Reports when touch chrome takes or releases the screen. The viewer uses
+  /// this to leave horizontal drags to the seek bar while it is visible.
+  final ValueChanged<bool>? onVisibilityChanged;
 
   @override
   State<HoverVideoControls> createState() => _HoverVideoControlsState();
@@ -44,7 +49,10 @@ class _HoverVideoControlsState extends State<HoverVideoControls> {
     _hideTimer?.cancel();
     _hideTimer = null;
     if (value) _restartTouchTimer();
-    if (_visible != value) setState(() => _visible = value);
+    if (_visible != value) {
+      setState(() => _visible = value);
+      widget.onVisibilityChanged?.call(value);
+    }
   }
 
   void _restartTouchTimer() {

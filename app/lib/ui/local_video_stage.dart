@@ -25,7 +25,10 @@ abstract interface class VideoPlaybackSession {
   Stream<bool> get playback;
   bool get playing;
   Duration get position;
-  Widget buildVideo(GlobalKey<VideoState> key);
+  Widget buildVideo(
+    GlobalKey<VideoState> key, {
+    ValueChanged<bool>? onControlsVisibilityChanged,
+  });
 }
 
 typedef VideoSessionFactory = VideoPlaybackSession Function();
@@ -109,7 +112,10 @@ class _NativeVideoSession implements VideoPlaybackSession {
   @override
   Duration get position => player.state.position;
   @override
-  Widget buildVideo(GlobalKey<VideoState> key) => Video(
+  Widget buildVideo(
+    GlobalKey<VideoState> key, {
+    ValueChanged<bool>? onControlsVisibilityChanged,
+  }) => Video(
     key: key,
     controller: controller,
     fit: BoxFit.contain,
@@ -127,6 +133,7 @@ class _NativeVideoSession implements VideoPlaybackSession {
             touchAutoHide: Platform.isAndroid
                 ? const Duration(seconds: 3)
                 : null,
+            onVisibilityChanged: onControlsVisibilityChanged,
             buttonBarHeight: style.bottomButtonBar.isEmpty
                 ? 0
                 : style.buttonBarHeight,
@@ -152,6 +159,7 @@ class LocalVideoStage extends ConsumerStatefulWidget {
     this.sessionFactory,
     this.onCompleted,
     this.onPlaybackActiveChanged,
+    this.onControlsVisibilityChanged,
   });
   final String path;
 
@@ -162,6 +170,9 @@ class LocalVideoStage extends ConsumerStatefulWidget {
   final VideoSessionFactory? sessionFactory;
   final VoidCallback? onCompleted;
   final ValueChanged<bool>? onPlaybackActiveChanged;
+
+  /// Lets the viewer yield horizontal drags to visible seek/volume controls.
+  final ValueChanged<bool>? onControlsVisibilityChanged;
   @override
   ConsumerState<LocalVideoStage> createState() => LocalVideoStageState();
 }
@@ -323,14 +334,22 @@ class LocalVideoStageState extends ConsumerState<LocalVideoStage> {
           controlsHoverDuration: touch
               ? const Duration(days: 365)
               : const Duration(seconds: 3),
-          bottomButtonBar: const [
-            MaterialDesktopSkipPreviousButton(),
-            MaterialDesktopPlayOrPauseButton(),
-            MaterialDesktopSkipNextButton(),
-            MaterialDesktopVolumeButton(),
-            MaterialDesktopPositionIndicator(),
-            Spacer(),
-          ],
+          // A single library video has no playlist, and touch devices already
+          // own volume; keep only transport and position on phones.
+          bottomButtonBar: touch
+              ? const [
+                  MaterialDesktopPlayOrPauseButton(),
+                  MaterialDesktopPositionIndicator(),
+                  Spacer(),
+                ]
+              : const [
+                  MaterialDesktopSkipPreviousButton(),
+                  MaterialDesktopPlayOrPauseButton(),
+                  MaterialDesktopSkipNextButton(),
+                  MaterialDesktopVolumeButton(),
+                  MaterialDesktopPositionIndicator(),
+                  Spacer(),
+                ],
           seekBarPositionColor: scheme.primary,
           seekBarThumbColor: scheme.primary,
           seekBarColor: scheme.onSurface.withValues(alpha: .20),
@@ -352,15 +371,16 @@ class LocalVideoStageState extends ConsumerState<LocalVideoStage> {
               final chrome = controls();
               final extent =
                   chrome.buttonBarHeight * 2 + chrome.seekBarContainerHeight;
-              final available = math.max(
-                0.0,
-                constraints.maxHeight - extent,
-              );
+              final available = math.max(0.0, constraints.maxHeight - extent);
               final inset = math.min(widget.bottomInset, available);
               return MaterialDesktopVideoControlsTheme(
                 normal: controls(bottomInset: inset),
                 fullscreen: controls(),
-                child: _session!.buildVideo(_view),
+                child: _session!.buildVideo(
+                  _view,
+                  onControlsVisibilityChanged:
+                      widget.onControlsVisibilityChanged,
+                ),
               );
             },
           ),

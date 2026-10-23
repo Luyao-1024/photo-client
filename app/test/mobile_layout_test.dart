@@ -122,6 +122,64 @@ void main() {
     }
   });
 
+  testWidgets('touch viewer swipes between photos without desktop chrome', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 6);
+    await mount(tester, gateway);
+
+    await tester.tap(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('viewer')), findsOneWidget);
+    for (final key in [
+      'viewer-previous',
+      'viewer-next',
+      'viewer-filmstrip',
+      'viewer-zoom-in',
+      'viewer-zoom-out',
+      'viewer-zoom-reset',
+      'viewer-immersive',
+    ]) {
+      expect(find.byKey(ValueKey(key)), findsNothing, reason: key);
+    }
+    expect(find.byKey(const ValueKey('viewer-more')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-favorite')), findsOneWidget);
+    expect(find.textContaining('1 / 6'), findsOneWidget);
+
+    // Secondary actions live in the sheet instead of crowding the header.
+    await tester.tap(find.byKey(const ValueKey('viewer-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-more-sheet')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-more-edit')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-more-details')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-more-trash')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('viewer-more-details')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-details-panel')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('viewer-details-close')));
+    await tester.pumpAndSettle();
+
+    final center = tester.getCenter(find.byKey(const ValueKey('viewer')));
+    await tester.dragFrom(center, const Offset(-320, 0));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 / 6'), findsOneWidget);
+
+    await tester.dragFrom(center, const Offset(320, 0));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 / 6'), findsOneWidget);
+
+    // A tap owns the chrome on touch; the header folds away and returns.
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-header')), findsNothing);
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-header')), findsOneWidget);
+
+    await disposeApp(tester, gateway);
+  });
+
   testWidgets('albums page owns favorites, videos, trash and search', (
     tester,
   ) async {

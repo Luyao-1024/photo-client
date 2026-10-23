@@ -55,8 +55,10 @@ class _Video implements VideoPlaybackSession {
   @override
   Duration get position => Duration.zero;
   @override
-  Widget buildVideo(GlobalKey<VideoState> key) =>
-      const ColoredBox(key: ValueKey('video-frame'), color: Colors.blue);
+  Widget buildVideo(
+    GlobalKey<VideoState> key, {
+    ValueChanged<bool>? onControlsVisibilityChanged,
+  }) => const ColoredBox(key: ValueKey('video-frame'), color: Colors.blue);
 }
 
 ui.Image pixel() {
