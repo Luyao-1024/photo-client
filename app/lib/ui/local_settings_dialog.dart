@@ -10,11 +10,15 @@ import 'cloud_sync_settings_page.dart';
 import 'glass_dialog.dart';
 import 'glass_theme.dart';
 import 'local_library_controller.dart';
+import 'mobile_settings_surface.dart';
 import 'presentation_preferences.dart';
 import 'strings.dart';
 
+enum MobileSettingsCategory { appearance, sources, storage, cloud }
+
 class LocalSettingsDialog extends ConsumerStatefulWidget {
-  const LocalSettingsDialog({super.key, this.onShortcuts});
+  const LocalSettingsDialog({super.key, this.onShortcuts, this.mobileCategory});
+  final MobileSettingsCategory? mobileCategory;
   final VoidCallback? onShortcuts;
   @override
   ConsumerState<LocalSettingsDialog> createState() =>
@@ -51,7 +55,8 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
       final usage = await controller.localCommand({'op': 'cacheUsage'}) as int?;
       int? cloudUsage;
       try {
-        cloudUsage = await controller.localCommand({'op': 'cloudUsage'}) as int?;
+        cloudUsage =
+            await controller.localCommand({'op': 'cloudUsage'}) as int?;
       } catch (_) {
         /* Older/test gateways do not report the cloud download size. */
       }
@@ -175,19 +180,96 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
       strings.pick('存储与日志', 'Storage and Logs'),
       strings.cloudSync,
     ];
-    Widget section(String title, List<Widget> children) => Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: GlassSection(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 10),
-            ...children,
-          ],
-        ),
+    Widget section(String title, List<Widget> children) =>
+        widget.mobileCategory != null
+        ? MobileSettingsGroup(
+            title: title,
+            contentPadding: const EdgeInsets.all(16),
+            children: children,
+          )
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: GlassSection(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 10),
+                  ...children,
+                ],
+              ),
+            ),
+          );
+    final sourceSettings = section(strings.pick('照片来源', 'Sources'), [
+      Consumer(
+        builder: (context, ref, _) {
+          final picker = ref.watch(sourcePickerProvider);
+          final state = ref.watch(localLibraryProvider);
+          final library = ref.read(localLibraryProvider.notifier);
+          final busy = _busy || state.scanning || state.selecting;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                key: const ValueKey('add-folder'),
+                onPressed: picker == null || busy
+                    ? null
+                    : () => _run(
+                        () => library.importSources(picker, directory: true),
+                      ),
+                icon: const Icon(Icons.create_new_folder_outlined),
+                label: Text(strings.addFolder),
+              ),
+              OutlinedButton.icon(
+                key: const ValueKey('add-files'),
+                onPressed: picker == null || busy
+                    ? null
+                    : () => _run(
+                        () => library.importSources(picker, directory: false),
+                      ),
+                icon: const Icon(Icons.note_add_outlined),
+                label: Text(strings.addFiles),
+              ),
+              OutlinedButton.icon(
+                key: const ValueKey('settings-rescan'),
+                onPressed: busy ? null : () => _run(library.rescanSources),
+                icon: const Icon(Icons.refresh),
+                label: Text(strings.pick('重新扫描', 'Rescan')),
+              ),
+            ],
+          );
+        },
       ),
-    );
+      const SizedBox(height: 8),
+      for (final source in _sources)
+        if ((source as Map)['enabled'] == true && source['kind'] != 'managed')
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              source['path'] as String,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              source['availability'] == 'available'
+                  ? strings.pick('可用', 'Available')
+                  : strings.pick(
+                      '来源不可用，请检查连接或权限',
+                      'Unavailable. Check the connection or permissions.',
+                    ),
+            ),
+            trailing: IconButton(
+              key: ValueKey('settings-remove-source-${source['path']}'),
+              tooltip: strings.pick(
+                '移除来源，保留原文件',
+                'Remove source and keep files',
+              ),
+              onPressed: _busy ? null : () => _remove(source),
+              icon: const Icon(Icons.remove_circle_outline),
+            ),
+          ),
+    ]);
     final pages = <Widget>[
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -345,85 +427,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               onChanged: controller.setAutoPlayMotionPhoto,
             ),
           ]),
-          section(strings.pick('照片来源', 'Sources'), [
-            Consumer(
-              builder: (context, ref, _) {
-                final picker = ref.watch(sourcePickerProvider);
-                final state = ref.watch(localLibraryProvider);
-                final library = ref.read(localLibraryProvider.notifier);
-                final busy = _busy || state.scanning || state.selecting;
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      key: const ValueKey('add-folder'),
-                      onPressed: picker == null || busy
-                          ? null
-                          : () => _run(
-                              () => library.importSources(
-                                picker,
-                                directory: true,
-                              ),
-                            ),
-                      icon: const Icon(Icons.create_new_folder_outlined),
-                      label: Text(strings.addFolder),
-                    ),
-                    OutlinedButton.icon(
-                      key: const ValueKey('add-files'),
-                      onPressed: picker == null || busy
-                          ? null
-                          : () => _run(
-                              () => library.importSources(
-                                picker,
-                                directory: false,
-                              ),
-                            ),
-                      icon: const Icon(Icons.note_add_outlined),
-                      label: Text(strings.addFiles),
-                    ),
-                    OutlinedButton.icon(
-                      key: const ValueKey('settings-rescan'),
-                      onPressed: busy
-                          ? null
-                          : () => _run(library.rescanSources),
-                      icon: const Icon(Icons.refresh),
-                      label: Text(strings.pick('重新扫描', 'Rescan')),
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            for (final source in _sources)
-              if ((source as Map)['enabled'] == true &&
-                  source['kind'] != 'managed')
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    source['path'] as String,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    source['availability'] == 'available'
-                        ? strings.pick('可用', 'Available')
-                        : strings.pick(
-                            '来源不可用，请检查连接或权限',
-                            'Unavailable. Check the connection or permissions.',
-                          ),
-                  ),
-                  trailing: IconButton(
-                    key: ValueKey('settings-remove-source-${source['path']}'),
-                    tooltip: strings.pick(
-                      '移除来源，保留原文件',
-                      'Remove source and keep files',
-                    ),
-                    onPressed: _busy ? null : () => _remove(source),
-                    icon: const Icon(Icons.remove_circle_outline),
-                  ),
-                ),
-          ]),
+          sourceSettings,
         ],
       ),
       Column(
@@ -471,10 +475,7 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
               title: Text(strings.pick('缓存与云端数据', 'Cache and cloud data')),
               subtitle: Text(
                 _usage == null
-                    ? strings.pick(
-                        '正在计算…',
-                        'Calculating…',
-                      )
+                    ? strings.pick('正在计算…', 'Calculating…')
                     : [
                         '${strings.pick('缩略图缓存', 'Thumbnail cache')} ${_bytes(_usage!)}',
                         if (_cloudUsage != null && _cloudUsage! > 0)
@@ -532,6 +533,46 @@ class _LocalSettingsDialogState extends ConsumerState<LocalSettingsDialog> {
       ),
       const CloudSyncSettingsPage(),
     ];
+    if (widget.mobileCategory case final category?) {
+      final (title, content) = switch (category) {
+        MobileSettingsCategory.appearance => (
+          strings.pick('外观效果', 'Appearance effects'),
+          pages[1],
+        ),
+        MobileSettingsCategory.sources => (
+          strings.pick('照片来源', 'Photo sources'),
+          sourceSettings,
+        ),
+        MobileSettingsCategory.storage => (
+          strings.pick('存储与日志', 'Storage and logs'),
+          pages[3],
+        ),
+        MobileSettingsCategory.cloud => (strings.cloudSync, pages[4]),
+      };
+      return MobileSettingsScaffold(
+        title: title,
+        child: ListView(
+          key: PageStorageKey('mobile-settings-${category.name}'),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          children: [
+            if (_failed || preferences.saveFailed)
+              ListTile(
+                title: Text(
+                  strings.pick(
+                    '设置读取或保存失败，请重试。',
+                    'Could not read or save settings. Please retry.',
+                  ),
+                ),
+                trailing: TextButton(
+                  onPressed: _reload,
+                  child: Text(strings.retry),
+                ),
+              ),
+            content,
+          ],
+        ),
+      );
+    }
     return GlassDialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 900, maxHeight: 720),

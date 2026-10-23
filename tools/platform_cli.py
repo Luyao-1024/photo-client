@@ -24,6 +24,8 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("--profile", default="linux-x86_64")
         command.add_argument("--profile-file", type=Path, help="Use this YAML instead of the named profile (also useful for rejection tests)")
         command.add_argument("--mode", choices=("release", "debug"), default="debug")
+        if name == "build":
+            command.add_argument("--android-abi", choices=tuple(ANDROID_ABIS), help="Build a split APK for only this Android ABI")
         if name == "run":
             command.add_argument("app_args", nargs=argparse.REMAINDER, help="Arguments forwarded after --")
     return result
@@ -109,7 +111,10 @@ def cargo_ndk_available() -> bool:
     return probe.returncode == 0
 
 
-def build_android(profile: dict, mode: str, root: Path) -> Path:
+def build_android(profile: dict, mode: str, root: Path, *, abi: str | None = None) -> Path:
+    if abi is not None and abi not in ANDROID_ABIS:
+        raise ProfileError(f"build: unsupported Android ABI: {abi}")
+    selected_abis = {abi: ANDROID_ABIS[abi]} if abi else ANDROID_ABIS
     flutter = discover_flutter()
     cargo = shutil.which("cargo")
     if not cargo:
@@ -119,8 +124,8 @@ def build_android(profile: dict, mode: str, root: Path) -> Path:
     ndk = discover_ndk(root)
     paths = generate(profile, root)
     jni = root / "app" / "android" / "app" / "src" / "main" / "jniLibs"
-    for abi in ANDROID_ABIS:
-        stale = jni / abi / "libphoto_bridge.so"
+    for stale_abi in ANDROID_ABIS:
+        stale = jni / stale_abi / "libphoto_bridge.so"
         if stale.exists():
             stale.unlink()
     env = os.environ.copy()
@@ -129,48 +134,57 @@ def build_android(profile: dict, mode: str, root: Path) -> Path:
     env["ANDROID_NDK_HOME"] = str(ndk)
     env["ANDROID_NDK_ROOT"] = str(ndk)
     cargo_args = [cargo, "ndk", "-P", "30"]
-    for abi in ANDROID_ABIS:
-        cargo_args.extend(["-t", abi])
+    for selected_abi in selected_abis:
+        cargo_args.extend(["-t", selected_abi])
     cargo_args.extend(["-o", str(jni), "build", "--locked", "-p", "photo-bridge"])
     if mode == "release":
         cargo_args.append("--release")
     execute(cargo_args, cwd=root, env=env)
     native = {}
-    for abi in ANDROID_ABIS:
-        library = jni / abi / "libphoto_bridge.so"
+    for selected_abi in selected_abis:
+        library = jni / selected_abi / "libphoto_bridge.so"
         if not library.is_file():
             raise ProfileError(f"build: expected native library missing: {library}")
-        native[abi] = str(library)
-    targets = ",".join(ANDROID_ABIS.values())
-    execute([
+        native[selected_abi] = str(library)
+    targets = ",".join(selected_abis.values())
+    flutter_args = [
         flutter, "--no-version-check", "build", "apk", f"--{mode}",
         "--target-platform", targets,
         f"--dart-define-from-file={paths['dart_defines']}",
-    ], cwd=root / "app", env=env)
-    apk = root / "app" / "build" / "app" / "outputs" / "flutter-apk" / f"app-{mode}.apk"
+    ]
+    if abi:
+        flutter_args.append("--split-per-abi")
+    execute(flutter_args, cwd=root / "app", env=env)
+    apk_name = f"app-{abi}-{mode}.apk" if abi else f"app-{mode}.apk"
+    apk = root / "app" / "build" / "app" / "outputs" / "flutter-apk" / apk_name
     if not apk.is_file():
         raise ProfileError(f"build: Flutter did not produce expected APK: {apk}")
     with zipfile.ZipFile(apk) as archive:
         entries = set(archive.namelist())
-    for abi in ANDROID_ABIS:
-        if f"lib/{abi}/libphoto_bridge.so" not in entries:
-            raise ProfileError(f"build: APK is missing libphoto_bridge.so for {abi}")
+    for selected_abi in selected_abis:
+        if f"lib/{selected_abi}/libphoto_bridge.so" not in entries:
+            raise ProfileError(f"build: APK is missing libphoto_bridge.so for {selected_abi}")
+    packaged_abis = {entry.split("/")[1] for entry in entries if entry.startswith("lib/") and entry.endswith(".so")}
+    if packaged_abis != set(selected_abis):
+        raise ProfileError(f"build: APK ABI mismatch: expected {list(selected_abis)}, got {sorted(packaged_abis)}")
     print(canonical_json({
         "profile_id": profile["profile_id"], "profile_digest": profile_digest(profile),
         "mode": mode, "native_libraries": native, "apk": str(apk),
-        "abis": list(ANDROID_ABIS), "packaging_acceptance": "NOT RUN",
+        "abis": list(selected_abis), "packaging_acceptance": "NOT RUN",
     }), flush=True)
     return apk
 
 
-def build(profile: dict, mode: str, root: Path = ROOT) -> Path:
+def build(profile: dict, mode: str, root: Path = ROOT, *, android_abi: str | None = None) -> Path:
     require_active(profile)
+    if android_abi is not None and profile["platform"] != "android":
+        raise ProfileError("build: --android-abi requires an Android profile")
     if not (root / "Cargo.toml").is_file() or not (root / "app" / "pubspec.yaml").is_file():
         raise ProfileError("build: Rust workspace and app/pubspec.yaml are required")
     if not (root / "Cargo.lock").is_file():
         raise ProfileError("build: Cargo.lock is required for --locked builds")
     if profile["platform"] == "android":
-        return build_android(profile, mode, root)
+        return build_android(profile, mode, root, abi=android_abi)
     if profile["platform"] != "linux":
         raise ProfileError(f"build: {profile['platform']} packaging is not implemented")
     flutter = discover_flutter()
@@ -223,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
         if options.profile_file is None and profile["profile_id"] != options.profile:
             raise ProfileError("profile_id: YAML identity does not match selected profile")
         if options.command in ("build", "run"):
-            bundle = build(profile, options.mode)
+            bundle = build(profile, options.mode, android_abi=getattr(options, "android_abi", None))
             if options.command == "run":
                 launch(bundle, options.app_args)
         elif options.command == "generate":

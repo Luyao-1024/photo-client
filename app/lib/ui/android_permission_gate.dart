@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../platform/android_runtime.dart';
 import 'glass_surface.dart';
+import 'library_access.dart';
 import 'strings.dart';
 
 /// The path-based library needs the all-files contract on Android 11+, exactly
@@ -49,9 +50,15 @@ class _AndroidPermissionGateState extends ConsumerState<AndroidPermissionGate>
     }
     try {
       final granted = await AndroidRuntime.hasAllFiles();
-      if (mounted) setState(() => _granted = granted);
+      if (mounted) {
+        ref.read(libraryAccessProvider.notifier).setGranted(granted);
+        setState(() => _granted = granted);
+      }
     } catch (_) {
-      if (mounted) setState(() => _granted = false);
+      if (mounted) {
+        ref.read(libraryAccessProvider.notifier).setGranted(false);
+        setState(() => _granted = false);
+      }
     }
   }
 
@@ -103,10 +110,7 @@ class _AndroidPermissionGateState extends ConsumerState<AndroidPermissionGate>
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              strings.pick(
-                                '允许访问照片和视频',
-                                'Allow photo access',
-                              ),
+                              strings.pick('允许访问照片和视频', 'Allow photo access'),
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                           ),
@@ -126,9 +130,7 @@ class _AndroidPermissionGateState extends ConsumerState<AndroidPermissionGate>
                         children: [
                           TextButton(
                             onPressed: () => unawaited(_check()),
-                            child: Text(
-                              strings.pick('重新检查', 'Check again'),
-                            ),
+                            child: Text(strings.pick('重新检查', 'Check again')),
                           ),
                           const SizedBox(width: 8),
                           FilledButton(

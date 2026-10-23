@@ -223,52 +223,13 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
           const SizedBox(width: 8),
           _CircleAction(
             key: const ValueKey('mobile-albums-options'),
-            tooltip: strings.pick('更多选项', 'More options'),
+            tooltip: strings.settings,
             icon: Icons.more_vert,
-            onPressed: _showMore,
+            onPressed: widget.onOpenSettings,
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _showMore() async {
-    final strings = AppStrings.of(context);
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _MobileSheet(
-        children: [
-          ListTile(
-            key: const ValueKey('mobile-albums-add-source'),
-            leading: const Icon(Icons.add_photo_alternate_outlined),
-            title: Text(strings.pick('添加照片或目录', 'Add photos or folder')),
-            onTap: () => Navigator.of(context).pop('add'),
-          ),
-          ListTile(
-            key: const ValueKey('mobile-albums-refresh'),
-            leading: const Icon(Icons.refresh),
-            title: Text(strings.refresh),
-            onTap: () => Navigator.of(context).pop('refresh'),
-          ),
-          ListTile(
-            key: const ValueKey('mobile-albums-settings'),
-            leading: const Icon(Icons.settings_outlined),
-            title: Text(strings.settings),
-            onTap: () => Navigator.of(context).pop('settings'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || action == null) return;
-    switch (action) {
-      case 'add':
-        widget.onAdd();
-      case 'refresh':
-        await ref.read(localLibraryProvider.notifier).refresh(force: true);
-      case 'settings':
-        widget.onOpenSettings();
-    }
   }
 
   Future<void> _createAlbum() async {

@@ -38,6 +38,7 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
     this.searchDetail = false,
     this.onCloseSearch,
     this.mobile = false,
+    this.groupMode,
     this.searchRequest = 0,
     this.closeSearchRequest = 0,
     this.onSearchVisibilityChanged,
@@ -62,6 +63,9 @@ class LocalLibraryPane extends ConsumerStatefulWidget {
   /// Phones draw edge to edge under a floating bottom bar instead of the
   /// desktop workspace; only presentation changes, the query is shared.
   final bool mobile;
+
+  /// The phone shell owns its single cycling mode button.
+  final GroupMode? groupMode;
 
   /// Monotonic counters let the mobile shell open or close the inline search
   /// without exposing the pane's private state.
@@ -148,6 +152,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   @override
   void initState() {
     super.initState();
+    _mode = widget.groupMode ?? GroupMode.day;
     final gateway = ref.read(coreGatewayProvider);
     if (gateway is LocalLibraryGateway && gateway is ThumbnailPipelineGateway) {
       _decodedPool = ThumbnailPool.forGateway(gateway as LocalLibraryGateway);
@@ -384,6 +389,9 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
   @override
   void didUpdateWidget(LocalLibraryPane oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.groupMode != null && widget.groupMode != oldWidget.groupMode) {
+      _changeMode(widget.groupMode!);
+    }
     if (widget.searchMode && !oldWidget.searchMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _searchFocus.requestFocus();
@@ -1223,6 +1231,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
               ? _chooseCover
               : null,
           onSort: _showSort,
+          onOpenSettings: widget.onOpenSettings,
           hasContent: hasContent,
           choosingCover: _choosingCover,
           onCancelCover: _cancelCover,
@@ -1279,7 +1288,20 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
         // before any tile is focused; key events from tiles bubble up here.
         autofocus: true,
         skipTraversal: true,
-        child: _scrollBody(strings, state, controller, gateway, preferences),
+        child: widget.mobile
+            ? RefreshIndicator(
+                key: const ValueKey('mobile-photos-refresh'),
+                edgeOffset: _headerExtent,
+                onRefresh: () => controller.refresh(force: true),
+                child: _scrollBody(
+                  strings,
+                  state,
+                  controller,
+                  gateway,
+                  preferences,
+                ),
+              )
+            : _scrollBody(strings, state, controller, gateway, preferences),
       ),
     );
   }
@@ -1295,6 +1317,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
     if (status != null) {
       return CustomScrollView(
         key: const ValueKey('local-photo-grid'),
+        physics: widget.mobile ? const AlwaysScrollableScrollPhysics() : null,
         controller: _scroll,
         slivers: [
           SliverToBoxAdapter(child: SizedBox(height: _headerExtent)),
@@ -1307,7 +1330,8 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
         : _sections(state);
     return NotificationListener<ScrollNotification>(
       onNotification: (event) {
-        if (event.metrics.pixels <= 0 &&
+        if (!widget.mobile &&
+            event.metrics.pixels <= 0 &&
             event is OverscrollNotification &&
             event.overscroll < 0 &&
             !_overviewOpen) {
@@ -1322,6 +1346,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       },
       child: CustomScrollView(
         key: const ValueKey('local-photo-grid'),
+        physics: widget.mobile ? const AlwaysScrollableScrollPhysics() : null,
         controller: _scroll,
         slivers: [
           SliverToBoxAdapter(child: SizedBox(height: _headerExtent)),
@@ -1342,7 +1367,10 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 double.infinity,
               );
               final columns = widget.mobile
-                  ? (available >= 600 ? 5 : 3)
+                  ? mobileGridColumns(
+                      widget.searchMode ? GroupMode.day : _mode,
+                      preferences.dayColumns,
+                    )
                   : _mode == GroupMode.day && !widget.searchMode
                   ? preferences.dayColumns
                   : (available /
@@ -1351,7 +1379,14 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                             ))
                         .ceil()
                         .clamp(1, 100);
-              final side = (available - 8 * (columns - 1)) / columns;
+              final spacing = widget.mobile
+                  ? switch (_mode) {
+                      GroupMode.year => 2.0,
+                      GroupMode.month => 3.0,
+                      GroupMode.day => 4.0,
+                    }
+                  : 8.0;
+              final side = (available - spacing * (columns - 1)) / columns;
               // Keep the old Month/Day medium prewarm, while dense Year tiles
               // use Small. Foreground requests still choose by physical crop.
               _prewarmSizeClass = _mode == GroupMode.year ? 256 : 512;
@@ -1412,12 +1447,12 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                             : fallbackRank),
                     count: count,
                     columns: columns,
-                    stride: side + 8,
+                    stride: side + spacing,
                     header: header,
                     items: section.startIndex == null ? section.items : null,
                   ),
                 );
-                top += header + (count / columns).ceil() * (side + 8);
+                top += header + (count / columns).ceil() * (side + spacing);
                 fallbackRank += count;
               }
               _geometry = layout;
@@ -1431,7 +1466,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                         group.top +
                         group.header +
                         ((_pendingRank! - group.start) ~/ columns) *
-                            (side + 8) +
+                            (side + spacing) +
                         (_withinRow < 0
                             ? _withinRow
                             : _withinRow / _anchorStride * group.stride) -
@@ -1454,11 +1489,15 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 });
               }
               return SliverPadding(
-                padding: EdgeInsets.only(bottom: widget.mobile ? 118 : 90),
+                padding: EdgeInsets.only(
+                  bottom: widget.mobile
+                      ? 100 + MediaQuery.paddingOf(context).bottom
+                      : 90,
+                ),
                 sliver: SliverVariedExtentList.builder(
                   itemCount: rows,
                   itemExtentBuilder: (row, _) =>
-                      resolve(row).$2 < 0 ? header : side + 8,
+                      resolve(row).$2 < 0 ? header : side + spacing,
                   itemBuilder: (context, row) {
                     final (section, localRow) = resolve(row);
                     if (localRow < 0) {
@@ -1509,11 +1548,11 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                       );
                     }
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: EdgeInsets.only(bottom: spacing),
                       child: Row(
                         children: [
                           for (var column = 0; column < columns; column++) ...[
-                            if (column > 0) const SizedBox(width: 8),
+                            if (column > 0) SizedBox(width: spacing),
                             Expanded(
                               child:
                                   localRow * columns + column >=
@@ -1587,6 +1626,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
       photo: item.photo,
       gateway: gateway,
       radius: widget.mobile ? 4 : GlassTheme.photoRadius,
+      compact: widget.mobile && !widget.searchMode && _mode != GroupMode.day,
       selected: _selected.contains(item.photo.id),
       multiSelect: _selectionMode,
       cloudBound: cloudBound,
@@ -1919,6 +1959,7 @@ class _Header extends StatelessWidget {
     required this.onStartSelection,
     required this.onChooseCover,
     required this.onSort,
+    required this.onOpenSettings,
     required this.hasContent,
     required this.choosingCover,
     required this.onCancelCover,
@@ -1955,7 +1996,7 @@ class _Header extends StatelessWidget {
   final VoidCallback onSelectAll;
   final VoidCallback onDeselectAll;
   final VoidCallback onExitSelection, onStartSelection, onSort, onCancelCover;
-  final VoidCallback? onChooseCover;
+  final VoidCallback? onChooseCover, onOpenSettings;
   final bool hasContent, choosingCover;
   final List<LocalPhoto> selectedPhotos;
   final VoidCallback onBatchFavorite;
@@ -2042,13 +2083,27 @@ class _Header extends StatelessWidget {
         ),
       ] else ...[
         const SizedBox(width: 8),
-        _PageMenuButton(
-          onChooseCover: onChooseCover,
-          onSort: onSort,
-          onStartSelection: hasContent && !selectionMode
-              ? onStartSelection
-              : null,
-        ),
+        if (mobile)
+          _PageIconSurface(
+            child: IconButton(
+              key: const ValueKey('library-options'),
+              tooltip: strings.settings,
+              onPressed: onOpenSettings,
+              icon: const Icon(Icons.more_vert),
+              style: IconButton.styleFrom(
+                fixedSize: const Size(48, 48),
+                shape: const CircleBorder(),
+              ),
+            ),
+          )
+        else
+          _PageMenuButton(
+            onChooseCover: onChooseCover,
+            onSort: onSort,
+            onStartSelection: hasContent && !selectionMode
+                ? onStartSelection
+                : null,
+          ),
       ],
     ];
     return Padding(

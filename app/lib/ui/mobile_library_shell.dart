@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_library_gateway.dart';
 import 'glass_surface.dart';
-import 'glass_theme.dart';
 import 'local_library_controller.dart';
 import 'local_library_pane.dart';
+import 'mobile_settings_page.dart';
 import 'local_settings_dialog.dart';
 import 'mobile_albums_page.dart';
 import 'strings.dart';
+import 'photos_grid.dart';
+import 'mobile_settings_surface.dart';
 
 enum _MobileTab { photos, albums }
 
@@ -26,6 +28,7 @@ class MobileLibraryShell extends ConsumerStatefulWidget {
 class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
   _MobileTab _tab = _MobileTab.photos;
   bool _albumDetail = false;
+  GroupMode _groupMode = GroupMode.day;
   int _searchRequest = 0;
   int _closeSearchRequest = 0;
   bool _searchVisible = false;
@@ -42,9 +45,15 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
   }
 
   void _openSettings() {
-    showDialog<void>(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => const LocalSettingsDialog(),
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const FractionallySizedBox(
+        heightFactor: .96,
+        child: MobileSettingsPage(),
+      ),
     );
   }
 
@@ -112,53 +121,11 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
     setState(() => _searchVisible = visible);
   }
 
-  Future<void> _showMore() async {
-    final strings = AppStrings.of(context);
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => SafeArea(
-        top: false,
-        child: GlassSurface(
-          role: GlassRole.overlay,
-          radius: GlassTheme.dialogRadius,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ListTile(
-                  key: const ValueKey('mobile-more-refresh'),
-                  leading: const Icon(Icons.refresh),
-                  title: Text(strings.refresh),
-                  onTap: () => Navigator.of(context).pop('refresh'),
-                ),
-                ListTile(
-                  key: const ValueKey('mobile-more-settings'),
-                  leading: const Icon(Icons.settings_outlined),
-                  title: Text(strings.settings),
-                  onTap: () => Navigator.of(context).pop('settings'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    if (!mounted || action == null) return;
-    switch (action) {
-      case 'refresh':
-        await _controller.refresh(force: true);
-      case 'settings':
-        _openSettings();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(localLibraryProvider);
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final showAlbums = _tab == _MobileTab.albums && !_albumDetail;
     final filtered =
         state.trashed ||
         state.favoritesOnly ||
@@ -187,27 +154,39 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            IndexedStack(
-              sizing: StackFit.expand,
-              index: _tab == _MobileTab.albums && !_albumDetail ? 1 : 0,
+            Stack(
+              fit: StackFit.expand,
               children: [
-                LocalLibraryPane(
-                  mobile: true,
-                  trashMode: state.trashed,
-                  onOpenSettings: _openSettings,
-                  onBack: _tab == _MobileTab.albums && _albumDetail
-                      ? _showAlbums
-                      : null,
-                  searchRequest: _searchRequest,
-                  closeSearchRequest: _closeSearchRequest,
-                  onSearchVisibilityChanged: _onSearchVisibilityChanged,
+                _MobileTabPage(
+                  visible: !showAlbums,
+                  child: LocalLibraryPane(
+                    mobile: true,
+                    groupMode: _groupMode,
+                    trashMode: state.trashed,
+                    onOpenSettings: _openSettings,
+                    onBack: _tab == _MobileTab.albums && _albumDetail
+                        ? _showAlbums
+                        : null,
+                    searchRequest: _searchRequest,
+                    closeSearchRequest: _closeSearchRequest,
+                    onSearchVisibilityChanged: _onSearchVisibilityChanged,
+                  ),
                 ),
-                MobileAlbumsPage(
-                  onOpenSmartAlbum: _openSmartAlbum,
-                  onOpenAlbum: _openAlbum,
-                  onSearch: _openSearch,
-                  onOpenSettings: _openSettings,
-                  onAdd: _openSettings,
+                _MobileTabPage(
+                  visible: showAlbums,
+                  child: MobileAlbumsPage(
+                    onOpenSmartAlbum: _openSmartAlbum,
+                    onOpenAlbum: _openAlbum,
+                    onSearch: _openSearch,
+                    onOpenSettings: _openSettings,
+                    onAdd: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const LocalSettingsDialog(
+                          mobileCategory: MobileSettingsCategory.sources,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -219,15 +198,147 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
                 child: SafeArea(
                   top: false,
                   minimum: const EdgeInsets.only(bottom: 10),
-                  child: _MobileNavigationBar(
-                    tab: _tab,
-                    onPhotos: _showPhotos,
-                    onAlbums: _showAlbums,
-                    onMore: () => unawaited(_showMore()),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final diameter = _mobileNavigationHeight(context);
+                      final capsuleWidth =
+                          (constraints.maxWidth - 2 * (diameter + 10)).clamp(
+                            120.0,
+                            228.0,
+                          );
+                      return SizedBox(
+                        height: diameter,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: capsuleWidth,
+                              child: _MobileNavigationBar(
+                                tab: _tab,
+                                onPhotos: _showPhotos,
+                                onAlbums: _showAlbums,
+                              ),
+                            ),
+                            if (_tab == _MobileTab.photos || _albumDetail)
+                              Positioned(
+                                left:
+                                    (constraints.maxWidth - capsuleWidth) / 2 -
+                                    diameter -
+                                    10,
+                                child: _MobileGroupModeButton(
+                                  mode: _groupMode,
+                                  onChanged: (mode) =>
+                                      setState(() => _groupMode = mode),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+double _mobileNavigationHeight(BuildContext context) =>
+    60 + (MediaQuery.textScalerOf(context).scale(11) - 11);
+
+/// Both pages stay mounted so switching tabs retains scroll and selection.
+/// After the fade, the hidden page also leaves layout and accessibility.
+class _MobileTabPage extends StatefulWidget {
+  const _MobileTabPage({required this.visible, required this.child});
+  final bool visible;
+  final Widget child;
+
+  @override
+  State<_MobileTabPage> createState() => _MobileTabPageState();
+}
+
+class _MobileTabPageState extends State<_MobileTabPage> {
+  late bool _hidden = !widget.visible;
+
+  @override
+  void didUpdateWidget(_MobileTabPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.visible) _hidden = false;
+  }
+
+  @override
+  Widget build(BuildContext context) => Offstage(
+    offstage: _hidden,
+    child: IgnorePointer(
+      ignoring: !widget.visible,
+      child: ExcludeSemantics(
+        excluding: !widget.visible,
+        child: ExcludeFocus(
+          excluding: !widget.visible,
+          child: AnimatedOpacity(
+            opacity: widget.visible ? 1 : 0,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            onEnd: () {
+              if (widget.visible || _hidden) return;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && !widget.visible) setState(() => _hidden = true);
+              });
+            },
+            child: TickerMode(enabled: widget.visible, child: widget.child),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _MobileGroupModeButton extends StatelessWidget {
+  const _MobileGroupModeButton({required this.mode, required this.onChanged});
+
+  final GroupMode mode;
+  final ValueChanged<GroupMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    String label(GroupMode mode) => switch (mode) {
+      GroupMode.day => strings.modeDay,
+      GroupMode.month => strings.modeMonth,
+      GroupMode.year => strings.modeYear,
+    };
+    final next = switch (mode) {
+      GroupMode.day => GroupMode.month,
+      GroupMode.month => GroupMode.year,
+      GroupMode.year => GroupMode.day,
+    };
+    final tooltip = strings.pick(
+      '当前${label(mode)}视图，点击切换到${label(next)}视图',
+      '${label(mode)} view. Switch to ${label(next)} view',
+    );
+    final diameter = _mobileNavigationHeight(context);
+    return GlassSurface(
+      role: GlassRole.chrome,
+      live: true,
+      radius: diameter / 2,
+      child: SizedBox.square(
+        dimension: diameter,
+        child: IconButton(
+          key: const ValueKey('mobile-group-mode'),
+          tooltip: tooltip,
+          onPressed: () => onChanged(next),
+          style: IconButton.styleFrom(shape: const CircleBorder()),
+          icon: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label(mode),
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
         ),
       ),
     );
@@ -239,43 +350,71 @@ class _MobileNavigationBar extends StatelessWidget {
     required this.tab,
     required this.onPhotos,
     required this.onAlbums,
-    required this.onMore,
   });
 
   final _MobileTab tab;
-  final VoidCallback onPhotos, onAlbums, onMore;
+  final VoidCallback onPhotos, onAlbums;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return GlassSurface(
       key: const ValueKey('mobile-navigation'),
-      role: GlassRole.overlay,
-      radius: 30,
+      role: GlassRole.chrome,
+      live: true,
+      radius: _mobileNavigationHeight(context) / 2,
       child: SizedBox(
-        height: 64,
-        child: Row(
+        height: _mobileNavigationHeight(context),
+        child: Stack(
           children: [
-            _MobileNavItem(
-              key: const ValueKey('mobile-nav-photos'),
-              icon: Icons.grid_view_rounded,
-              label: strings.library,
-              selected: tab == _MobileTab.photos,
-              onTap: onPhotos,
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: AnimatedAlign(
+                  key: const ValueKey('mobile-navigation-indicator'),
+                  alignment: tab == _MobileTab.photos
+                      ? Alignment.centerLeft
+                      : Alignment.centerRight,
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  child: FractionallySizedBox(
+                    widthFactor: .5,
+                    heightFactor: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: mobileAccentColor(context)
+                              .withValues(alpha: .07),
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            _MobileNavItem(
-              key: const ValueKey('mobile-nav-albums'),
-              icon: Icons.photo_library_outlined,
-              label: strings.albums,
-              selected: tab == _MobileTab.albums,
-              onTap: onAlbums,
-            ),
-            _MobileNavItem(
-              key: const ValueKey('mobile-nav-more'),
-              icon: Icons.menu,
-              label: strings.pick('更多', 'More'),
-              selected: false,
-              onTap: onMore,
+            Row(
+              children: [
+                _MobileNavItem(
+                  key: const ValueKey('mobile-nav-photos'),
+                  icon: Icons.photo_outlined,
+                  selectedIcon: Icons.photo_rounded,
+                  label: strings.library,
+                  selected: tab == _MobileTab.photos,
+                  onTap: onPhotos,
+                ),
+                _MobileNavItem(
+                  key: const ValueKey('mobile-nav-albums'),
+                  icon: Icons.photo_library_outlined,
+                  selectedIcon: Icons.photo_library_rounded,
+                  label: strings.albums,
+                  selected: tab == _MobileTab.albums,
+                  onTap: onAlbums,
+                ),
+              ],
             ),
           ],
         ),
@@ -288,12 +427,13 @@ class _MobileNavItem extends StatelessWidget {
   const _MobileNavItem({
     super.key,
     required this.icon,
+    required this.selectedIcon,
     required this.label,
     required this.selected,
     required this.onTap,
   });
 
-  final IconData icon;
+  final IconData icon, selectedIcon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -301,41 +441,50 @@ class _MobileNavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final glass = GlassTheme.of(context);
-    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
+    final color = selected ? mobileAccentColor(context) : scheme.onSurface;
     return Expanded(
       child: Semantics(
         selected: selected,
         button: true,
         child: Padding(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(2),
           child: InkWell(
             borderRadius: BorderRadius.circular(22),
             onTap: onTap,
-            child: AnimatedContainer(
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(begin: scheme.onSurface, end: color),
               duration: MediaQuery.disableAnimationsOf(context)
                   ? Duration.zero
-                  : const Duration(milliseconds: 180),
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              decoration: BoxDecoration(
-                color: selected ? glass.selection : Colors.transparent,
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 22, color: color),
-                  const SizedBox(height: 2),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: color,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  : const Duration(milliseconds: 200),
+              builder: (context, color, _) => SizedBox.expand(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 160),
+                      child: Icon(
+                        selected ? selectedIcon : icon,
+                        key: ValueKey(selected),
+                        size: 23,
+                        color: color,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: color,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

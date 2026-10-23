@@ -13,7 +13,17 @@ import 'strings.dart';
 /// photoViewer/docs/modules/ui-design.md "Media Grids And Tiles".
 enum GroupMode { year, month, day }
 
-/// Largest tile edge per mode; Day is the densest layout.
+/// Phone overview modes progressively fit more photos on the same screen.
+int mobileGridColumns(GroupMode mode, int dayColumns) {
+  final day = dayColumns.clamp(3, 8);
+  return switch (mode) {
+    GroupMode.day => day,
+    GroupMode.month => (day * 1.6).ceil(),
+    GroupMode.year => (day * 2.6).ceil(),
+  };
+}
+
+/// Largest tile edge per desktop mode; Year is the densest layout.
 double gridMaxCrossAxisExtent(GroupMode mode) => switch (mode) {
   GroupMode.year => 90,
   GroupMode.month => 180,
@@ -107,6 +117,7 @@ class PhotoTile extends StatefulWidget {
     required this.onToggleFavorite,
     required this.onShowDetails,
     this.cloudBound = false,
+    this.compact = false,
     this.onUploadToCloud,
     this.onRename,
     this.onMoveToTrash,
@@ -131,6 +142,9 @@ class PhotoTile extends StatefulWidget {
   final VoidCallback onToggleFavorite;
   final VoidCallback onShowDetails;
   final bool cloudBound;
+
+  /// Dense overviews keep badges from covering the thumbnail or clipping.
+  final bool compact;
   final VoidCallback? onUploadToCloud;
   final VoidCallback? onRename;
   final VoidCallback? onMoveToTrash;
@@ -411,8 +425,8 @@ class _PhotoTileState extends State<PhotoTile> {
                 if (widget.photo.mediaKind == 'video' ||
                     widget.photo.motionOffset != null)
                   Positioned(
-                    left: 6,
-                    bottom: 6,
+                    left: widget.compact ? 2 : 6,
+                    bottom: widget.compact ? 2 : 6,
                     child: Semantics(
                       label: widget.photo.mediaKind == 'video'
                           ? strings.videos
@@ -423,14 +437,15 @@ class _PhotoTileState extends State<PhotoTile> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 3,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: widget.compact ? 3 : 5,
+                            vertical: widget.compact ? 2 : 3,
                           ),
-                          child: widget.photo.durationMs == null
-                              ? const Icon(
+                          child:
+                              widget.compact || widget.photo.durationMs == null
+                              ? Icon(
                                   Icons.play_arrow_rounded,
-                                  size: 18,
+                                  size: widget.compact ? 12 : 18,
                                   color: Colors.white,
                                 )
                               : Text(
@@ -444,7 +459,7 @@ class _PhotoTileState extends State<PhotoTile> {
                       ),
                     ),
                   ),
-                if (widget.cloudBound)
+                if (widget.cloudBound && !widget.compact)
                   Positioned(
                     top: 6,
                     left: 6,
@@ -467,7 +482,7 @@ class _PhotoTileState extends State<PhotoTile> {
                       ),
                     ),
                   ),
-                if (widget.photo.favorite)
+                if (widget.photo.favorite && !widget.compact)
                   Positioned(
                     top: 6,
                     right: 6,

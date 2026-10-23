@@ -162,6 +162,14 @@ cd /path/to/photo-client
 
 `packaging_acceptance: NOT RUN` 表示安装包级别的验收没有自动化，必须按第 6.3 节在设备或模拟器上完成。构建成功、APK 内 ABI 齐全，不等于功能验收通过。
 
+实体设备可按实际 ABI 构建独立 APK。例如设备的 `ro.product.cpu.abilist` 为 `arm64-v8a` 时：
+
+```bash
+PHOTO_FLUTTER_ROOT="$HOME/.local/share/photo-client/flutter" ./tools/platform build --profile android-universal --mode release --android-abi arm64-v8a
+```
+
+此模式只编译所选架构的 Rust 核心和 Flutter 代码，并检查 APK 中所有原生库只属于该 ABI。产物为 `app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`。不传 `--android-abi` 时仍生成三个架构的通用包；此选项只改变打包架构，不改变平台能力或 profile 摘要。
+
 ### 4.2 产物位置
 
 | 产物 | 路径 | 是否提交 |
@@ -224,6 +232,8 @@ adb shell am start -n com.photoviewer.photo_client/.MainActivity
 ### 5.1 权限
 
 应用和桌面版一样使用路径式图库，首次启动必须取得“所有文件访问权限”，否则权限门禁会阻止进入图库。手动操作路径：系统设置 → 应用 → PhotoViewer → 特殊应用权限 → 所有文件访问权限。
+
+存储授权也是原生运行时初始化的前置条件。未授权时不读取原生偏好、不打开图库或启动首次扫描；从系统授权页面返回后再初始化，随后扫描设备上真实的 `DCIM`、`Pictures`、`Movies`、`Download`。授权返回后应直接出现已有照片，无需重启应用。验证首次安装时必须覆盖这条流程，不能只用脚本预先授权后的启动代替。
 
 自动化测试设备可以用 adb 直接授权：
 
@@ -335,7 +345,7 @@ flutter test test/progressive_media_test.dart
 
 | 步骤 | 操作 | 通过标准 |
 |---|---|---|
-| 权限 | 清空数据后首次启动 | 出现权限门禁；授权后返回并重新检查可进入图库；未授权时不会伪造访问 |
+| 权限 | 清空数据后首次启动 | 出现权限门禁且不提前打开图库；授权返回后无需重启即扫描已有照片；未授权时不会伪造访问 |
 | 图库 | 添加测试目录 | 7 项素材全部出现；三列网格；快速滚动不拉伸变形 |
 | 查看器 | 左右滑动 | 文件名与 `N / 7` 随滑动变化；没有左右箭头、胶片条、缩放和沉浸按钮 |
 | 查看器 | 点按、捏合、菜单 | 点按隐藏/恢复头部；双指缩放后滑动不翻页；更多菜单含编辑、照片信息、移到回收站 |

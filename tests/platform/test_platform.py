@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 import yaml
@@ -280,6 +281,64 @@ class ToolTests(unittest.TestCase):
             defines = self.root / ".build/linux-x86_64/dart-defines.json"
             self.assertEqual(calls[1][0][5], f"--dart-define-from-file={defines}")
             self.assertEqual(bundle, self.root / f"app/build/linux/x64/{mode}/bundle")
+
+    def _mock_android_build(self, requested_abi, extra_abi=None):
+        profile = load_profile(ROOT / "config/platforms/android-universal.yaml", host=LINUX_HOST)
+        (self.root / "app").mkdir(exist_ok=True)
+        for path in ("Cargo.toml", "Cargo.lock", "app/pubspec.yaml"):
+            (self.root / path).touch()
+        jni = self.root / "app/android/app/src/main/jniLibs"
+        for abi in platform_cli.ANDROID_ABIS:
+            stale = jni / abi / "libphoto_bridge.so"
+            stale.parent.mkdir(parents=True, exist_ok=True)
+            stale.write_bytes(b"stale")
+        calls = []
+        selected = [requested_abi] if requested_abi else list(platform_cli.ANDROID_ABIS)
+        apk_name = f"app-{requested_abi}-release.apk" if requested_abi else "app-release.apk"
+        apk = self.root / "app/build/app/outputs/flutter-apk" / apk_name
+
+        def execute(args, *, cwd, env=None):
+            calls.append(args)
+            if len(calls) == 1:
+                self.assertFalse(any(jni.glob("*/libphoto_bridge.so")))
+                for abi in selected:
+                    (jni / abi / "libphoto_bridge.so").write_bytes(b"rebuilt")
+            else:
+                apk.parent.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(apk, "w") as archive:
+                    for abi in selected:
+                        for library in ("libphoto_bridge.so", "libflutter.so", "libapp.so"):
+                            archive.writestr(f"lib/{abi}/{library}", b"test")
+                    if extra_abi:
+                        archive.writestr(f"lib/{extra_abi}/libother.so", b"unexpected")
+
+        with patch("platform_cli.discover_flutter", return_value="/flutter/bin/flutter"), patch("platform_cli.shutil.which", return_value="/cargo/bin/cargo"), patch("platform_cli.cargo_ndk_available", return_value=True), patch("platform_cli.discover_ndk", return_value=self.root / "ndk"), patch("platform_cli.execute", side_effect=execute), patch("builtins.print"):
+            actual = platform_cli.build(profile, "release", self.root, android_abi=requested_abi)
+        self.assertEqual(actual, apk)
+        return calls
+
+    def test_android_apk_targets_match_requested_abis(self):
+        for abi in (None, "arm64-v8a"):
+            with self.subTest(abi=abi):
+                calls = self._mock_android_build(abi)
+                targets = [calls[0][index + 1] for index, arg in enumerate(calls[0]) if arg == "-t"]
+                selected = [abi] if abi else list(platform_cli.ANDROID_ABIS)
+                self.assertEqual(targets, selected)
+                self.assertEqual(calls[1][calls[1].index("--target-platform") + 1], ",".join(platform_cli.ANDROID_ABIS[item] for item in selected))
+                self.assertEqual("--split-per-abi" in calls[1], abi is not None)
+                if abi:
+                    self.assertFalse((self.root / "app/android/app/src/main/jniLibs/x86_64/libphoto_bridge.so").exists())
+
+    def test_android_single_abi_rejects_extra_packaged_architectures(self):
+        with self.assertRaisesRegex(ProfileError, "APK ABI mismatch"):
+            self._mock_android_build("arm64-v8a", extra_abi="x86_64")
+
+    def test_android_abi_option_requires_android_profile(self):
+        options = platform_cli.parser().parse_args(["build", "--profile", "android-universal", "--android-abi", "arm64-v8a"])
+        self.assertEqual(options.android_abi, "arm64-v8a")
+        profile = load_profile(ROOT / "config/platforms/linux-x86_64.yaml", host=LINUX_HOST)
+        with self.assertRaisesRegex(ProfileError, "requires an Android profile"):
+            platform_cli.build(profile, "release", self.root, android_abi="arm64-v8a")
 
     def test_cargo_failure_stops_flutter(self):
         profile = load_profile(ROOT / "config/platforms/linux-x86_64.yaml", host=LINUX_HOST)

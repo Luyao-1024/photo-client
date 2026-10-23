@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/core_gateway.dart';
+import 'library_access.dart';
 
 final coreGatewayProvider = Provider<CoreGateway>((ref) {
   throw StateError('PhotoClientApp must supply a CoreGateway.');
@@ -72,13 +73,18 @@ class RuntimeController extends Notifier<RuntimeViewState> {
       _disposed = true;
       unawaited(shutdown());
     });
+    ref.listen(libraryAccessProvider, (_, granted) {
+      if (granted && !_attempted && !_stopping) scheduleMicrotask(initialize);
+    });
     // Never mutate another provider or publish state during the build phase.
     scheduleMicrotask(initialize);
     return const RuntimeViewState();
   }
 
   Future<void> initialize() {
-    if (_disposed || _stopping) return Future<void>.value();
+    if (_disposed || _stopping || !ref.read(libraryAccessProvider)) {
+      return Future<void>.value();
+    }
     return _initializing ??= _initialize().whenComplete(() {
       _initializing = null;
     });
