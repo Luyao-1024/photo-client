@@ -35,6 +35,22 @@
 
 `--headless`、独立 `--data-root` 和 fake gateway 只供自动测试用例使用，不能代替真实环境启动或人工验收。
 
+### Android
+
+安卓端同样走 `tools/run_app`，不要另造启动入口：
+
+```bash
+# 构建 APK、安装到模拟器或设备、授予全文件与媒体权限、启动。
+./tools/run_app android --build
+
+# 用已有 APK 直接安装并启动。
+./tools/run_app android
+```
+
+没有在线设备时脚本会用 `setsid` 拉起 AVD `photo36` 并等待引导完成；模拟器参数用 `--device`、`--avd`、`--no-avd`、`--gpu`、`--no-window` 调整（默认带窗口显示在当前桌面）。`--background`、`--data-root`、`--x11`、`--headless` 只适用于 Linux 桌面端。
+
+安卓端的真实环境是设备本身：读取设备上的 `/sdcard/{DCIM,Pictures,Movies,Download}`，权限由系统授予，不伪造访问路径。工具链、模拟器基线、构建与验收步骤见 [Android 编译、运行与测试环境](docs/android/README.md)。
+
 ## 数据库版本升级
 
 开发阶段允许并要求为受支持的旧版本添加明确的数据库升级逻辑。当前支持 v1/v2 → v3：先通过 SQLite backup API 将一致备份写入真实图库的 `backups/`，再在单个事务中补齐字段、表和偏好，并更新版本记录。保留原照片文件、图库身份、来源、收藏及相册关系；失败回滚，备份失败则不开始升级。不得因版本不匹配删库重建。未来版本数据库拒绝旧客户端写入，不做自动降级。实现与验证见 [数据库升级记录](docs/local-first/database-upgrade.md)。
@@ -45,6 +61,8 @@
 - `tools/platform` 负责平台配置生成与 Rust/Flutter 构建；`tools/prepare_linux_media.py` 为两种启动模式准备媒体依赖及链接环境。不要绕过这些步骤直接运行裸 `flutter run`，否则可能缺少平台定义、原生核心或媒体依赖。
 - 系统只有 `libheif.so.1`、缺少开发链接名时，工具会在 `.tooling/media-link` 创建本地 `libheif.so` 别名并设置 `LIBRARY_PATH`。不再需要临时的 `glass-build-link` 或手动设置库路径；不修改系统库。
 - 手动调用平台工具时，需要保证 Flutter 在 PATH 中或设置 `PHOTO_FLUTTER_ROOT`。构建产物位于 `app/build/linux/x64/{debug,release}/bundle/`，不要只复制其中的可执行文件。
+- 安卓构建需要 `cargo-ndk` 与三个 Rust 安卓 target；`app/android/app/build.gradle.kts` 的 `ndkVersion` 必须等于 SDK 里实际安装的 NDK 版本。产物是 `app/build/app/outputs/flutter-apk/app-release.apk`。
+- 本机 `/usr/lib/jvm/java-25-openjdk` 是 JRE，没有 javac，AGP 会失败；Gradle 与 Flutter 都指向 `~/.local/jdk/jdk-21.0.12.1+1`。`dl.google.com` 在本网络不可达，`~/.gradle/init.gradle` 把 Google Maven 重定向到可达镜像。
 
 ## 验证
 

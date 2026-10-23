@@ -198,6 +198,19 @@ unzip -l app/build/app/outputs/flutter-apk/app-release.apk | grep 'lib/.*/libpho
 
 ## 5. 安装与运行
 
+推荐用仓库的统一启动入口，它把构建、安装、授权和启动串成一步，并且规避了手工步骤里的两个已知竞态：
+
+```bash
+./tools/run_app android --build    # 构建 APK、安装、授权、启动
+./tools/run_app android            # 用已有 APK 直接安装并启动
+```
+
+没有在线设备时，脚本会用 `setsid` 拉起 AVD 并等待引导完成。可用参数：`--device SERIAL` 指定 adb 设备、`--avd NAME` 指定 AVD、`--no-avd` 表示没有设备就直接报错、`--gpu MODE` 指定模拟器 GPU 后端、`--no-window` 让模拟器无窗口运行（**默认带窗口**，窗口会出现在当前桌面）。`--background`、`--data-root`、`--x11`、`--headless` 只适用于 Linux 桌面端，在 `android` 模式下直接报错退出。
+
+脚本在 `adb install -r` 之后会先 `am force-stop`，再启动应用。原因是覆盖安装会让 Android 自行重launch应用，若不先停止，同一进程里会出现两个 Flutter 引擎，原生运行时拒绝二次初始化，界面就会停在“照片加载失败”，且界面上“重试”无效、只有杀掉进程重开才能恢复。详见第 9 节。
+
+等价的纯手工步骤：
+
 ```bash
 export ANDROID_SERIAL=emulator-5554       # 多设备时必设
 
@@ -351,12 +364,17 @@ adb shell dumpsys package com.photoviewer.photo_client | grep -E 'versionCode|ve
 | `toolchain: cargo-ndk not found` | 未安装或不在 PATH | `cargo install cargo-ndk --version 4.1.2 --locked` |
 | `expected native library missing` | 交叉编译失败或 ABI 不齐 | 重新执行 `tools/platform build`，不要手工复制库 |
 | 安装后显示“照片加载失败” | 用了裸 `flutter build apk`，缺少 `PHOTO_PROFILE_*` | 改用 `tools/platform build --profile android-universal` |
+| 安装后显示“照片加载失败”，重试无效 | 覆盖安装后 Android 自行重launch应用，同进程出现两个 Flutter 引擎 | `adb shell am force-stop com.photoviewer.photo_client` 后重开；用 `tools/run_app android` 可自动规避 |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 新电脑的 debug keystore 不同 | 先卸载再安装；卸载会删除应用数据 |
 | 一直停在权限门禁 | 未授予所有文件访问权限 | 系统设置授权，或测试设备执行第 5.1 节 `appops` |
-| 模拟器启动失败或极慢 | 无 KVM 或 GPU 后端不兼容 | 确认 `/dev/kvm` 可访问；改用 `-gpu swiftshader_indirect` |
+| 模拟器启动失败或极慢 | 无 KVM 或 GPU 后端不兼容 | 确认 `/dev/kvm` 可访问；优先用 `-gpu host`，`swiftshader_indirect` 在部分主机上会让模拟器直接崩溃（见第 9.2 节） |
+| 模拟器刚启动就退出，日志无报错 | 上一台实例还在优雅关闭，AVD 锁未释放 | 等待旧实例退出后再启动；`tools/run_app android` 会等待并重试 |
 | 截图尺寸/布局与文档不符 | AVD 参数被改过 | 重新创建 `Medium_Phone`，核对 `wm size` 与 `wm density` |
 | `pubspec.lock` 出现镜像 URL | 设置了 `PUB_HOSTED_URL` | 取消该变量，从 git 恢复锁文件，再 `pub get --enforce-lockfile` |
 | 构建时报 Java 版本错误 | JDK 低于 17 或未被 Flutter 识别 | 安装 JDK 17+，设置 `JAVA_HOME` 或 `flutter config --jdk-dir` |
+| `does not provide the required capabilities: [JAVA_COMPILER]` | 装的是 JRE 而不是 JDK，没有 `javac` | 装完整 JDK 并设置 `org.gradle.java.home` 与 `flutter config --jdk-dir` |
+| Gradle 长时间无输出且不报错 | 命中不可达的 `dl.google.com` | 见第 9.3 节，用 init 脚本重定向 Google Maven |
+| 视频能显示封面但提示无法播放 | 编码不受支持，模拟器 MediaCodec 不解 MPEG-4 Part 2 | 用 H.264（`libx264`/`libopenh264`）、H.265 或 AV1 重新生成素材 |
 | 16 KB 设备上原生库加载失败 | 原生库未按 16 KB 对齐 | 重新用固定 NDK/cargo-ndk 构建，执行第 4.3 节检查 |
 | 数据库被占用 | 旧进程未退出 | `adb shell am force-stop com.photoviewer.photo_client` 后重试 |
 
@@ -370,3 +388,120 @@ adb shell dumpsys package com.photoviewer.photo_client | grep -E 'versionCode|ve
 - `mobile_layout_test.dart` 6 个用例通过。
 
 未执行项：本文件没有新增或修改 Android 自动化端到端套件；安装级别的人工验收仍按 6.3 节逐次记录。
+
+## 9. 受限网络主机上的偏差与实测记录
+
+第 1–8 节描述的是**标准基线**。当构建主机无法访问 Google 官方源时，基线里的部分组件装不上，必须显式记录偏差，否则"文档说是 A、机器上是 B"会直接变成构建失败或验收口径不一致。
+
+本节记录 2026-10-23 在这台开发机（Fedora 44 / x86_64 / Wayland / 内网，Google 源不可达）上实测的偏差。**基线仍是标准，其他主机按第 1–8 节执行即可。**
+
+### 9.1 偏差总表
+
+| 项目 | 标准基线 | 本机实测 | 原因与影响 |
+|---|---|---|---|
+| NDK | 27.0.12077973 | 28.2.13676358 | `dl.google.com` 不可达，NDK 27 无法下载；已把 `app/android/app/build.gradle.kts` 的 `ndkVersion` 改成本机版本。**16 KB 关键指标不受影响**：NDK 28 产出的 `arm64-v8a`、`x86_64` 的 `LOAD` 段对齐仍为 `0x4000`（第 4.3 节校验通过） |
+| JDK | 25.0.4.1 | Temurin 21.0.12.1（`~/.local/jdk/jdk-21.0.12.1+1`） | 系统的 `/usr/lib/jvm/java-25-openjdk` 是 **JRE，没有 `javac`**，AGP 会报 `does not provide the required capabilities: [JAVA_COMPILER]`。Gradle 与 Flutter 都指向用户级 JDK 21 |
+| Google Maven | 直连 | 经 `~/.gradle/init.gradle` 重定向到 `maven.aliyun.com/repository/google` | `dl.google.com` 不可达时 Gradle 会卡住且不报错。第 2 节规则 3 禁止改仓库内的 Gradle 配置，本机用机器级 init 脚本实现，不改仓库文件 |
+| 模拟器 | Emulator 36.6.11 | 37.2.12.0 | SDK 里已是该版本 |
+| 系统镜像 | `android-37.0;google_apis_playstore_ps16k`（16 KB 页） | `android-36;google_apis`（4 KB 页） | 只装得到 android-36 镜像。**第 3.2 节的 `getconf PAGE_SIZE` = 16384 校验在本机无法执行**，改用 `readelf -lW` 静态检查 `LOAD` 段对齐作为等效验证 |
+| AVD | `Medium_Phone`（medium_phone 规格） | `photo36`（pixel_6 规格，1080×2400、density 420、2 GB RAM、6 核） | 屏幕与内存参数与基线一致，只是设备规格与名字不同 |
+| Platform-Tools | 37.0.0 | 37.0.1 | 补丁版本差异 |
+| Rust | 1.99.0 | 1.98.0 | 满足 `Cargo.toml` 声明的 `rust-version = 1.98`，低于基线固定的 1.99.0 |
+
+### 9.2 模拟器 GPU 后端：本机只能用 `host`
+
+第 3.2 节和第 7 节都把 `-gpu swiftshader_indirect` 当作 GPU 不可用时的兜底。**在本机上这个兜底会让模拟器宿主进程 SIGSEGV**：崩溃点在 gfxstream 创建完 ColorBuffer 之后（`Selecting Vulkan Device: SwiftShader Device (Subzero)` 之后），`-gpu off` 同样崩溃。
+
+实测只有 `-gpu host` 能完成引导并稳定运行。`tools/run_app android` 因此把 `--gpu` 的默认值设为 `host`。
+
+这里要特别区分两件事：**崩溃来自 SwiftShader 渲染管线，不是窗口**。最初几次带窗口的失败，是因为同时用了默认的 `swiftshader_indirect`；换成 `-gpu host` 之后，带窗口与无窗口两种方式都能正常引导：
+
+```bash
+# 带窗口（默认）：窗口出现在当前桌面
+~/Android/Sdk/emulator/emulator -avd photo36 -gpu host -no-boot-anim -no-audio -no-snapshot
+
+# 无窗口
+~/Android/Sdk/emulator/emulator -avd photo36 -gpu host -no-window -no-boot-anim -no-audio -no-snapshot
+```
+
+模拟器自带的 Qt 插件只有 `libqxcbAndroidEmu.so`，没有 wayland 插件，因此窗口走 XWayland（Wayland 会话下的 X11 桥）。验证窗口是否已映射：
+
+```bash
+DISPLAY=:0 xdotool search --onlyvisible --name 'Android Emulator'
+```
+
+无窗口方式同样可用于验收：`adb exec-out screencap -p` 能取到与屏幕一致的 1080×2400 截图。
+
+### 9.3 机器级 Gradle 镜像脚本
+
+`dl.google.com`（28.0.0.6）不可达时，Gradle 会停在该主机上，既不报错也不超时退出。`storage.googleapis.com`（Flutter 引擎产物源）可达，不需要重定向。
+
+用 `~/.gradle/init.gradle` 重定向，不修改仓库内任何 Gradle 文件：
+
+```groovy
+def googleMirror = 'https://maven.aliyun.com/repository/google'
+def googleHosts = ['dl.google.com', 'maven.google.com']
+
+def redirectGoogle = { repos ->
+    repos.all { repo ->
+        if (repo instanceof MavenArtifactRepository) {
+            if (repo.url?.host in googleHosts) {
+                repo.url = googleMirror
+            }
+        }
+    }
+}
+
+// beforeSettings 必须保留：插件解析发生在 settings 脚本求值期间，
+// 只有它能在解析前改掉 pluginManagement 里的仓库。
+beforeSettings { settings ->
+    redirectGoogle(settings.pluginManagement.repositories)
+    redirectGoogle(settings.dependencyResolutionManagement.repositories)
+}
+
+settingsEvaluated { settings ->
+    redirectGoogle(settings.pluginManagement.repositories)
+    redirectGoogle(settings.dependencyResolutionManagement.repositories)
+}
+
+allprojects {
+    buildscript { redirectGoogle(repositories) }
+    redirectGoogle(repositories)
+}
+```
+
+排查手段：`ss -tnp | grep java` 若看到连向 28.0.0.6:443 的连接，说明仍在等 Google 源。
+
+### 9.4 覆盖安装与模拟器重启的竞态
+
+两个只在这台机器的时序下出现、但同样会在别处复现的故障，都由 `tools/run_app android` 处理：
+
+1. **双 Flutter 引擎**：对正在运行的应用执行 `adb install -r`，Android 会自行重launch它；脚本的 `am start` 与之叠加，同一进程里出现两个 Flutter 引擎。原生运行时是进程级单例，第二次初始化返回 `AlreadyInitialized`，界面停在"照片加载失败"；界面上的"重试"无效，只有杀掉进程重开才能恢复。脚本在安装后先 `am force-stop` 再启动。
+2. **AVD 锁未释放**：`adb emu kill` 后模拟器优雅关闭需要约 20 秒，期间新实例拿不到 AVD 锁会静默退出，日志里也看不出原因。脚本会等待上一实例退出，并在引导失败时重试一次。
+
+### 9.5 素材命令在本机的差异
+
+第 6.1 节的素材命令在本机需要两处调整：
+
+- `ffmpeg -c:v libx264` 不可用（本机 ffmpeg-free 不含 libx264），改用 `-c:v libopenh264`；
+- **编码必须是 H.264/H.265/AV1**：模拟器 MediaCodec 不解 MPEG-4 Part 2。用 ffmpeg 默认的 `mpeg4` 编码会得到"封面能显示、播放报无法播放"的结果。
+
+本机的 ImageMagick 带 HEIC 支持（1.23.5），但只支持读取；HEIC 样例可直接取仓库内的 `tests/fixtures/media/real_phone.heic`，比现场转码更接近真实设备产物。
+
+### 9.6 本机验证记录
+
+2026-10-23，在本机（Flutter 3.47.7、Rust 1.98.0、JDK 21.0.12.1、NDK 28.2.13676358、`photo36`：Android 16 / x86_64 / 1080×2400 / 4 KB 页 / `-gpu host`）上完成了：
+
+- `tools/platform build --profile android-universal --mode release` 成功，输出 `profile_digest=3dcede2c...`（与基线一致），APK 内含三 ABI 的 `libphoto_bridge.so`；
+- APK 通过 `zipalign -c -P 16` 校验（Verification successful），`arm64-v8a` 与 `x86_64` 的 `LOAD` 段对齐为 `0x4000`；
+- `tools/run_app android --build` 完成构建、安装、授权、启动全链路；无在线设备时能自动拉起模拟器并等待引导；
+- 模拟器**带窗口**运行，窗口 `Android Emulator - photo36:5554` 出现在当前桌面，窗口内应用完整渲染（三列网格、日期分组、HEIC 缩略图、底部导航）；`xdotool search --onlyvisible --name 'Android Emulator'` 可查到该窗口；
+- 图库页读到 9 项媒体并按 EXIF 拍摄时间分组；JPEG / PNG 大图与缩略图正常；
+- HEIC 真机照片完整解码，EXIF 正确读出（OPPO Find X8s、Hasselblad、24 mm f/1.8 1/100 s ISO320）；
+- 相册页计数正确（Favorites 0 / Images 8 / Videos 1 / Motion photos 0 / Trash 0），实体相册 Movies 1、Pictures 8；
+- 手机查看器按第 6.3 节清单复验：头部只显示文件名与「N / 9」、收藏与更多，**没有**左右箭头、胶片条、缩放与沉浸按钮；左右滑动翻页生效（7/9 → 8/9 → 9/9，右滑回退）；点按折叠与恢复头部；更多面板含 Edit、Photo information、Move to trash；
+- 视频控件只保留播放键与「00:03 / 00:04」进度条，没有上一首/下一首/音量；
+- H.264 视频经 `c2.goldfish.h264.decoder` 硬解播放，帧计数随播放推进；
+- 液态玻璃材质与底部导航（Photos / Albums / More）渲染正常，应用无崩溃。
+
+未执行项：16 KB 页 AVD 上的运行期验收（本机无 37.0 ps16k 镜像）；`More` 页内设置项的逐项行为；真机（USB 设备）；十万张图库性能；第 6.3 节中的编辑（裁剪/旋转并保存副本）与"强制停止后重新打开"两项本轮未逐条执行。

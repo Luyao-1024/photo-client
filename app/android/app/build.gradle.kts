@@ -8,7 +8,9 @@ android {
     namespace = "com.photoviewer.photo_client"
     compileSdk = flutter.compileSdkVersion
     // Match the NDK used by tools/platform for the Rust Android targets.
-    ndkVersion = "27.0.12077973"
+    // tools/platform selects the newest NDK installed under the SDK, so this
+    // must track that version or AGP will try to download a missing one.
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

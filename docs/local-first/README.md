@@ -39,6 +39,7 @@ JPEG/PNG/WebP是初始格式验收基线；旧应用的其他图片/视频能力
 
 - [一期开发与逐步验收](development-plan.md)
 - [一期逐项验收](acceptance.md)
+- [Android 编译、运行与测试环境](../android/README.md)
 - [一期阶段状态](contracts/stage-plan.json)
 - [已有工程基础验收手册](../design/stage-acceptance.md#s01)：只继承S01共用门槛
 - [性能合同](../design/modules/16-performance.md)：保留浏览/内存指标；并行负载改测本地扫描、缩略图、保存/导出

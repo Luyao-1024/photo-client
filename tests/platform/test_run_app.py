@@ -61,6 +61,24 @@ else:
 """)
         self.bundle = self.project / 'app/build/linux/x64/release/bundle/photo_client'
         self.executable(self.bundle, self.record + "record('application')\n")
+        self.android_sdk = self.root / 'android-sdk'
+        (self.android_sdk / 'platform-tools').mkdir(parents=True)
+        self.executable(self.android_sdk / 'platform-tools/adb', self.record + """
+args = sys.argv[1:]
+if args[0] == 'devices':
+    print('List of devices attached')
+    if not os.environ.get('ADB_NO_DEVICES'):
+        print('emulator-5554\\tdevice')
+elif 'getprop' in args:
+    print('1')
+record('adb')
+""")
+        self.android_apk = (self.project / 'app/build/app/outputs/flutter-apk/app-release.apk')
+        self.android_apk.parent.mkdir(parents=True, exist_ok=True)
+        self.android_apk.write_bytes(b'apk')
+        (self.project / 'app/android').mkdir(parents=True, exist_ok=True)
+        (self.project / 'app/android/local.properties').write_text(
+            f'sdk.dir={self.android_sdk}\n')
 
     def executable(self, path, body):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -125,3 +143,47 @@ while True: time.sleep(.1)
                 result = self.launch('dev', *args)
                 self.assertEqual(result.returncode, 2)
                 self.assertFalse(self.trace.exists())
+
+    def test_android_installs_grants_and_launches_on_the_online_device(self):
+        self.env.pop('ANDROID_HOME', None)
+        self.env.pop('ANDROID_SDK_ROOT', None)
+        result = self.launch('android')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = [' '.join(e['args']) for e in self.records() if e['kind'] == 'adb']
+        self.assertTrue(any(c.endswith(str(self.android_apk)) for c in calls), calls)
+        self.assertTrue(any('MANAGE_EXTERNAL_STORAGE allow' in c for c in calls), calls)
+        self.assertTrue(any('READ_MEDIA_IMAGES' in c for c in calls), calls)
+        self.assertTrue(any('READ_MEDIA_VIDEO' in c for c in calls), calls)
+        self.assertTrue(any('am start -n com.photoviewer.photo_client/.MainActivity' in c
+                            for c in calls), calls)
+        # The path-based library needs a real system grant, never a stub.
+        self.assertTrue(any('appops set' in c for c in calls), calls)
+        # Installing over a running app makes Android relaunch it by itself, so
+        # the package must be stopped before the explicit launch; two engines in
+        # one process leave the native runtime refusing to initialize twice.
+        stop = next(i for i, c in enumerate(calls) if 'am force-stop' in c)
+        start = next(i for i, c in enumerate(calls) if 'am start' in c)
+        self.assertLess(stop, start)
+
+    def test_android_rejects_desktop_only_options_before_touching_the_device(self):
+        for args in [('--background',), ('--data-root', 'isolated'), ('--x11',),
+                     ('--headless',)]:
+            with self.subTest(args=args):
+                result = self.launch('android', *args)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse(self.trace.exists())
+
+    def test_android_accepts_the_headless_emulator_flag(self):
+        # The emulator opens a window by default; --no-window is the opt-out.
+        result = self.launch('android', '--no-window')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(any(e['kind'] == 'adb' for e in self.records()))
+
+    def test_android_without_a_device_reports_the_missing_avd_path(self):
+        self.env['ADB_NO_DEVICES'] = '1'
+        result = self.launch('android', '--no-avd')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('no online Android device', result.stderr)
+        calls = [' '.join(e['args']) for e in self.records() if e['kind'] == 'adb']
+        self.assertFalse(any('install' in c for c in calls), calls)
+        self.assertFalse(any('am start' in c for c in calls), calls)

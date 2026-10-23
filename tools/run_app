@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# One-click launcher for the photo-client Linux desktop app.
+# One-click launcher for the photo-client Linux desktop app and the Android app.
 #
 #   tools/run_app release            run the built release bundle (foreground)
 #   tools/run_app release --build    build current sources, then run
 #   tools/run_app dev                flutter run -d linux (debug, hot reload)
+#   tools/run_app android            build/install/launch the Android app
 #
 # By default this is your REAL environment: your real desktop (native Wayland
 # when present, else X11) and the app's real default library
@@ -13,10 +14,19 @@
 # Display selection: native Wayland when the user session exposes one, else
 # X11/XWayland; --x11 forces X11, --headless runs on a private Xvfb display so
 # nothing appears on (or injects into) the real desktop.
+#
+# Android selection: the app runs on a real emulator or a connected device.
+# The Android emulator defaults to the host GPU because the SwiftShader
+# fallback crashes the guest display pipeline on some hosts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUNDLE="$ROOT/app/build/linux/x64/release/bundle/photo_client"
+
+ANDROID_PROFILE="android-universal"
+ANDROID_APK="$ROOT/app/build/app/outputs/flutter-apk/app-release.apk"
+ANDROID_PACKAGE="com.photoviewer.photo_client"
+ANDROID_ACTIVITY="$ANDROID_PACKAGE/.MainActivity"
 
 mode="release"
 data_root=""
@@ -26,28 +36,42 @@ background=0
 XVFB_PID=""
 APP_PID=""
 
+android_device=""
+android_avd="photo36"
+android_gpu="host"
+android_headless=0
+android_no_avd=0
+
 usage() {
   cat <<'EOF'
-Usage: tools/run_app [release|dev] [options]
+Usage: tools/run_app [release|dev|android] [options]
 
 Modes:
   release            run the built release bundle (default)
   dev                run `flutter run -d linux` (debug, hot reload, foreground)
+  android            build/install/launch the Android app on an emulator or device
 
 Options:
   --data-root DIR    (tests only) override the library data root
                      (default: the app's real default library, no isolation)
   --x11              force X11/XWayland instead of native Wayland
   --headless         private Xvfb display; no window on your desktop (test only)
-  --build            (release) rebuild via tools/platform before running
+  --build            (release, android) rebuild via tools/platform before running
   --background       (release) detach with nohup; print PID and log path
   -h, --help         show this help
+
+Android options:
+  --device SERIAL    target this adb device (default: the only online device)
+  --avd NAME         AVD to boot when no device is online (default: photo36)
+  --no-avd           never start an emulator; fail if no device is online
+  --gpu MODE         emulator GPU backend (default: host)
+  --no-window        run the emulator headless; by default it opens a window
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    release|dev) mode="$1"; shift ;;
+    release|dev|android) mode="$1"; shift ;;
     --data-root)
       if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" == --* ]]; then
         echo "run_app: --data-root needs a directory" >&2
@@ -58,6 +82,26 @@ while [ $# -gt 0 ]; do
     --headless) display_mode="headless"; shift ;;
     --build) do_build=1; shift ;;
     --background) background=1; shift ;;
+    --device)
+      if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" == --* ]]; then
+        echo "run_app: --device needs a serial" >&2
+        exit 2
+      fi
+      android_device="$2"; shift 2 ;;
+    --avd)
+      if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" == --* ]]; then
+        echo "run_app: --avd needs a name" >&2
+        exit 2
+      fi
+      android_avd="$2"; shift 2 ;;
+    --no-avd) android_no_avd=1; shift ;;
+    --gpu)
+      if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" == --* ]]; then
+        echo "run_app: --gpu needs a backend name" >&2
+        exit 2
+      fi
+      android_gpu="$2"; shift 2 ;;
+    --no-window) android_headless=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "run_app: unknown argument: $1" >&2; usage; exit 2 ;;
   esac
@@ -165,6 +209,172 @@ setup_display() {
     unset WAYLAND_DISPLAY || true
   fi
 }
+
+android_sdk_root() {
+  local candidate
+  for candidate in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}"; do
+    if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  local properties="$ROOT/app/android/local.properties"
+  if [ -f "$properties" ]; then
+    candidate="$(sed -n 's/^sdk\.dir=//p' "$properties" | head -1 | sed 's/\\:/:/g; s/\\\\/\\/g')"
+    if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+  candidate="$HOME/Android/Sdk"
+  if [ -d "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+# Online devices only: "offline" or "unauthorized" serials are not usable.
+android_devices() {
+  "$ANDROID_ADB" devices | awk 'NR > 1 && $2 == "device" { print $1 }'
+}
+
+android_boot_complete() {
+  "$ANDROID_ADB" -s "$1" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r'
+}
+
+# True when an emulator process for this AVD is alive, whether it is still
+# booting or already up.
+emulator_running() {
+  pgrep -f "qemu-system.*-avd $1" >/dev/null 2>&1
+}
+
+# The emulator keeps running after this script returns, so it needs its own
+# session; a plain background job would be reaped with the caller's group.
+start_android_emulator() {
+  local avd="$1"
+  local emulator="$ANDROID_SDK/emulator/emulator"
+  if [ ! -x "$emulator" ]; then
+    echo "run_app: emulator not found: $emulator" >&2
+    exit 1
+  fi
+  local log="${TMPDIR:-/tmp}/photo-client-emulator-$avd.log"
+  local -a args=(-avd "$avd" -gpu "$android_gpu" -no-boot-anim -no-audio -no-snapshot)
+  if [ "$android_headless" = 1 ]; then args+=(-no-window); fi
+  # A previous instance of this AVD can still be shutting down and holding the
+  # AVD lock; starting a second one then fails silently. Wait it out.
+  local deadline=$((SECONDS + 90))
+  while emulator_running "$avd"; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "run_app: previous emulator for $avd is still shutting down" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+  setsid "$emulator" "${args[@]}" >"$log" 2>&1 </dev/null &
+  echo "run_app: emulator starting avd=$avd gpu=$android_gpu log=$log"
+}
+
+# Wait for a booted device; prints the serial it settled on.
+wait_android_device() {
+  local deadline=$((SECONDS + 180))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    local serial
+    serial="$(android_devices | head -1)"
+    if [ -n "$serial" ] && [ "$(android_boot_complete "$serial")" = "1" ]; then
+      printf '%s\n' "$serial"
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+if [ "$mode" = "android" ]; then
+  if [ "$background" = 1 ]; then
+    echo "run_app: --background does not apply to android; the app runs on the device" >&2
+    exit 2
+  fi
+  if [ -n "$data_root" ]; then
+    echo "run_app: --data-root does not apply to android; the library lives on the device" >&2
+    exit 2
+  fi
+  if [ "$display_mode" != "auto" ]; then
+    echo "run_app: --x11/--headless only apply to the Linux desktop app" >&2
+    exit 2
+  fi
+  ANDROID_SDK="$(android_sdk_root)" || {
+    echo "run_app: Android SDK not found; set ANDROID_HOME or ANDROID_SDK_ROOT" >&2
+    exit 2
+  }
+  ANDROID_ADB="$ANDROID_SDK/platform-tools/adb"
+  if [ ! -x "$ANDROID_ADB" ]; then
+    echo "run_app: adb not found: $ANDROID_ADB" >&2
+    exit 2
+  fi
+  export ANDROID_HOME="$ANDROID_SDK" ANDROID_SDK_ROOT="$ANDROID_SDK"
+
+  serial="$android_device"
+  if [ -z "$serial" ]; then
+    serial="$(android_devices | head -1)"
+  fi
+  if [ -z "$serial" ]; then
+    if [ "$android_no_avd" = 1 ]; then
+      echo "run_app: no online Android device; start one or drop --no-avd" >&2
+      exit 1
+    fi
+    if emulator_running "$android_avd"; then
+      # The AVD is already booting: adb has not registered it yet. Starting a
+      # second instance would only fight over the AVD lock, so wait instead.
+      serial="$(wait_android_device)" || {
+        echo "run_app: emulator $android_avd did not finish booting" >&2
+        exit 1
+      }
+    else
+      # One retry: the first attempt can lose a race with a shutting-down
+      # instance that still holds the AVD lock.
+      for attempt in 1 2; do
+        start_android_emulator "$android_avd"
+        if serial="$(wait_android_device)"; then
+          break
+        fi
+        if [ "$attempt" = 2 ]; then
+          echo "run_app: emulator $android_avd did not finish booting" >&2
+          exit 1
+        fi
+        echo "run_app: emulator $android_avd did not come up; retrying" >&2
+      done
+    fi
+  fi
+  echo "run_app: android device=$serial"
+
+  if [ "$do_build" = 1 ] || [ ! -f "$ANDROID_APK" ]; then
+    setup_flutter
+    python3 -B "$ROOT/tools/platform" build --profile "$ANDROID_PROFILE" --mode release
+  fi
+  if [ ! -f "$ANDROID_APK" ]; then
+    echo "run_app: APK not found: $ANDROID_APK" >&2
+    exit 1
+  fi
+
+  "$ANDROID_ADB" -s "$serial" install -r "$ANDROID_APK"
+  # Installing over a running app makes Android relaunch it on its own. That
+  # second launch races with ours and leaves two Flutter engines in one
+  # process, where the native runtime refuses to initialize twice and the
+  # library comes up empty. Stop the package so exactly one launch happens.
+  "$ANDROID_ADB" -s "$serial" shell am force-stop "$ANDROID_PACKAGE"
+  sleep 1
+  # The library is path-based like the desktop build, so it needs the all-files
+  # contract plus media reads. The grant is a real system grant, not a stub.
+  "$ANDROID_ADB" -s "$serial" shell appops set "$ANDROID_PACKAGE" MANAGE_EXTERNAL_STORAGE allow || true
+  for permission in READ_MEDIA_IMAGES READ_MEDIA_VIDEO; do
+    "$ANDROID_ADB" -s "$serial" shell pm grant "$ANDROID_PACKAGE" "android.permission.$permission" || true
+  done
+  "$ANDROID_ADB" -s "$serial" shell am start -n "$ANDROID_ACTIVITY"
+  echo "run_app: launched $ANDROID_ACTIVITY on $serial"
+  echo "run_app: logs: $ANDROID_ADB -s $serial logcat --pid=\$(pidof $ANDROID_PACKAGE)"
+  exit 0
+fi
 
 if [ "$mode" = "dev" ]; then
   setup_flutter
