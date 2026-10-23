@@ -1,6 +1,6 @@
 # Photo Client
 
-PhotoViewer跨平台重写：Flutter界面、独立Rust核心与SQLite。**一期先完成纯本地照片功能，云同步留到二期。** Linux先交付；Android、Windows通过平台配置和适配器后续接入。
+PhotoViewer跨平台重写：Flutter界面、独立Rust核心与SQLite。**一期先完成纯本地照片功能，云同步留到二期。** Linux先交付；Android已接入并通过固定环境验收（见[docs/android/README.md](docs/android/README.md)）；Windows通过平台配置和适配器后续接入。
 
 一期重点：本地目录/文件接入、十万张以内流畅浏览、查看器/收藏/相册/搜索、文件管理和编辑，以及统一液态玻璃UX。本地图库身份独立于云账号，不要求登录或网络。
 
@@ -23,4 +23,4 @@ PhotoViewer跨平台重写：Flutter界面、独立Rust核心与SQLite。**一�
 
 当前优先完成功能；按用户要求，新的UX自动化用例后续再补。原有S01–S04证据仍是各自版本的历史证据，不代表当前全部功能或十万张性能验收通过。云同步继续留到二期。
 
-开发与启动约定见 [AGENTS.md](AGENTS.md)。每次修改只运行与改动直接相关的用例，禁止运行全量用例；纯文档修改不重跑功能测试。
+开发与启动约定见 [AGENTS.md](AGENTS.md)。Android 的固定工具链、构建、模拟器与测试环境见 [docs/android/README.md](docs/android/README.md)。每次修改只运行与改动直接相关的用例，禁止运行全量用例；纯文档修改不重跑功能测试。
