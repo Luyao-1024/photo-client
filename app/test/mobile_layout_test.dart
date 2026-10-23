@@ -224,7 +224,8 @@ void main() {
 
   testWidgets('phone photo menu selects and switches between the two views', (
     tester,
-  ) async {    final gateway = FakeLocalGateway(imagePath: image, count: 8);
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 8);
     await mount(tester, gateway);
 
     await tester.tap(find.byKey(const ValueKey('library-options')));
@@ -240,8 +241,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('view-mode-compact')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('photo-grid-compact')), findsOneWidget);
-    // Grouping has no meaning in the packed grid.
-    expect(find.byKey(const ValueKey('mobile-group-mode')), findsNothing);
+    // Grouping stays available on the photos page in both views.
+    expect(find.byKey(const ValueKey('mobile-group-mode')), findsOneWidget);
     final first = tester.getRect(find.byKey(const ValueKey('photo-p0')));
     final second = tester.getRect(find.byKey(const ValueKey('photo-p1')));
     final nextRow = tester.getRect(find.byKey(const ValueKey('photo-p5')));
@@ -705,9 +706,7 @@ void main() {
     await disposeApp(tester, gateway);
   });
 
-  testWidgets('phone filmstrip uses uniform square thumbnails', (
-    tester,
-  ) async {
+  testWidgets('phone filmstrip uses uniform square thumbnails', (tester) async {
     final gateway = FakeLocalGateway(imagePath: image);
     gateway.photos = [
       for (var i = 0; i < 2; i++) gateway.photo(i, width: 300, height: 400),

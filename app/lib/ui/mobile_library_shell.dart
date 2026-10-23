@@ -223,8 +223,7 @@ class _MobileLibraryShellState extends ConsumerState<MobileLibraryShell> {
                                 onAlbums: _showAlbums,
                               ),
                             ),
-                            if (_tab == _MobileTab.photos &&
-                                _photoViewMode == PhotoViewMode.date)
+                            if (_tab == _MobileTab.photos)
                               Positioned(
                                 left:
                                     (constraints.maxWidth - capsuleWidth) / 2 -

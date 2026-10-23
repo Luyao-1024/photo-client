@@ -1658,7 +1658,6 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
             !widget.searchMode &&
             !_searchOpen &&
             !widget.mobile &&
-            !_compactMode &&
             state.folder == null &&
             state.mediaKind == null &&
             !state.favoritesOnly &&
@@ -1793,9 +1792,7 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                             GroupMode.day,
                             preferences.dayColumns,
                           )
-                        : (available / gridMaxCrossAxisExtent(GroupMode.year))
-                              .ceil()
-                              .clamp(1, 100)
+                        : preferences.dayColumns
                   : widget.mobile
                   ? mobileGridColumns(searchLayoutMode, preferences.dayColumns)
                   : _mode == GroupMode.day && !searchView

@@ -287,6 +287,7 @@ void main() {
     tester,
   ) async {
     final gateway = _Gateway(image);
+    gateway.preferences['dayColumns'] = 4;
     await mount(tester, gateway);
     expect(find.byType(ModeSelector), findsOneWidget);
     expect(find.byKey(const ValueKey('photo-grid-compact')), findsNothing);
@@ -297,11 +298,19 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('view-mode-compact')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('photo-grid-compact')), findsOneWidget);
-    expect(find.byType(ModeSelector), findsNothing);
+    expect(find.byType(ModeSelector), findsOneWidget);
     expect(find.byKey(const ValueKey('library-date-header')), findsNothing);
     expect(
       find.byKey(const ValueKey('library-header-date-range')),
       findsOneWidget,
+    );
+    final compactGrid = tester.widget<SliverGrid>(
+      find.byKey(const ValueKey('photo-grid-compact')),
+    );
+    expect(
+      (compactGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+          .crossAxisCount,
+      4,
     );
 
     await menu(tester, 'view');
