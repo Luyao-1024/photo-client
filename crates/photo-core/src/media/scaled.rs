@@ -22,7 +22,9 @@ pub(super) fn decode_jpeg(
     target_width: u32,
     target_height: u32,
 ) -> Result<RgbImage, String> {
-    let mut decoder = jpeg_decoder::Decoder::new(reader);
+    // The entropy parser requests individual bytes. Without a buffer each
+    // byte reaches File::read (especially costly through Android shared storage).
+    let mut decoder = jpeg_decoder::Decoder::new(BufReader::with_capacity(64 * 1024, reader));
     decoder
         .read_info()
         .map_err(|error| format!("ThumbnailDecodeFailed: {error}"))?;
@@ -240,5 +242,68 @@ pub(super) fn decode_jpeg_turbo(
         photo_jpeg_free_buffer(buffer.cast());
         RgbImage::from_raw(width as u32, height as u32, pixels)
             .ok_or_else(|| "ThumbnailDecodeFailed: invalid JPEG output".into())
+    }
+}
+
+#[cfg(test)]
+mod io_tests {
+    use super::*;
+    use std::{
+        io::Cursor,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+
+    struct CountingReader {
+        input: Cursor<Vec<u8>>,
+        calls: Arc<AtomicUsize>,
+        small: Arc<AtomicUsize>,
+    }
+    impl Read for CountingReader {
+        fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            if output.len() < 1024 {
+                self.small.fetch_add(1, Ordering::Relaxed);
+            }
+            self.input.read(output)
+        }
+    }
+
+    #[test]
+    fn jpeg_scaled_decode_batches_compressed_source_reads() {
+        let source = RgbImage::from_fn(1024, 768, |x, y| {
+            let hash = x.wrapping_mul(2654435761) ^ y.wrapping_mul(2246822519);
+            image::Rgb([hash as u8, (hash >> 8) as u8, (hash >> 16) as u8])
+        });
+        let mut bytes = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 90)
+            .encode_image(&source)
+            .unwrap();
+        let length = bytes.len();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let small = Arc::new(AtomicUsize::new(0));
+        let decoded = decode_jpeg(
+            CountingReader {
+                input: Cursor::new(bytes),
+                calls: calls.clone(),
+                small: small.clone(),
+            },
+            1024,
+            768,
+            128,
+            96,
+        )
+        .unwrap();
+        let calls = calls.load(Ordering::Relaxed);
+        let small = small.load(Ordering::Relaxed);
+        eprintln!("jpeg_scaled_io encoded_bytes={length} source_reads={calls} small_reads={small}");
+        assert_eq!(decoded.dimensions(), (128, 96));
+        assert!(
+            calls <= length.div_ceil(64 * 1024) + 4,
+            "compressed JPEG input must be buffered: {calls} reads for {length} bytes"
+        );
+        assert_eq!(small, 0, "decoder byte reads must not reach the source");
     }
 }

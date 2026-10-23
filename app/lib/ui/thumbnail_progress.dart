@@ -93,12 +93,21 @@ final thumbnailProgressProvider =
 
 /// A separate consumer keeps progress ticks from rebuilding the photo grid.
 class ThumbnailProgress extends ConsumerWidget {
-  const ThumbnailProgress({super.key, this.alwaysShow = false});
+  const ThumbnailProgress({
+    super.key,
+    this.alwaysShow = false,
+    this.idle,
+    this.padding = const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+    this.textAlign = TextAlign.center,
+  });
   final bool alwaysShow;
+  final Widget? idle;
+  final EdgeInsetsGeometry padding;
+  final TextAlign textAlign;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(thumbnailProgressProvider).asData?.value;
-    if (data == null) return const SizedBox.shrink();
+    if (data == null) return idle ?? const SizedBox.shrink();
     final total = data['total'] as int? ?? 0;
     final ready = data['ready'] as int? ?? 0;
     final failed = data['failed'] as int? ?? 0;
@@ -110,7 +119,7 @@ class ThumbnailProgress extends ConsumerWidget {
     if (total == 0 ||
         (reconciling && !rebuilding) ||
         (!alwaysShow && complete)) {
-      return const SizedBox.shrink();
+      return idle ?? const SizedBox.shrink();
     }
     final strings = AppStrings.of(context);
     final limited = data['cache_limit_reached'] == true;
@@ -123,7 +132,7 @@ class ThumbnailProgress extends ConsumerWidget {
         ? base
         : '$base · ${strings.indexingUnavailable(failed)}';
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      padding: padding,
       child: Tooltip(
         message: strings.indexingHint,
         child: Text(
@@ -131,7 +140,7 @@ class ThumbnailProgress extends ConsumerWidget {
           key: const ValueKey('thumbnail-generation-progress'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
+          textAlign: textAlign,
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ),

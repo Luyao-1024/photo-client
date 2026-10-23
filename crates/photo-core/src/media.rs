@@ -10,6 +10,7 @@ mod heif;
 pub mod motion_photo;
 mod scaled;
 mod thumbnail;
+pub mod visibility;
 
 pub use thumbnail::{prepare_embedded_thumbnail, prepare_thumbnail};
 
@@ -290,6 +291,9 @@ pub fn scan_paths_excluding_known(
                 continue;
             }
         };
+        if exclusions.iter().any(|excluded| root.starts_with(excluded)) {
+            continue;
+        }
         let mut entries = WalkDir::new(&root)
             .follow_links(false)
             .follow_root_links(false)
@@ -322,6 +326,9 @@ pub fn scan_paths_excluding_known(
                 continue;
             }
             if kind.is_dir() {
+                if visibility::hidden_directory_within(&root, entry.path()) {
+                    entries.skip_current_dir();
+                }
                 continue;
             }
             if kind.is_symlink() || !kind.is_file() || mime_from_extension(entry.path()).is_none() {
@@ -400,11 +407,13 @@ pub fn prepare_preview(
     if mime == "image/heic" {
         #[cfg(target_os = "android")]
         {
-            platform_android::image_thumbnail(source, destination, max_edge)?;
-            if let Err(error) = check_source(source, &handle, &expected) {
-                let _ = fs::remove_file(destination);
-                return Err(error);
-            }
+            thumbnail::prepare_android_thumbnail(
+                source,
+                &handle,
+                &expected,
+                max_edge,
+                destination,
+            )?;
         }
         #[cfg(not(target_os = "android"))]
         {

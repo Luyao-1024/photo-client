@@ -659,6 +659,7 @@ pub async fn add_paths(paths: Vec<String>) -> Result<LocalScanResult, String> {
             let mut invalid_paths = 0;
             let mut exclusions = active.store.exclusions()?;
             exclusions.push(active.store.root.clone());
+            exclusions.extend(active.store.trash_roots()?);
             // Re-adding a known folder or file only re-reads what changed.
             let known = active.store.indexed_fingerprints(&source_id)?;
             let summary = media::scan_paths_excluding_known(

@@ -52,7 +52,7 @@ class _NativeVideoSession implements VideoPlaybackSession {
               vo: 'mediacodec_embed',
               hwdec: 'mediacodec',
             )
-          : const VideoControllerConfiguration(),
+          : const VideoControllerConfiguration(hwdec: 'auto'),
     );
   }
   late final Player player;

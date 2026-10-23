@@ -1184,16 +1184,29 @@ class _LocalLibraryPaneState extends ConsumerState<LocalLibraryPane> {
                 final progress = _scroll.hasClients
                     ? (_scroll.positions.last.pixels / 48).clamp(0.0, 1.0)
                     : 0.0;
+                final background = Theme.of(context).scaffoldBackgroundColor;
                 return DecoratedBox(
+                  key: widget.mobile
+                      ? const ValueKey('mobile-library-header-backdrop')
+                      : null,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [
-                        Theme.of(context).scaffoldBackgroundColor
-                            .withValues(alpha: progress * .65),
-                        Colors.transparent,
-                      ],
+                      // Keep the phone title and status bar readable even when
+                      // bright thumbnails scroll underneath. Only the lower
+                      // edge fades back into the grid; no extra live blur.
+                      stops: widget.mobile ? const [0, .82, 1] : null,
+                      colors: widget.mobile
+                          ? [
+                              background.withValues(alpha: .98),
+                              background.withValues(alpha: .96),
+                              background.withValues(alpha: 0),
+                            ]
+                          : [
+                              background.withValues(alpha: progress * .65),
+                              background.withValues(alpha: 0),
+                            ],
                     ),
                   ),
                 );
@@ -2026,9 +2039,18 @@ class _Header extends StatelessWidget {
           );
     final subtitle = choosingCover
         ? strings.pick('选择一张照片作为相册封面', 'Choose a photo for the album cover')
-        : mobile && !searchMode && countText != null
-        ? '${MaterialLocalizations.of(context).formatFullDate(DateTime.now())} · $countText'
         : countText;
+    final subtitleWidget = subtitle == null
+        ? const SizedBox.shrink()
+        : Text(
+            subtitle,
+            key: const ValueKey('library-header-count'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          );
     final leading = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2044,17 +2066,16 @@ class _Header extends StatelessWidget {
             letterSpacing: mobile ? -.8 : -.5,
           ),
         ),
-        if (subtitle != null) ...[
+        if (subtitle != null || mobile) ...[
           const SizedBox(height: 3),
-          Text(
-            subtitle,
-            key: const ValueKey('library-header-count'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
+          if (mobile && !choosingCover)
+            LibraryActivityProgress(
+              compact: true,
+              textAlign: TextAlign.start,
+              idle: subtitleWidget,
+            )
+          else
+            subtitleWidget,
         ],
       ],
     );

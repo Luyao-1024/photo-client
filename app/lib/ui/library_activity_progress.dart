@@ -8,7 +8,16 @@ import 'thumbnail_progress.dart';
 /// One activity line in the photo header. A running cloud sweep wins over
 /// thumbnail indexing so its counters cannot be hidden behind it.
 class LibraryActivityProgress extends ConsumerWidget {
-  const LibraryActivityProgress({super.key});
+  const LibraryActivityProgress({
+    super.key,
+    this.idle,
+    this.compact = false,
+    this.textAlign = TextAlign.center,
+  });
+
+  final Widget? idle;
+  final bool compact;
+  final TextAlign textAlign;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -17,12 +26,22 @@ class LibraryActivityProgress extends ConsumerWidget {
         (state) => state.syncRunning || state.status.syncing,
       ),
     );
-    return syncing ? const CloudSyncProgress() : const ThumbnailProgress();
+    return syncing
+        ? CloudSyncProgress(textAlign: textAlign)
+        : ThumbnailProgress(
+            idle: idle,
+            padding: compact
+                ? EdgeInsets.zero
+                : const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            textAlign: textAlign,
+          );
   }
 }
 
 class CloudSyncProgress extends ConsumerWidget {
-  const CloudSyncProgress({super.key});
+  const CloudSyncProgress({super.key, this.textAlign = TextAlign.center});
+
+  final TextAlign textAlign;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -64,7 +83,7 @@ class CloudSyncProgress extends ConsumerWidget {
         key: const ValueKey('cloud-sync-progress'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
+        textAlign: textAlign,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
           color: Theme.of(context).colorScheme.primary,
           fontWeight: FontWeight.w600,

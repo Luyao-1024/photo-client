@@ -47,7 +47,7 @@
 ./tools/run_app android
 ```
 
-没有在线设备时脚本会用 `setsid` 拉起 AVD `photo36` 并等待引导完成；模拟器参数用 `--device`、`--avd`、`--no-avd`、`--gpu`、`--no-window` 调整（默认带窗口显示在当前桌面）。`--background`、`--data-root`、`--x11`、`--headless` 只适用于 Linux 桌面端。
+没有在线设备时脚本会用 `setsid` 拉起 AVD `photo36` 并等待引导完成；模拟器参数用 `--device`、`--avd`、`--no-avd`、`--gpu`、`--no-window`、`--window` 调整（默认无窗口、低内存模式，并关闭 Vulkan；`--window` 可恢复桌面窗口）。`--background`、`--data-root`、`--x11`、`--headless` 只适用于 Linux 桌面端。
 
 安卓端的真实环境是设备本身：读取设备上的 `/sdcard/{DCIM,Pictures,Movies,Download}`，权限由系统授予，不伪造访问路径。工具链、模拟器基线、构建与验收步骤见 [Android 编译、运行与测试环境](docs/android/README.md)。
 

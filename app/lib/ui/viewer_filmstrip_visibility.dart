@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 /// Keep the strip mounted while hidden so its decoded frames can be prepared
-/// before one shared fade. Hovering its own bounds reveals it during playback.
+/// before one shared fade. A slow frame cannot keep navigation hidden forever.
+/// Hovering its own bounds reveals it during desktop playback.
 class ViewerFilmstripVisibility extends StatefulWidget {
   const ViewerFilmstripVisibility({
     super.key,
@@ -20,10 +23,12 @@ class ViewerFilmstripVisibility extends StatefulWidget {
 
 class _ViewerFilmstripVisibilityState extends State<ViewerFilmstripVisibility> {
   bool _ready = false, _hovered = false;
+  Timer? _deadline;
 
   @override
   void initState() {
     super.initState();
+    _deadline = Timer(const Duration(milliseconds: 400), _reveal);
     _prepare();
   }
 
@@ -31,16 +36,28 @@ class _ViewerFilmstripVisibilityState extends State<ViewerFilmstripVisibility> {
   void didUpdateWidget(ViewerFilmstripVisibility oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.ready != widget.ready) {
-      _ready = false;
+      // Once visible, incoming thumbnail work must not hide the whole strip.
       _prepare();
     }
+  }
+
+  @override
+  void dispose() {
+    _deadline?.cancel();
+    super.dispose();
+  }
+
+  void _reveal() {
+    if (!mounted || _ready) return;
+    _deadline?.cancel();
+    setState(() => _ready = true);
   }
 
   void _prepare() {
     final future = widget.ready;
     void finish() {
       if (mounted && identical(future, widget.ready)) {
-        setState(() => _ready = true);
+        _reveal();
       }
     }
 

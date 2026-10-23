@@ -13,6 +13,7 @@ import 'package:photo_client/ui/presentation_preferences.dart';
 import 'package:photo_client/ui/mode_selector.dart';
 
 import 'fakes/local_gateway.dart';
+import 'helpers/filmstrip_frames.dart';
 
 void main() {
   late Directory fixtures;
@@ -397,10 +398,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('viewer')), findsOneWidget);
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-filmstrip')), findsOneWidget);
     for (final key in [
       'viewer-previous',
       'viewer-next',
-      'viewer-filmstrip',
       'viewer-zoom-in',
       'viewer-zoom-out',
       'viewer-zoom-reset',
@@ -438,9 +441,19 @@ void main() {
     await tester.tapAt(center);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer-header')), findsNothing);
+    expect(find.byKey(const ValueKey('viewer-filmstrip')), findsNothing);
     await tester.tapAt(center);
     await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer-header')), findsOneWidget);
+    expect(find.byKey(const ValueKey('viewer-filmstrip')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('viewer-strip-p2')));
+    await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('3 / 6'), findsOneWidget);
 
     await disposeApp(tester, gateway);
   });

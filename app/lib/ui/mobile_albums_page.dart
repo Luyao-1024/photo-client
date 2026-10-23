@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'glass_dialog.dart';
 import 'glass_surface.dart';
 import 'glass_theme.dart';
 import 'local_album_actions.dart';
+import 'library_activity_progress.dart';
 import 'local_library_controller.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
@@ -77,9 +79,7 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
     final strings = AppStrings.of(context);
     final library = ref.watch(localLibraryProvider);
     final albums = library.albums;
-    final side = (MediaQuery.sizeOf(context).width - 32 - 20) / 3;
-    final cardExtent =
-        side + 46 + (MediaQuery.textScalerOf(context).scale(1) - 1) * 24;
+    final textScaler = MediaQuery.textScalerOf(context);
     final smartAlbums = <(MobileSmartAlbum, String, IconData)>[
       (
         MobileSmartAlbum.favorites,
@@ -95,89 +95,110 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
       ),
       (MobileSmartAlbum.trash, strings.trash, Icons.delete_outline),
     ];
-    return Column(
-      key: const ValueKey('mobile-albums-page'),
-      children: [
-        _header(context, strings, albums.length),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () =>
-                ref.read(localLibraryProvider.notifier).refresh(force: true),
-            child: CustomScrollView(
-              key: const ValueKey('mobile-albums-scroll'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                  sliver: SliverGrid.builder(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 18,
-                      crossAxisSpacing: 10,
-                      mainAxisExtent: cardExtent,
-                    ),
-                    itemCount: smartAlbums.length,
-                    itemBuilder: (context, index) {
-                      final (kind, label, icon) = smartAlbums[index];
-                      final page = ref
-                          .watch(_smartAlbumPageProvider(kind))
-                          .asData
-                          ?.value;
-                      return _AlbumCard(
-                        key: ValueKey('mobile-smart-album-${kind.name}'),
-                        label: label,
-                        count: page?.total,
-                        coverMediaId: page?.items.firstOrNull?.id,
-                        revision: library.revision,
-                        fallbackIcon: icon,
-                        onTap: () => widget.onOpenSmartAlbum(kind),
-                      );
-                    },
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: _SectionHeader(
-                    label: strings.albums,
-                    onAdd: _createAlbum,
-                    onReorder: albums.length > 1 ? _reorderAlbums : null,
-                    addKey: const ValueKey('mobile-albums-add'),
-                    reorderKey: const ValueKey('mobile-albums-reorder'),
-                  ),
-                ),
-                if (albums.isEmpty)
-                  SliverToBoxAdapter(child: _EmptyAlbums(onAdd: widget.onAdd))
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                    sliver: SliverGrid.builder(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 18,
-                        crossAxisSpacing: 10,
-                        mainAxisExtent: cardExtent,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = math.max(0.0, constraints.maxWidth - 32);
+        // Phone albums keep three columns; larger text gets more vertical
+        // space below the cover instead of reducing the number of columns.
+        const columns = 3;
+        final side = (availableWidth - (columns - 1) * 10) / columns;
+        // Reserve both title lines and the count at the actual text scale.
+        final cardExtent =
+            side +
+            7 +
+            textScaler.scale(14) * 2.5 +
+            textScaler.scale(12) * 1.4 +
+            4;
+        return Column(
+          key: const ValueKey('mobile-albums-page'),
+          children: [
+            _header(context, strings, albums.length),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => ref
+                    .read(localLibraryProvider.notifier)
+                    .refresh(force: true),
+                child: CustomScrollView(
+                  key: const ValueKey('mobile-albums-scroll'),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                      sliver: SliverGrid.builder(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          mainAxisSpacing: 18,
+                          crossAxisSpacing: 10,
+                          mainAxisExtent: cardExtent,
+                        ),
+                        itemCount: smartAlbums.length,
+                        itemBuilder: (context, index) {
+                          final (kind, label, icon) = smartAlbums[index];
+                          final page = ref
+                              .watch(_smartAlbumPageProvider(kind))
+                              .asData
+                              ?.value;
+                          return _AlbumCard(
+                            key: ValueKey('mobile-smart-album-${kind.name}'),
+                            label: label,
+                            count: page?.total,
+                            coverMediaId: page?.items.firstOrNull?.id,
+                            revision: library.revision,
+                            fallbackIcon: icon,
+                            onTap: () => widget.onOpenSmartAlbum(kind),
+                          );
+                        },
                       ),
-                      itemCount: albums.length,
-                      itemBuilder: (context, index) {
-                        final album = albums[index];
-                        return _AlbumCard(
-                          key: ValueKey('mobile-album-${album.path}'),
-                          label: album.name,
-                          count: album.count,
-                          coverMediaId: album.coverMediaId,
-                          revision: library.revision,
-                          fallbackIcon: Icons.folder_outlined,
-                          onTap: () => widget.onOpenAlbum(album),
-                          onLongPress: () => unawaited(_showAlbumMenu(album)),
-                        );
-                      },
                     ),
-                  ),
-                const SliverToBoxAdapter(child: SizedBox(height: 132)),
-              ],
+                    SliverToBoxAdapter(
+                      child: _SectionHeader(
+                        label: strings.albums,
+                        onAdd: _createAlbum,
+                        onReorder: albums.length > 1 ? _reorderAlbums : null,
+                        addKey: const ValueKey('mobile-albums-add'),
+                        reorderKey: const ValueKey('mobile-albums-reorder'),
+                      ),
+                    ),
+                    if (albums.isEmpty)
+                      SliverToBoxAdapter(
+                        child: _EmptyAlbums(onAdd: widget.onAdd),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                        sliver: SliverGrid.builder(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                mainAxisSpacing: 18,
+                                crossAxisSpacing: 10,
+                                mainAxisExtent: cardExtent,
+                              ),
+                          itemCount: albums.length,
+                          itemBuilder: (context, index) {
+                            final album = albums[index];
+                            return _AlbumCard(
+                              key: ValueKey('mobile-album-${album.path}'),
+                              label: album.name,
+                              count: album.count,
+                              coverMediaId: album.coverMediaId,
+                              revision: library.revision,
+                              fallbackIcon: Icons.folder_outlined,
+                              onTap: () => widget.onOpenAlbum(album),
+                              onLongPress: () =>
+                                  unawaited(_showAlbumMenu(album)),
+                            );
+                          },
+                        ),
+                      ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 132)),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
@@ -198,6 +219,8 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
               children: [
                 Text(
                   strings.albums,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontSize: 32,
                     fontWeight: FontWeight.w700,
@@ -205,10 +228,16 @@ class _MobileAlbumsPageState extends ConsumerState<MobileAlbumsPage> {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  strings.pick('$albumCount 个相册', '$albumCount albums'),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                LibraryActivityProgress(
+                  compact: true,
+                  textAlign: TextAlign.start,
+                  idle: Text(
+                    strings.pick('$albumCount 个相册', '$albumCount albums'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -474,11 +503,14 @@ class _AlbumCard extends StatelessWidget {
             const SizedBox(height: 7),
             Text(
               label,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontSize: 14,
+                height: 1.25,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             if (countLabel.isNotEmpty)
               Text(
@@ -487,6 +519,8 @@ class _AlbumCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: 12,
+                  height: 1.4,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),

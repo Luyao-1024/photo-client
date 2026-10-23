@@ -8,7 +8,7 @@ use jni::{
     sys,
 };
 use std::{
-    ffi::c_void,
+    ffi::{CString, c_char, c_int, c_void},
     path::{Path, PathBuf},
     sync::OnceLock,
 };
@@ -82,10 +82,7 @@ macro_rules! with_bridge {
     }};
 }
 
-fn string_arg<'local>(
-    env: &mut JNIEnv<'local>,
-    text: &str,
-) -> Result<JObject<'local>, String> {
+fn string_arg<'local>(env: &mut JNIEnv<'local>, text: &str) -> Result<JObject<'local>, String> {
     env.new_string(text)
         .map(JObject::from)
         .map_err(|_| "JniUnavailable".to_string())
@@ -103,9 +100,7 @@ pub fn probe_video(path: &Path) -> Result<VideoProbe, String> {
                 &[JValue::Object(&path)],
             )
             .map_err(|_| "VideoMetadataFailed".to_string())?;
-        let object = value
-            .l()
-            .map_err(|_| "VideoMetadataFailed".to_string())?;
+        let object = value.l().map_err(|_| "VideoMetadataFailed".to_string())?;
         if object.is_null() {
             return Err("VideoMetadataFailed".into());
         }
@@ -135,7 +130,13 @@ pub fn probe_video(path: &Path) -> Result<VideoProbe, String> {
 }
 
 pub fn video_thumbnail(path: &Path, destination: &Path, max_edge: u32) -> Result<(), String> {
-    thumbnail(path, destination, max_edge, "videoThumbnail", "VideoThumbnailFailed")
+    thumbnail(
+        path,
+        destination,
+        max_edge,
+        "videoThumbnail",
+        "VideoThumbnailFailed",
+    )
 }
 
 pub fn probe_image(path: &Path) -> Result<ImageProbe, String> {
@@ -183,7 +184,13 @@ pub fn probe_image(path: &Path) -> Result<ImageProbe, String> {
 }
 
 pub fn image_thumbnail(path: &Path, destination: &Path, max_edge: u32) -> Result<(), String> {
-    thumbnail(path, destination, max_edge, "imageThumbnail", "EncodeFailed")
+    thumbnail(
+        path,
+        destination,
+        max_edge,
+        "imageThumbnail",
+        "EncodeFailed",
+    )
 }
 
 fn thumbnail(
@@ -226,12 +233,7 @@ pub fn media_directories() -> Vec<PathBuf> {
 fn directories() -> Result<Vec<PathBuf>, String> {
     with_bridge!(|env, class| {
         let value = env
-            .call_static_method(
-                class,
-                "mediaDirectories",
-                "()[Ljava/lang/String;",
-                &[],
-            )
+            .call_static_method(class, "mediaDirectories", "()[Ljava/lang/String;", &[])
             .map_err(|_| "JniUnavailable".to_string())?;
         let object = value.l().map_err(|_| "JniUnavailable".to_string())?;
         if object.is_null() {
@@ -260,4 +262,19 @@ fn directories() -> Result<Vec<PathBuf>, String> {
         }
         Ok(paths)
     })
+}
+
+/// Native thumbnail diagnostics must reach logcat; Android discards stderr
+/// for release applications. Messages contain counters, never private paths.
+pub fn log_info(message: &str) {
+    #[link(name = "log")]
+    unsafe extern "C" {
+        fn __android_log_write(priority: c_int, tag: *const c_char, text: *const c_char) -> c_int;
+    }
+    if let Ok(message) = CString::new(message) {
+        // SAFETY: both strings are nul-terminated and valid for this call.
+        unsafe {
+            __android_log_write(4, c"PhotoThumbnail".as_ptr(), message.as_ptr());
+        }
+    }
 }

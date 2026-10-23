@@ -133,6 +133,15 @@ pub fn prepare_thumbnail(
         target_height: target_height as u32,
         thumbnail_bytes: thumbnail_bytes.unwrap_or(0),
     };
+    #[cfg(target_os = "android")]
+    if u64::from(header.width) * u64::from(header.height) <= MAX_SOURCE_PIXELS
+        && thumbnail_bytes
+            .and_then(|bytes| bytes.checked_add(expected.size))
+            .is_some_and(|bytes| bytes + WORKSPACE_RESERVE <= DECODE_BUDGET)
+        && prepare_android_thumbnail(source, &file, &expected, max_edge, destination).is_ok()
+    {
+        return Ok(());
+    }
     #[allow(unused_mut)]
     let mut jpeg_fast = None;
     #[cfg(target_os = "linux")]
@@ -203,6 +212,49 @@ pub fn prepare_thumbnail(
 
 /// Everything one thumbnail needs: the captured source, its fingerprint and
 /// the header the target size was derived from.
+/// The platform owns hardware-capable codecs (notably HEIF). A software
+/// bitmap is only the output memory used by the JPEG cache encoder; it does
+/// not force the platform's underlying media codec to be a software decoder.
+#[cfg(target_os = "android")]
+pub(super) fn prepare_android_thumbnail(
+    source: &Path,
+    handle: &File,
+    expected: &Fingerprint,
+    max_edge: u32,
+    destination: &Path,
+) -> Result<(), String> {
+    if max_edge == 0 {
+        return Err("InvalidThumbnailBounds".into());
+    }
+    if let Ok(metadata) = fs::symlink_metadata(destination) {
+        if metadata.file_type().is_symlink()
+            || Fingerprint::from_metadata(&metadata).ok().as_ref() == Some(expected)
+        {
+            return Err("UnsafeThumbnailDestination".into());
+        }
+    }
+    check_source(source, handle, expected)?;
+    let parent = destination
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).map_err(|_| "CacheUnavailable")?;
+    let stage = tempfile::Builder::new()
+        .prefix(".photo-native-thumb-")
+        .suffix(".jpg")
+        .tempfile_in(parent)
+        .map_err(|_| "CacheUnavailable")?;
+    platform_android::image_thumbnail(source, stage.path(), max_edge)?;
+    check_source(source, handle, expected)?;
+    let (width, height) = super::thumbnail_dimensions(stage.path()).ok_or("EncodeFailed")?;
+    if width == 0 || height == 0 || width.max(height) > max_edge {
+        return Err("InvalidThumbnailBounds".into());
+    }
+    stage.as_file().sync_all().map_err(|_| "CacheUnavailable")?;
+    stage.persist(destination).map_err(|_| "CacheUnavailable")?;
+    Ok(())
+}
+
 struct Plan<'a> {
     source: &'a Path,
     expected: &'a Fingerprint,

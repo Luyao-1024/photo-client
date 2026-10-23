@@ -174,10 +174,11 @@ while True: time.sleep(.1)
                 self.assertFalse(self.trace.exists())
 
     def test_android_accepts_the_headless_emulator_flag(self):
-        # The emulator opens a window by default; --no-window is the opt-out.
-        result = self.launch('android', '--no-window')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(any(e['kind'] == 'adb' for e in self.records()))
+        for flags in ((), ('--no-window',), ('--window',)):
+            with self.subTest(flags=flags):
+                result = self.launch('android', *flags)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(any(e['kind'] == 'adb' for e in self.records()))
 
     def test_android_without_a_device_reports_the_missing_avd_path(self):
         self.env['ADB_NO_DEVICES'] = '1'

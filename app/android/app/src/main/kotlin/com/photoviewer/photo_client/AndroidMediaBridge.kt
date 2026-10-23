@@ -2,9 +2,14 @@ package com.photoviewer.photo_client
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.media.ExifInterface
 import android.media.MediaMetadataRetriever
+import android.media.MediaCodecList
+import android.os.SystemClock
+import android.util.Log
 import android.os.Environment
 import androidx.annotation.Keep
 import java.io.File
@@ -12,10 +17,11 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 
 /**
- * Called from the Rust core over JNI. Android owns video/HEIC decoding so the
+ * Called from the Rust core over JNI. Android owns platform image/video decoding so the
  * catalog and thumbnail pipeline stay identical to the Linux core.
  */
 @Keep
@@ -27,7 +33,16 @@ object AndroidMediaBridge {
     }
 
     /** Forces class initialization so Rust caches this class before any scan. */
-    fun ensureInitialized() = Unit
+    fun ensureInitialized() {
+        val hardware = try {
+            MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+                .filter { !it.isEncoder && it.isHardwareAccelerated && !it.name.endsWith(".secure") }
+                .joinToString(";") { codec -> "${codec.name}:${codec.supportedTypes.joinToString(",")}" }
+        } catch (_: Exception) { "unavailable" }
+        Log.i("PhotoDecode", "policy=platform-first hardware_decoders=$hardware")
+    }
+
+    private val reportedImageTypes = ConcurrentHashMap.newKeySet<String>()
 
     /** Returns [width, height, durationMs, rotation, captureTimeMs] or an empty array. */
     @JvmStatic
@@ -114,50 +129,73 @@ object AndroidMediaBridge {
 
     @JvmStatic
     fun imageThumbnail(path: String, destination: String, maxEdge: Int): Boolean {
+        val started = SystemClock.elapsedRealtime()
+        var bitmap: Bitmap? = null
+        var mime = "unknown"
         return try {
+            if (maxEdge <= 0) return false
             val source = ImageDecoder.createSource(File(path))
-            val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val decoded = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                mime = info.mimeType
+                require(info.size.width.toLong() * info.size.height <= 256L * 1024 * 1024)
                 val longest = max(info.size.width, info.size.height)
-                var sample = 1
-                while (longest / (sample * 2) >= maxEdge) sample *= 2
-                if (sample > 1) decoder.setTargetSampleSize(sample)
+                val ratio = minOf(1.0, maxEdge.toDouble() / longest)
+                decoder.setTargetSize(
+                    max(1, (info.size.width * ratio).toInt()),
+                    max(1, (info.size.height * ratio).toInt()),
+                )
+                // This selects the cache encoder's CPU-readable output memory,
+                // not the underlying codec. HEIF can still use MediaCodec hardware.
+                // A GPU bitmap would add an upload/readback before JPEG encoding.
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
-            writeJpeg(bitmap, destination, maxEdge)
-        } catch (_: Exception) {
+            bitmap = decoded
+            val success = writeJpeg(decoded, destination, maxEdge)
+            val elapsed = SystemClock.elapsedRealtime() - started
+            if (reportedImageTypes.add(mime) || elapsed >= 250) {
+                Log.i("PhotoDecode", "image_decode backend=android-platform mime=$mime max_edge=$maxEdge elapsed_ms=$elapsed result=${if (success) "complete" else "failed"}")
+            }
+            success
+        } catch (error: Exception) {
+            Log.w("PhotoDecode", "image_decode backend=android-platform mime=$mime result=failed error=${error.javaClass.simpleName}")
             false
+        } finally {
+            bitmap?.recycle()
         }
     }
 
     @JvmStatic
     fun videoThumbnail(path: String, destination: String, maxEdge: Int): Boolean {
         val retriever = MediaMetadataRetriever()
+        var frame: Bitmap? = null
+        var rotated: Bitmap? = null
         return try {
+            if (maxEdge <= 0) return false
             retriever.setDataSource(path)
-            val frame = retriever.getFrameAtTime(
-                0,
-                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-            ) ?: return false
+            // Keep the platform's hardware-capable media codec path, requesting
+            // a bounded frame instead of materialising a full 4K/8K bitmap.
+            val decoded = try {
+                retriever.getScaledFrameAtTime(
+                    0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, maxEdge, maxEdge,
+                )
+            } catch (_: Exception) { null }
+                ?: retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: return false
+            frame = decoded
             val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
                 ?.toIntOrNull() ?: 0
-            var bitmap = frame
-            if (rotation % 360 != 0) {
+            val bitmap = if (rotation % 360 != 0) {
                 val matrix = android.graphics.Matrix()
                 matrix.postRotate(rotation.toFloat())
-                bitmap = Bitmap.createBitmap(
-                    frame,
-                    0,
-                    0,
-                    frame.width,
-                    frame.height,
-                    matrix,
-                    true,
-                )
-            }
+                Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+                    .also { if (it !== decoded) rotated = it }
+            } else decoded
             writeJpeg(bitmap, destination, maxEdge)
         } catch (_: Exception) {
             false
         } finally {
+            rotated?.recycle()
+            frame?.recycle()
             retriever.release()
         }
     }
@@ -167,18 +205,29 @@ object AndroidMediaBridge {
         val scaled = if (longest > maxEdge) {
             val ratio = maxEdge.toFloat() / longest.toFloat()
             Bitmap.createScaledBitmap(
-                bitmap,
-                max(1, (bitmap.width * ratio).toInt()),
-                max(1, (bitmap.height * ratio).toInt()),
-                true,
+                bitmap, max(1, (bitmap.width * ratio).toInt()),
+                max(1, (bitmap.height * ratio).toInt()), true,
             )
-        } else {
-            bitmap
-        }
-        val target = File(destination)
-        target.parentFile?.mkdirs()
-        return FileOutputStream(target).use { output ->
-            scaled.compress(Bitmap.CompressFormat.JPEG, 90, output)
+        } else bitmap
+        var opaque: Bitmap? = null
+        return try {
+            // Match the shared thumbnail encoder's white alpha composition.
+            val outputBitmap = if (scaled.hasAlpha()) {
+                Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.ARGB_8888).also {
+                    opaque = it
+                    val canvas = Canvas(it)
+                    canvas.drawColor(Color.WHITE)
+                    canvas.drawBitmap(scaled, 0f, 0f, null)
+                }
+            } else scaled
+            val target = File(destination)
+            target.parentFile?.mkdirs()
+            FileOutputStream(target).use { output ->
+                outputBitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+            }
+        } finally {
+            opaque?.recycle()
+            if (scaled !== bitmap) scaled.recycle()
         }
     }
 

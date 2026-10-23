@@ -15,6 +15,15 @@ use std::{
 };
 use tokio::sync::oneshot;
 
+macro_rules! thumbnail_log {
+    ($($arg:tt)*) => {{
+        #[cfg(target_os = "android")]
+        platform_android::log_info(&format!($($arg)*));
+        #[cfg(not(target_os = "android"))]
+        eprintln!($($arg)*);
+    }};
+}
+
 /// Match the old fastest tier while respecting process CPU affinity/quota.
 pub fn fastest_worker_count() -> usize {
     let available = thread::available_parallelism()
@@ -829,7 +838,7 @@ fn run_job(inner: &Inner, key: Key) {
         }
     };
     if let Some((done, m, pending)) = batch {
-        eprintln!(
+        thumbnail_log!(
             "thumbnail_batch processed={done} generated={} failed={} pending={pending} disk_hits={} memory_hits={} merged={} cancelled={} generation_ms={} max_queue_wait_ms={} status={}",
             m.generated,
             m.failed,
@@ -844,7 +853,7 @@ fn run_job(inner: &Inner, key: Key) {
     }
     // No private source paths are logged. Slow foreground work remains visible.
     if elapsed >= 250 {
-        eprintln!(
+        thumbnail_log!(
             "thumbnail_complete tier={tier} size={} elapsed_ms={elapsed} queue_wait_ms={wait} result={}",
             key.size,
             if result.is_ok() { "complete" } else { "failed" }
@@ -914,7 +923,7 @@ fn prewarm_step(inner: &Inner) -> bool {
             };
             if report {
                 if let Ok((total, ready, failed)) = inner.store.thumbnail_counts(size) {
-                    eprintln!(
+                    thumbnail_log!(
                         "thumbnail_prewarm size={size} total={total} ready={ready} failed={failed} status={}",
                         if failed == 0 && ready == total {
                             "complete"
@@ -1028,7 +1037,7 @@ fn maintain_cache(inner: &Inner, limit: u64) {
         s.cache_epoch += 1;
         s.reconcile = Some(0);
         s.budget_limited = true;
-        eprintln!(
+        thumbnail_log!(
             "thumbnail_cache_maintenance removed={removed} bytes={bytes} limit_bytes={limit} status=complete"
         );
     }

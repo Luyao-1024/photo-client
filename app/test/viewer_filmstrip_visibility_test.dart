@@ -81,6 +81,34 @@ void main() {
     },
   );
 
+  testWidgets('a slow thumbnail cannot keep navigation invisible', (
+    tester,
+  ) async {
+    final slow = Completer<void>();
+    await tester.pumpWidget(host(slow.future));
+    await tester.pump(const Duration(milliseconds: 399));
+    expect(opacity(tester), 0);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(opacity(tester), 1);
+    slow.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('new preparation does not hide an already visible strip', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host(Future<void>.value()));
+    await tester.pumpAndSettle();
+    expect(opacity(tester), 1);
+    final slow = Completer<void>();
+    await tester.pumpWidget(host(slow.future));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(opacity(tester), 1);
+    slow.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('a stale preparation cannot expose a new filmstrip', (
     tester,
   ) async {

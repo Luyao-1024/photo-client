@@ -285,6 +285,11 @@ impl LocalLibrary {
         }
         save::recover(&mut connection)?;
         save::recover_purges(&mut connection)?;
+        let visibility = connection.transaction().map_err(error)?;
+        if tools::hide_hidden_media(&visibility, &library_id)? {
+            tools::recount(&visibility, &library_id)?;
+        }
+        visibility.commit().map_err(error)?;
         let (sender, receiver) = mpsc::sync_channel::<Message>(256);
         let worker = thread::Builder::new()
             .name("photo-local-db".into())
@@ -390,7 +395,11 @@ impl LocalLibrary {
         let library = self.library_id.clone();
         self.execute(move|c|{
             let tx=c.transaction().map_err(error)?;let mut changed=0;let mut active_delta=0_i64;let mut favorite_delta=0_i64;
+            let (source_root, source_kind): (String, String) = tx.query_row("SELECT root_uri,source_kind FROM sources WHERE library_id=?1 AND source_id=?2",params![library,source_id],|r| Ok((r.get(0)?,r.get(1)?))).map_err(error)?;
             for m in items {
+                if source_kind != "managed" && crate::media::visibility::hidden_directory_within(Path::new(&source_root), Path::new(&m.parent)) {
+                    continue;
+                }
                 let previous:Option<(String,bool)>=tx.query_row("SELECT state,favorite FROM media WHERE library_id=?1 AND source_uri=?2",params![library,m.path],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(error)?;
                 if previous.as_ref().is_none_or(|p|p.0!="active") {active_delta+=1; if previous.as_ref().is_some_and(|p|p.1){favorite_delta+=1;}}
                 let size=i64::try_from(m.size_bytes).map_err(|_|"FileTooLarge")?;

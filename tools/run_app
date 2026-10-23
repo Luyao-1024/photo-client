@@ -18,6 +18,7 @@
 # Android selection: the app runs on a real emulator or a connected device.
 # The Android emulator defaults to the host GPU because the SwiftShader
 # fallback crashes the guest display pipeline on some hosts.
+# Use a headless, low-memory guest with Vulkan disabled by default.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,9 +38,10 @@ XVFB_PID=""
 APP_PID=""
 
 android_device=""
+android_abi=""
 android_avd="photo36"
 android_gpu="host"
-android_headless=0
+android_headless=1
 android_no_avd=0
 
 usage() {
@@ -62,10 +64,12 @@ Options:
 
 Android options:
   --device SERIAL    target this adb device (default: the only online device)
+  --android-abi ABI  build/install a split APK: arm64-v8a, armeabi-v7a or x86_64
   --avd NAME         AVD to boot when no device is online (default: photo36)
   --no-avd           never start an emulator; fail if no device is online
   --gpu MODE         emulator GPU backend (default: host)
-  --no-window        run the emulator headless; by default it opens a window
+  --no-window        run the emulator headless (default)
+  --window           show the emulator window on the desktop
 EOF
 }
 
@@ -88,6 +92,16 @@ while [ $# -gt 0 ]; do
         exit 2
       fi
       android_device="$2"; shift 2 ;;
+    --android-abi)
+      if [ $# -lt 2 ]; then
+        echo "run_app: --android-abi needs an ABI" >&2
+        exit 2
+      fi
+      case "$2" in
+        arm64-v8a|armeabi-v7a|x86_64) android_abi="$2" ;;
+        *) echo "run_app: unsupported Android ABI: $2" >&2; exit 2 ;;
+      esac
+      shift 2 ;;
     --avd)
       if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" == --* ]]; then
         echo "run_app: --avd needs a name" >&2
@@ -102,10 +116,16 @@ while [ $# -gt 0 ]; do
       fi
       android_gpu="$2"; shift 2 ;;
     --no-window) android_headless=1; shift ;;
+    --window) android_headless=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "run_app: unknown argument: $1" >&2; usage; exit 2 ;;
   esac
 done
+
+if [ -n "$android_abi" ] && [ "$mode" != "android" ]; then
+  echo "run_app: --android-abi only applies to android" >&2
+  exit 2
+fi
 
 if [ -n "$data_root" ]; then
   data_root="$(python3 -B - "$data_root" <<'PY'
@@ -259,7 +279,9 @@ start_android_emulator() {
     exit 1
   fi
   local log="${TMPDIR:-/tmp}/photo-client-emulator-$avd.log"
-  local -a args=(-avd "$avd" -gpu "$android_gpu" -no-boot-anim -no-audio -no-snapshot)
+  # Low-RAM mode keeps the configured RAM instead of increasing it to 2560 MB.
+  # Disabling Vulkan also avoids large host GPU allocations on this machine.
+  local -a args=(-avd "$avd" -gpu "$android_gpu" -lowram -feature -Vulkan -no-boot-anim -no-audio -no-snapshot)
   if [ "$android_headless" = 1 ]; then args+=(-no-window); fi
   # A previous instance of this AVD can still be shutting down and holding the
   # AVD lock; starting a second one then fails silently. Wait it out.
@@ -347,10 +369,17 @@ if [ "$mode" = "android" ]; then
     fi
   fi
   echo "run_app: android device=$serial"
+  if [ -n "$android_abi" ]; then
+    ANDROID_APK="$ROOT/app/build/app/outputs/flutter-apk/app-$android_abi-release.apk"
+  fi
 
   if [ "$do_build" = 1 ] || [ ! -f "$ANDROID_APK" ]; then
     setup_flutter
-    python3 -B "$ROOT/tools/platform" build --profile "$ANDROID_PROFILE" --mode release
+    android_build_args=(python3 -B "$ROOT/tools/platform" build --profile "$ANDROID_PROFILE" --mode release)
+    if [ -n "$android_abi" ]; then
+      android_build_args+=(--android-abi "$android_abi")
+    fi
+    "${android_build_args[@]}"
   fi
   if [ ! -f "$ANDROID_APK" ]; then
     echo "run_app: APK not found: $ANDROID_APK" >&2

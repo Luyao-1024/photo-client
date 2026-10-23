@@ -25,7 +25,7 @@ pub struct ImageProbe {
 mod android;
 #[cfg(target_os = "android")]
 pub use android::{
-    image_thumbnail, media_directories, probe_image, probe_video, retain_jni_entrypoints,
+    image_thumbnail, log_info, media_directories, probe_image, probe_video, retain_jni_entrypoints,
     video_thumbnail,
 };
 
@@ -38,5 +38,6 @@ pub use unsupported::{
 };
 
 pub(crate) fn utf8(path: &Path) -> Result<&str, String> {
-    path.to_str().ok_or_else(|| "UnsupportedPathEncoding".into())
+    path.to_str()
+        .ok_or_else(|| "UnsupportedPathEncoding".into())
 }

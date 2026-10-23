@@ -112,8 +112,18 @@ pub(super) fn thumbnail(path: &Path, max_edge: u32, destination: &Path) -> Resul
         .suffix(".png")
         .tempfile_in(dir)
         .map_err(|_| "CacheUnavailable")?;
-    let mut cmd = Command::new("ffmpeg");
-    cmd.args(["-v", "error", "-nostdin", "-threads", "1", "-i"])
+    let extract = |hardware: bool| {
+        let mut cmd = Command::new("ffmpeg");
+        cmd.args([
+            "-v",
+            "error",
+            "-nostdin",
+            "-threads",
+            "1",
+            "-hwaccel",
+            if hardware { "auto" } else { "none" },
+            "-i",
+        ])
         .arg(path)
         .args([
             "-frames:v",
@@ -123,7 +133,13 @@ pub(super) fn thumbnail(path: &Path, max_edge: u32, destination: &Path) -> Resul
             "-y",
         ])
         .arg(frame.path());
-    output(cmd)?;
+        output(cmd)
+    };
+    // Probe/use available hardware first; unavailable or incompatible drivers
+    // must not prevent thumbnails from using the normal software fallback.
+    if extract(true).is_err() {
+        extract(false)?;
+    }
     let decoded = image::open(frame.path()).map_err(|_| "VideoThumbnailFailed")?;
     let mut stage = tempfile::Builder::new()
         .suffix(".jpg")

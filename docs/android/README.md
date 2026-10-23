@@ -347,7 +347,7 @@ flutter test test/progressive_media_test.dart
 |---|---|---|
 | 权限 | 清空数据后首次启动 | 出现权限门禁且不提前打开图库；授权返回后无需重启即扫描已有照片；未授权时不会伪造访问 |
 | 图库 | 添加测试目录 | 7 项素材全部出现；三列网格；快速滚动不拉伸变形 |
-| 查看器 | 左右滑动 | 文件名与 `N / 7` 随滑动变化；没有左右箭头、胶片条、缩放和沉浸按钮 |
+| 查看器 | 左右滑动与缩略图栏 | 文件名与 `N / 7` 随滑动变化；底部缩略图栏可横向滚动、点按切图，当前照片居中；点按画面可一起隐藏/恢复头部与缩略图栏；没有左右箭头、缩放和沉浸按钮 |
 | 查看器 | 点按、捏合、菜单 | 点按隐藏/恢复头部；双指缩放后滑动不翻页；更多菜单含编辑、照片信息、移到回收站 |
 | 视频 | 打开 `clip.mp4` | 点按只出现播放/时间/进度条；控件显示时拖动进度条不翻页；约 3 秒自动隐藏后左右滑动可翻页 |
 | 相册 | 收藏、回收站、搜索 | 收藏与回收站位于相册页内；创建、重命名、排序、搜索可用 |
@@ -414,7 +414,7 @@ adb shell dumpsys package com.photoviewer.photo_client | grep -E 'versionCode|ve
 | Google Maven | 直连 | 经 `~/.gradle/init.gradle` 重定向到 `maven.aliyun.com/repository/google` | `dl.google.com` 不可达时 Gradle 会卡住且不报错。第 2 节规则 3 禁止改仓库内的 Gradle 配置，本机用机器级 init 脚本实现，不改仓库文件 |
 | 模拟器 | Emulator 36.6.11 | 37.2.12.0 | SDK 里已是该版本 |
 | 系统镜像 | `android-37.0;google_apis_playstore_ps16k`（16 KB 页） | `android-36;google_apis`（4 KB 页） | 只装得到 android-36 镜像。**第 3.2 节的 `getconf PAGE_SIZE` = 16384 校验在本机无法执行**，改用 `readelf -lW` 静态检查 `LOAD` 段对齐作为等效验证 |
-| AVD | `Medium_Phone`（medium_phone 规格） | `photo36`（pixel_6 规格，1080×2400、density 420、2 GB RAM、6 核） | 屏幕与内存参数与基线一致，只是设备规格与名字不同 |
+| AVD | `Medium_Phone`（medium_phone 规格） | `photo36`（当前节省内存配置：1080×2400、density 420、1 GB RAM、2 核、30 Hz） | 2026-10-23 改为无窗口低内存运行；保留原始分辨率与清晰度，其他设置以节省内存为目标 |
 | Platform-Tools | 37.0.0 | 37.0.1 | 补丁版本差异 |
 | Rust | 1.99.0 | 1.98.0 | 满足 `Cargo.toml` 声明的 `rust-version = 1.98`，低于基线固定的 1.99.0 |
 
@@ -422,16 +422,21 @@ adb shell dumpsys package com.photoviewer.photo_client | grep -E 'versionCode|ve
 
 第 3.2 节和第 7 节都把 `-gpu swiftshader_indirect` 当作 GPU 不可用时的兜底。**在本机上这个兜底会让模拟器宿主进程 SIGSEGV**：崩溃点在 gfxstream 创建完 ColorBuffer 之后（`Selecting Vulkan Device: SwiftShader Device (Subzero)` 之后），`-gpu off` 同样崩溃。
 
-实测只有 `-gpu host` 能完成引导并稳定运行。`tools/run_app android` 因此把 `--gpu` 的默认值设为 `host`。
+实测只有 `-gpu host` 能完成引导并稳定运行。`tools/run_app android` 因此把 `--gpu` 的默认值设为 `host`。当天再次验证，现代 `swiftshader` 后端关闭 Vulkan 后仍不能完成启动，继续使用 `host`。
+
+当前以节省内存为目标：默认无窗口、`-lowram`、`-feature -Vulkan`，AVD 配置为 1024 MB RAM、2 核、1080×2400、density 420、30 Hz、256 MB 应用堆，并关闭模拟摄像头、音频和快照。`-lowram` 用于避免模拟器把 RAM 自动提高到 2560 MB。原配置保存在 AVD 目录的 `config.ini.before-low-memory-*`。
 
 这里要特别区分两件事：**崩溃来自 SwiftShader 渲染管线，不是窗口**。最初几次带窗口的失败，是因为同时用了默认的 `swiftshader_indirect`；换成 `-gpu host` 之后，带窗口与无窗口两种方式都能正常引导：
 
 ```bash
-# 带窗口（默认）：窗口出现在当前桌面
-~/Android/Sdk/emulator/emulator -avd photo36 -gpu host -no-boot-anim -no-audio -no-snapshot
+# 默认：无窗口、低内存
+./tools/run_app android
 
-# 无窗口
-~/Android/Sdk/emulator/emulator -avd photo36 -gpu host -no-window -no-boot-anim -no-audio -no-snapshot
+# 需要桌面窗口时
+./tools/run_app android --window
+
+# 等价的模拟器启动参数（不安装或启动应用）
+~/Android/Sdk/emulator/emulator -avd photo36 -gpu host -lowram -feature -Vulkan -no-window -no-boot-anim -no-audio -no-snapshot
 ```
 
 模拟器自带的 Qt 插件只有 `libqxcbAndroidEmu.so`，没有 wayland 插件，因此窗口走 XWayland（Wayland 会话下的 X11 桥）。验证窗口是否已映射：
@@ -440,7 +445,7 @@ adb shell dumpsys package com.photoviewer.photo_client | grep -E 'versionCode|ve
 DISPLAY=:0 xdotool search --onlyvisible --name 'Android Emulator'
 ```
 
-无窗口方式同样可用于验收：`adb exec-out screencap -p` 能取到与屏幕一致的 1080×2400 截图。
+无窗口方式仍可通过 ADB 检查真实设备数据：`adb exec-out screencap -p` 能取得当前 1080×2400 的实际画面；桌面窗口验收需另行使用 `--window`。
 
 ### 9.3 机器级 Gradle 镜像脚本
 
@@ -509,6 +514,8 @@ allprojects {
 - 图库页读到 9 项媒体并按 EXIF 拍摄时间分组；JPEG / PNG 大图与缩略图正常；
 - HEIC 真机照片完整解码，EXIF 正确读出（OPPO Find X8s、Hasselblad、24 mm f/1.8 1/100 s ISO320）；
 - 相册页计数正确（Favorites 0 / Images 8 / Videos 1 / Motion photos 0 / Trash 0），实体相册 Movies 1、Pictures 8；
+以下为早期手机查看器精简版本的验收历史；其“没有胶片条”已由后续恢复缩略图栏的实现取代，不代表当前行为。
+
 - 手机查看器按第 6.3 节清单复验：头部只显示文件名与「N / 9」、收藏与更多，**没有**左右箭头、胶片条、缩放与沉浸按钮；左右滑动翻页生效（7/9 → 8/9 → 9/9，右滑回退）；点按折叠与恢复头部；更多面板含 Edit、Photo information、Move to trash；
 - 视频控件只保留播放键与「00:03 / 00:04」进度条，没有上一首/下一首/音量；
 - H.264 视频经 `c2.goldfish.h264.decoder` 硬解播放，帧计数随播放推进；

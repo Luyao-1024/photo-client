@@ -402,12 +402,56 @@ impl LocalLibrary {
         prune_thumbnail_cache_root(&self.root)
     }
 }
+/// Retain old catalog identities without publishing hidden source contents.
+/// This changes visibility only: it never deletes files or queues cloud deletes.
+pub(super) fn hide_hidden_media(c: &Connection, library: &str) -> Result<bool, String> {
+    let mut statement = c.prepare(
+        "SELECT m.media_id,m.parent_uri,s.root_uri FROM media m JOIN sources s ON s.library_id=m.library_id AND s.source_id=m.source_id WHERE m.library_id=?1 AND m.state='active' AND s.source_kind<>'managed'"
+    ).map_err(error)?;
+    let rows = statement
+        .query_map([library], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(error)?;
+    drop(statement);
+    let mut changed = false;
+    for (id, parent, root) in rows {
+        if crate::media::visibility::hidden_directory_within(Path::new(&root), Path::new(&parent)) {
+            changed |= c.execute(
+                "UPDATE media SET state='missing',error_code='HiddenDirectory' WHERE library_id=?1 AND media_id=?2 AND state='active'",
+                params![library, id],
+            ).map_err(error)? > 0;
+        }
+    }
+    Ok(changed)
+}
+
 pub(super) fn recount(c: &Connection, library: &str) -> Result<(), String> {
     c.execute("UPDATE libraries SET media_count=(SELECT COUNT(*) FROM media WHERE library_id=?1 AND state='active'),favorite_count=(SELECT COUNT(*) FROM media WHERE library_id=?1 AND state='active' AND favorite=1),revision=revision+1 WHERE library_id=?1",[library]).map_err(error)?;
     Ok(())
 }
 
 impl LocalLibrary {
+    /// Actual platform trash roots, including per-mount Linux trash locations.
+    pub fn trash_roots(&self) -> Result<Vec<PathBuf>, String> {
+        let mut roots = super::system_trash::roots(&self.root, &self.root);
+        for source in self.sources()?.into_iter().filter(|s| s.kind != "managed") {
+            roots.extend(super::system_trash::roots(
+                Path::new(&source.path),
+                &self.root,
+            ));
+        }
+        roots.sort();
+        roots.dedup();
+        Ok(roots)
+    }
+
     /// Reflect file-manager trash / restore / empty operations for included roots.
     pub fn reconcile_trash(&self) -> Result<(), String> {
         let sources = self.sources()?;
@@ -448,6 +492,7 @@ impl LocalLibrary {
                 }
                 changed=true;
             }
+            changed |= hide_hidden_media(&tx, &library)?;
             if changed{recount(&tx,&library)?;}tx.commit().map_err(error)
         })
     }

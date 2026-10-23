@@ -29,6 +29,7 @@ import 'presentation_preferences.dart';
 import 'runtime_controller.dart';
 import 'strings.dart';
 import 'viewer_filmstrip_visibility.dart';
+import 'viewer_filmstrip_layout.dart';
 
 /// Media-stage viewer per photoViewer/docs/modules/ui-design.md "Viewer Page":
 /// a full-bleed dark stage with floating glass chrome — header (date, position,
@@ -53,18 +54,58 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
   // (fit); declaring a lower floor would leave zoom-out enabled but inert.
   static const double _minScale = 1;
   static const double _maxScale = 8;
-  static const double _stripExtent = 72;
-  static const double _stripThumb = 60;
-  static const double _stripHeight = 84;
-  static const double _navigationBottom = _stripHeight + 28;
-  static const double _videoControlsInset = _stripHeight + 20;
-  static const double _stripPadding = 16;
+  // Compact phone chrome keeps the image prominent and the touch target
+  // at least 48 logical pixels. Desktop geometry stays unchanged.
+  double get _stripThumb => _mobileLayout ? 48 : 60;
+  double get _stripHeight => _mobileLayout ? 64 : 84;
+  double get _navigationBottom => _stripHeight + 28;
+  double get _videoControlsInset => _stripHeight + 20;
   static const double _headerInset = 70;
 
-  /// Edge items need half a viewport of leading/trailing space so the first
-  /// and last thumbnails can also reach the centre of the strip.
-  static double _stripInsetFor(double viewport) =>
-      math.max(_stripPadding, (viewport - _stripExtent) / 2);
+  double get _bottomSafeInset =>
+      _mobileLayout ? MediaQuery.paddingOf(context).bottom : 0;
+
+  ViewerFilmstripLayout? _stripLayout;
+  (int, int, double)? _stripLayoutKey;
+
+  void _updateStripLayout(LibraryViewState library, int? index) {
+    final previous = _stripLayout;
+    final position = _strip.hasClients ? _strip.position : null;
+    final wasCentered =
+        previous == null ||
+        index == null ||
+        index >= previous.count ||
+        position == null ||
+        !position.hasContentDimensions ||
+        _stripPendingCenter ||
+        (previous.centeredOffset(index, position.viewportDimension) -
+                    position.pixels)
+                .abs() <
+            2;
+    final key = (library.queryEpoch, library.revision, _stripThumb);
+    if (_stripLayoutKey != key || _stripLayout?.count != library.total) {
+      _stripLayoutKey = key;
+      _stripLayout = ViewerFilmstripLayout(
+        count: library.total,
+        height: _stripThumb,
+      );
+      _stripCentered = null;
+    }
+    final layout = _stripLayout!;
+    final revision = layout.revision;
+    for (final page in library.pages.entries) {
+      for (var item = 0; item < page.value.length; item++) {
+        layout.update(
+          page.key * LocalLibraryController.pageSize + item,
+          page.value[item],
+        );
+      }
+    }
+    // Loading a distant page while the user browses the strip must not pull
+    // the list back to the displayed photo. Correct the centre only when it
+    // was already following that photo; a new selection centres separately.
+    if (layout.revision != revision && wasCentered) _stripCentered = null;
+  }
 
   late LocalPhoto _photo = widget.photo;
   final _transform = TransformationController();
@@ -670,9 +711,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
     // whole stage.
     final width = MediaQuery.sizeOf(context).width;
     final side = width < 392 ? 16.0 : (width - 360) / 2;
-    final bottom = _mobileLayout
-        ? math.max(16.0, MediaQuery.paddingOf(context).bottom + 12)
-        : _stripHeight + 28;
+    final bottom = _stripHeight + 28 + _bottomSafeInset;
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
@@ -929,10 +968,15 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
   void _centerStripOn(int index, {bool animate = false}) {
     if (!_strip.hasClients || !_strip.position.hasContentDimensions) return;
     final position = _strip.position;
-    final inset = _stripInsetFor(position.viewportDimension);
-    final target =
-        (inset + (index + .5) * _stripExtent - position.viewportDimension / 2)
-            .clamp(position.minScrollExtent, position.maxScrollExtent);
+    final layout = _stripLayout;
+    if (layout == null || index < 0 || index >= layout.count) return;
+    // A varied-extent list can still estimate its far end from the first
+    // visible items. Our measured target is exact for the declared item widths;
+    // do not truncate it to a stale estimate before the destination lays out.
+    final target = math.max(
+      position.minScrollExtent,
+      layout.centeredOffset(index, position.viewportDimension),
+    );
     if ((target - position.pixels).abs() < 1) return;
     if (!animate || MediaQuery.disableAnimationsOf(context)) {
       _strip.jumpTo(target);
@@ -1019,6 +1063,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
       _scheduledPages.clear();
       _stripCentered = null;
     }
+    _updateStripLayout(library, index);
     if (index != null && (_stripCentered != photo.id || !_strip.hasClients)) {
       _stripCentered = photo.id;
       _stripPendingCenter = true;
@@ -1318,22 +1363,21 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                       ),
                     ),
                   ),
-                  if (!mobile)
-                    Positioned(
-                      key: const ValueKey('viewer-filmstrip-position'),
-                      bottom: 12,
-                      left: 12,
-                      right: 12,
-                      child: _RevealRegion(
-                        revealed: !_chromeHidden,
-                        foldOffset: const Offset(0, .35),
-                        child: _filmstrip(
-                          library: library,
-                          index: index,
-                          gateway: gateway,
-                        ),
+                  Positioned(
+                    key: const ValueKey('viewer-filmstrip-position'),
+                    bottom: 12 + _bottomSafeInset,
+                    left: 12,
+                    right: 12,
+                    child: _RevealRegion(
+                      revealed: !_chromeHidden,
+                      foldOffset: const Offset(0, .35),
+                      child: _filmstrip(
+                        library: library,
+                        index: index,
+                        gateway: gateway,
                       ),
                     ),
+                  ),
                   if (!mobile)
                     Positioned(
                       key: const ValueKey('viewer-navigation-position'),
@@ -1431,9 +1475,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
 
     final videoInset = _chromeHidden
         ? 0.0
-        : (_mobileLayout
-              ? math.max(16.0, MediaQuery.paddingOf(context).bottom + 12)
-              : _videoControlsInset);
+        : _videoControlsInset + _bottomSafeInset;
     void playbackChanged(bool active) {
       if (mounted &&
           _detailsIdentity == '${photo.id}:${photo.contentVersion}' &&
@@ -2042,23 +2084,23 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
     LocalLibraryGateway gateway,
     double width,
   ) {
-    final inset = _stripInsetFor(width);
+    final layout = _stripLayout!;
+    final inset = layout.leadingInset(width);
     final offset = !_stripPendingCenter && _strip.hasClients
         ? _strip.offset
-        : math.max(0.0, inset + ((index ?? 0) + .5) * _stripExtent - width / 2);
-    // Prepare only the visible strip plus one neighbor on either side.
-    final first = ((offset - inset) / _stripExtent).floor().clamp(
-      0,
-      library.total,
-    );
-    final last = ((offset + width - inset) / _stripExtent).ceil().clamp(
-      0,
-      library.total,
-    );
+        : layout.count == 0
+        ? 0.0
+        : math.max(0.0, layout.centeredOffset(index ?? 0, width));
+    // Prepare only the variable-width visible strip and its neighbours.
+    final first = layout.indexAt(offset - inset);
+    final last = layout.count == 0
+        ? 0
+        : layout.indexAt(offset + width - inset) + 1;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final pool = ThumbnailPool.forGateway(gateway);
     final key =
-        '${library.queryEpoch}:${pool.epoch.value}:$first:$last:$dpr:'
+        '${library.queryEpoch}:${library.revision}:${pool.epoch.value}:'
+        '${layout.height}:${layout.count}:${layout.revision}:$first:$last:$dpr:'
         '${[for (var i = first; i < last; i++) '${library.photoAt(i)?.id}:${library.photoAt(i)?.contentVersion}'].join(',')}';
     if (_stripWarmKey == key) return _stripWarmFuture!;
     _stripWarmKey = key;
@@ -2085,9 +2127,10 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                   photo == null) {
                 return;
               }
+              final size = layout.sizeFor(photo);
               request = pool.acquire(
                 photo,
-                thumbnailSizeClassForCover(_stripThumb * dpr, photo),
+                thumbnailSizeClassFor(size.longestSide * dpr),
               );
               _stripWarmRequests.add(request);
               final path = await request.future;
@@ -2096,7 +2139,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                 ThumbnailImage.file(
                   path,
                   photo,
-                  width: thumbnailDecodeWidth(_stripThumb * dpr),
+                  width: thumbnailDecodeWidth(size.width * dpr),
                 ),
                 context,
                 onError: (_, _) {},
@@ -2129,7 +2172,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
             gateway,
             constraints.maxWidth,
           ),
-          playbackActive: _playbackActive,
+          // Touch users cannot hover to recover a hidden strip. The phone
+          // keeps it available until the user folds the viewer chrome.
+          playbackActive: !_mobileLayout && _playbackActive,
           child: GlassSurface(
             key: const ValueKey('viewer-filmstrip'),
             role: GlassRole.raised,
@@ -2138,13 +2183,16 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
               height: _stripHeight,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final inset = _stripInsetFor(constraints.maxWidth);
+                  final layout = _stripLayout!;
                   return ListView.builder(
                     controller: _strip,
                     scrollDirection: Axis.horizontal,
                     clipBehavior: Clip.none,
-                    padding: EdgeInsets.symmetric(horizontal: inset),
-                    itemExtent: _stripExtent,
+                    padding: EdgeInsets.only(
+                      left: layout.leadingInset(constraints.maxWidth),
+                      right: layout.trailingInset(constraints.maxWidth),
+                    ),
+                    itemExtentBuilder: (index, _) => layout.extentAt(index),
                     itemCount: library.total,
                     itemBuilder: (context, i) {
                       final photo = library.photoAt(i);
@@ -2161,11 +2209,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                             }
                           });
                         }
-                        return const Center(
+                        return Center(
                           child: SizedBox(
                             width: _stripThumb,
                             height: _stripThumb,
-                            child: Icon(
+                            child: const Icon(
                               Icons.photo_outlined,
                               color: Colors.white24,
                             ),
@@ -2177,8 +2225,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                         i ~/ LocalLibraryController.pageSize,
                       );
                       final active = i == index;
-                      // Active reads larger through scale/outline only — never
-                      // through margin or padding changes that shift allocation.
+                      final size = layout.sizeAt(i);
+                      // Selection changes paint scale only. Width, spacing and
+                      // centre offsets remain stable throughout navigation.
                       return Center(
                         child: Tooltip(
                           message: photo.name,
@@ -2188,30 +2237,38 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                               key: ValueKey('viewer-strip-${photo.id}'),
                               borderRadius: BorderRadius.circular(10),
                               onTap: () => unawaited(_jumpTo(i)),
-                              child: AnimatedScale(
-                                scale: active ? 1.14 : 1,
-                                duration:
-                                    MediaQuery.disableAnimationsOf(context)
-                                    ? Duration.zero
-                                    : const Duration(milliseconds: 150),
-                                child: Container(
-                                  width: _stripThumb,
-                                  height: _stripThumb,
-                                  clipBehavior: Clip.antiAlias,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: active
-                                          ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                          : Colors.white.withValues(alpha: .22),
-                                      width: active ? 2 : 1,
+                              child: Semantics(
+                                selected: active,
+                                child: SizedBox(
+                                  width: math.max(48, size.width),
+                                  height: math.max(48, size.height),
+                                  child: Center(
+                                    child: AnimatedScale(
+                                      scale: active
+                                          ? ViewerFilmstripLayout.activeScale
+                                          : 1,
+                                      duration:
+                                          MediaQuery.disableAnimationsOf(
+                                            context,
+                                          )
+                                          ? Duration.zero
+                                          : const Duration(milliseconds: 150),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: SizedBox(
+                                          key: ValueKey(
+                                            'viewer-strip-image-${photo.id}',
+                                          ),
+                                          width: size.width,
+                                          height: size.height,
+                                          child: _FilmstripThumb(
+                                            photo: photo,
+                                            gateway: gateway,
+                                            size: size,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                  child: _FilmstripThumb(
-                                    photo: photo,
-                                    gateway: gateway,
                                   ),
                                 ),
                               ),
@@ -2981,9 +3038,14 @@ class _FullscreenPreviewState extends ConsumerState<_FullscreenPreview> {
 }
 
 class _FilmstripThumb extends StatefulWidget {
-  const _FilmstripThumb({required this.photo, required this.gateway});
+  const _FilmstripThumb({
+    required this.photo,
+    required this.gateway,
+    required this.size,
+  });
   final LocalPhoto photo;
   final LocalLibraryGateway gateway;
+  final Size size;
   @override
   State<_FilmstripThumb> createState() => _FilmstripThumbState();
 }
@@ -3007,72 +3069,66 @@ class _FilmstripThumbState extends State<_FilmstripThumb> {
     final photo = widget.photo;
     final identity =
         '${identityHashCode(widget.gateway)}:${photo.id}:${photo.contentVersion}:${ThumbnailPool.forGateway(widget.gateway).epoch.value}';
-    final size = thumbnailSizeClassForCover(
-      _LocalPhotoViewerState._stripThumb *
-          MediaQuery.devicePixelRatioOf(context),
-      photo,
+    final size = thumbnailSizeClassFor(
+      widget.size.longestSide * MediaQuery.devicePixelRatioOf(context),
     );
     if (_identity != '$identity:$size') {
       _identity = '$identity:$size';
       _request?.release();
       _request = ThumbnailPool.forGateway(widget.gateway).acquire(photo, size);
     }
-    return ColoredBox(
-      color: Colors.white.withValues(alpha: .06),
-      child: FutureBuilder<String>(
-        future: _request!.future,
-        initialData: _request!.path,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(
-              child: Icon(
-                Icons.broken_image_outlined,
-                color: Colors.white38,
-                size: 20,
-              ),
-            );
-          }
-          final path = snapshot.data;
-          if (path == null) {
-            return FutureBuilder<String?>(
-              future: _request!.placeholder,
-              builder: (context, preview) => preview.data == null
-                  ? const Center(
-                      child: Icon(
-                        Icons.photo_outlined,
-                        color: Colors.white24,
-                        size: 20,
-                      ),
-                    )
-                  : Image(
-                      image: ThumbnailImage.file(
-                        preview.data!,
-                        photo,
-                        use: ThumbnailUse.embedded,
-                      ),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                    ),
-            );
-          }
-          final target = thumbnailDecodeWidth(
-            _LocalPhotoViewerState._stripThumb *
-                MediaQuery.devicePixelRatioOf(context),
-          );
-          return Image(
-            image: ThumbnailImage.file(path, photo, width: target),
-            fit: BoxFit.cover,
-            excludeFromSemantics: true,
-            errorBuilder: (context, error, stack) => const Center(
-              child: Icon(
-                Icons.broken_image_outlined,
-                color: Colors.white38,
-                size: 20,
-              ),
+    return FutureBuilder<String>(
+      future: _request!.future,
+      initialData: _request!.path,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Icon(
+              Icons.broken_image_outlined,
+              color: Colors.white38,
+              size: 20,
             ),
           );
-        },
-      ),
+        }
+        final path = snapshot.data;
+        if (path == null) {
+          return FutureBuilder<String?>(
+            future: _request!.placeholder,
+            builder: (context, preview) => preview.data == null
+                ? const Center(
+                    child: Icon(
+                      Icons.photo_outlined,
+                      color: Colors.white24,
+                      size: 20,
+                    ),
+                  )
+                : Image(
+                    image: ThumbnailImage.file(
+                      preview.data!,
+                      photo,
+                      use: ThumbnailUse.embedded,
+                    ),
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+          );
+        }
+        final target = thumbnailDecodeWidth(
+          widget.size.width * MediaQuery.devicePixelRatioOf(context),
+        );
+        return Image(
+          image: ThumbnailImage.file(path, photo, width: target),
+          fit: BoxFit.contain,
+          excludeFromSemantics: true,
+          errorBuilder: (context, error, stack) => const Center(
+            child: Icon(
+              Icons.broken_image_outlined,
+              color: Colors.white38,
+              size: 20,
+            ),
+          ),
+        );
+      },
     );
   }
 }
