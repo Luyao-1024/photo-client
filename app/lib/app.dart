@@ -60,6 +60,23 @@ class _Application extends ConsumerStatefulWidget {
   ConsumerState<_Application> createState() => _ApplicationState();
 }
 
+/// Android's Material 3 overscroll stretches the entire scrollable, which
+/// visibly warps photo thumbnails while the user pulls past an edge. Keep the
+/// platform default everywhere else.
+class _PhotoClientScrollBehavior extends MaterialScrollBehavior {
+  const _PhotoClientScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    if (getPlatform(context) == TargetPlatform.android) return child;
+    return super.buildOverscrollIndicator(context, child, details);
+  }
+}
+
 class _ApplicationState extends ConsumerState<_Application>
     with WidgetsBindingObserver {
   static String? _lastQualityReport;
@@ -192,6 +209,7 @@ class _ApplicationState extends ConsumerState<_Application>
       theme: photoTheme(Brightness.light),
       darkTheme: photoTheme(Brightness.dark),
       themeMode: preferences.themeMode,
+      scrollBehavior: const _PhotoClientScrollBehavior(),
       locale: preferences.locale,
       supportedLocales: const [Locale('zh', 'CN'), Locale('en')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

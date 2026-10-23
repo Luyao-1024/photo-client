@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -101,6 +102,24 @@ void main() {
     expect(third.dx, greaterThan(second.dx));
     expect(fourth.dy, greaterThan(first.dy));
     await disposeApp(tester, gateway);
+  });
+
+  testWidgets('overscroll never stretches the photo grid on Android', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final gateway = FakeLocalGateway(imagePath: image, count: 12);
+      await mount(tester, gateway);
+
+      // Material 3 applies a stretch indicator to every scrollable on Android;
+      // it scales the whole grid, visibly distorting photo thumbnails.
+      expect(find.byType(StretchingOverscrollIndicator), findsNothing);
+      await disposeApp(tester, gateway);
+    } finally {
+      // The binding checks foundation debug variables before tearDowns run.
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('albums page owns favorites, videos, trash and search', (
