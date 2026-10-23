@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -235,7 +236,14 @@ void main() {
         find.byKey(const ValueKey('sidebar-album-/local/photos')),
       );
       await tester.pumpAndSettle();
+      final gridTop = tester
+          .getTopLeft(find.byKey(const ValueKey('photo-p0')))
+          .dy;
       await menu(tester, 'cover');
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('photo-p0'))).dy,
+        closeTo(gridTop, .5),
+      );
       await tester.tap(find.byKey(const ValueKey('cancel-cover-selection')));
       await tester.pumpAndSettle();
       expect(gateway.coverWrites, isEmpty);
@@ -274,4 +282,144 @@ void main() {
       await dispose(tester, gateway);
     },
   );
+
+  testWidgets('desktop view menu switches between dated and compact grids', (
+    tester,
+  ) async {
+    final gateway = _Gateway(image);
+    await mount(tester, gateway);
+    expect(find.byType(ModeSelector), findsOneWidget);
+    expect(find.byKey(const ValueKey('photo-grid-compact')), findsNothing);
+
+    await menu(tester, 'view');
+    expect(find.byKey(const ValueKey('view-mode-date')), findsOneWidget);
+    expect(find.byKey(const ValueKey('view-mode-compact')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('view-mode-compact')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('photo-grid-compact')), findsOneWidget);
+    expect(find.byType(ModeSelector), findsNothing);
+    expect(find.byKey(const ValueKey('library-date-header')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('library-header-date-range')),
+      findsOneWidget,
+    );
+
+    await menu(tester, 'view');
+    await tester.tap(find.byKey(const ValueKey('view-mode-date')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('photo-grid-compact')), findsNothing);
+    expect(find.byType(ModeSelector), findsOneWidget);
+    expect(find.byKey(const ValueKey('library-date-header')), findsOneWidget);
+    await dispose(tester, gateway);
+  });
+
+  testWidgets('desktop grouping selector stays on the photos root only', (
+    tester,
+  ) async {
+    final gateway = _Gateway(image);
+    gateway.photos[0] = gateway.photo(0, favorite: true);
+    await mount(tester, gateway);
+    expect(find.byType(ModeSelector), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('sidebar-album-/local/photos')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('photo-p0')), findsOneWidget);
+    expect(find.byType(ModeSelector), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('sidebar-favorites')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ModeSelector), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('sidebar-photos')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ModeSelector), findsOneWidget);
+    await dispose(tester, gateway);
+  });
+
+  testWidgets('desktop overview reports photo and video counts', (
+    tester,
+  ) async {
+    final gateway = _Gateway(image);
+    for (var index = 3; index < 60; index++) {
+      gateway.photos.add(gateway.photo(index));
+    }
+    gateway.photos.add(
+      gateway.photo(
+        60,
+        mediaKind: 'video',
+        mimeType: 'video/mp4',
+        name: 'Clip.mp4',
+      ),
+    );
+    gateway.photos.add(
+      gateway.photo(
+        61,
+        mediaKind: 'video',
+        mimeType: 'video/mp4',
+        name: 'Clip 2.mp4',
+      ),
+    );
+    await mount(tester, gateway);
+    await tester.drag(
+      find.byKey(const ValueKey('local-photo-grid')),
+      const Offset(0, 160),
+    );
+    await tester.pumpAndSettle();
+    final info = tester.widget<Text>(
+      find.byKey(const ValueKey('library-info')),
+    );
+    expect(info.data, contains('photos'));
+    expect(info.data, contains('videos'));
+    expect(find.textContaining('Revision'), findsNothing);
+    await dispose(tester, gateway);
+  });
+
+  testWidgets('desktop overview counts follow the selected album', (
+    tester,
+  ) async {
+    final gateway = _Gateway(image);
+    for (var index = 3; index < 20; index++) {
+      gateway.photos.add(gateway.photo(index, parent: '/local/elsewhere'));
+    }
+    gateway.photos.add(
+      gateway.photo(
+        100,
+        mediaKind: 'video',
+        mimeType: 'video/mp4',
+        name: 'Clip.mp4',
+      ),
+    );
+    await mount(tester, gateway);
+    await tester.drag(
+      find.byKey(const ValueKey('local-photo-grid')),
+      const Offset(0, 160),
+    );
+    await tester.pumpAndSettle();
+    var info = tester.widget<Text>(find.byKey(const ValueKey('library-info')));
+    expect(info.data, '20 photos · 1 video');
+    await tester.tap(find.byKey(const ValueKey('sidebar-album-/local/photos')));
+    await tester.pumpAndSettle();
+    info = tester.widget<Text>(find.byKey(const ValueKey('library-info')));
+    expect(info.data, '3 photos · 1 video');
+    await dispose(tester, gateway);
+  });
+
+  testWidgets('desktop wheel-up at the top reveals the overview', (
+    tester,
+  ) async {
+    final gateway = _Gateway(image);
+    for (var index = 3; index < 60; index++) {
+      gateway.photos.add(gateway.photo(index));
+    }
+    await mount(tester, gateway);
+    final center = tester.getCenter(
+      find.byKey(const ValueKey('local-photo-grid')),
+    );
+    await tester.sendEventToBinding(
+      PointerScrollEvent(position: center, scrollDelta: const Offset(0, -60)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('library-info')), findsOneWidget);
+    await dispose(tester, gateway);
+  });
 }

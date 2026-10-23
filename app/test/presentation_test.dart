@@ -513,7 +513,7 @@ void main() {
     },
   );
 
-  testWidgets('backgrounding keeps core, detach and teardown clean up once', (
+  testWidgets('backgrounding keeps the process-scoped core until teardown', (
     tester,
   ) async {
     final gateway = FakeLocalGateway(imagePath: image);
@@ -529,12 +529,19 @@ void main() {
       await Future<void>.delayed(Duration.zero);
     });
     await tester.pumpAndSettle();
-    expect(gateway.cancellations, 1);
-    expect(gateway.shutdowns, 1);
+    // Detaching an engine is not exit: the native session is process-scoped
+    // and must stay available to a recreated engine.
+    expect(gateway.cancellations, 0);
+    expect(gateway.shutdowns, 0);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
+    await tester.runAsync(() async {
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pump();
     expect(gateway.shutdowns, 1);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    expect(gateway.cancellations, 1);
     await gateway.changes.close();
     await gateway.events.close();
   });

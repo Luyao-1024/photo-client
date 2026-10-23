@@ -40,8 +40,12 @@ class AppStrings {
   String photosCountLabel(int n) => pick('$n 张照片', '$n photos');
   String libraryMediaCounts(int photos, int videos) {
     if (videos == 0) return photosCountLabel(photos);
-    if (photos == 0) return pick('$videos 个视频', '$videos videos');
-    return pick('$photos 张照片、$videos 个视频', '$photos photos · $videos videos');
+    final videoText = videos == 1 ? 'video' : 'videos';
+    if (photos == 0) return pick('$videos 个视频', '$videos $videoText');
+    return pick(
+      '$photos 张照片、$videos 个视频',
+      '$photos photos · $videos $videoText',
+    );
   }
 
   String positionLabel(int cur, int total) => '$cur / $total';

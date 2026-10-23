@@ -15,3 +15,4 @@ Android 和 Linux 共用同一套 `ViewerFilmstripLayout`。每张照片固定�
 - `mobile_layout_test.dart`：手机缩略图为 48×48，相邻中心间距 56（8dp 间隔），图片使用 `BoxFit.cover`。
 - `emulator-5554` 实测：3:4、4:5、2:3、9:16 竖图与 4:3 横图的缩略图尺寸一致，间距均匀；截图见 `/tmp/filmstrip_square_portrait.png`、`/tmp/filmstrip_square.png`（本机临时文件，不入库）。
 - 未启动 Linux 实体桌面窗口；桌面几何由 60 高度的布局用例覆盖，不代表 Linux 运行期视觉验收通过。
+- 2026-10-23 后续在真实 Linux 桌面（XWayland，1280×720）启动最新 Release：查看器缩略图栏与手机保持同一方形规则，所有缩略图按方形尺寸和 `BoxFit.cover` 显示，间隔均匀，当前项只放大、无选中色描边；未做像素级颜色或 GPU 性能验收。桌面 60×60 与居中几何仍由 `viewer_filmstrip_test.dart` 断言。
