@@ -358,39 +358,35 @@ class _MobileNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final diameter = _mobileNavigationHeight(context);
     return GlassSurface(
       key: const ValueKey('mobile-navigation'),
       role: GlassRole.chrome,
       live: true,
-      radius: _mobileNavigationHeight(context) / 2,
+      radius: diameter / 2,
       child: SizedBox(
-        height: _mobileNavigationHeight(context),
+        height: diameter,
         child: Stack(
           children: [
+            // The selected half is a stadium with the capsule's own radius, so
+            // its outer cap reaches the glass rim instead of floating inset.
             Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: AnimatedAlign(
-                  key: const ValueKey('mobile-navigation-indicator'),
-                  alignment: tab == _MobileTab.photos
-                      ? Alignment.centerLeft
-                      : Alignment.centerRight,
-                  duration: MediaQuery.disableAnimationsOf(context)
-                      ? Duration.zero
-                      : const Duration(milliseconds: 240),
-                  curve: Curves.easeOutCubic,
-                  child: FractionallySizedBox(
-                    widthFactor: .5,
-                    heightFactor: 1,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: mobileAccentColor(context)
-                              .withValues(alpha: .07),
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                      ),
+              child: AnimatedAlign(
+                key: const ValueKey('mobile-navigation-indicator'),
+                alignment: tab == _MobileTab.photos
+                    ? Alignment.centerLeft
+                    : Alignment.centerRight,
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                child: FractionallySizedBox(
+                  widthFactor: .5,
+                  heightFactor: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: mobileAccentColor(context).withValues(alpha: .07),
+                      borderRadius: BorderRadius.circular(diameter / 2),
                     ),
                   ),
                 ),

@@ -137,6 +137,13 @@ void main() {
         of: find.byKey(const ValueKey('mobile-navigation-indicator')),
         matching: find.byType(DecoratedBox),
       );
+      final pill = tester.getRect(navigation);
+      // The accent is a half-pill that reaches the glass rim on the selected
+      // side instead of a small inset rectangle.
+      expect(tester.getRect(indicator).left, closeTo(pill.left, .5));
+      expect(tester.getRect(indicator).top, closeTo(pill.top, .5));
+      expect(tester.getRect(indicator).height, closeTo(pill.height, .5));
+      expect(tester.getRect(indicator).width, closeTo(pill.width / 2, .5));
       final start = tester.getCenter(indicator).dx;
       await tester.tap(find.byKey(const ValueKey('mobile-nav-albums')));
       await tester.pump();
@@ -146,6 +153,7 @@ void main() {
       await tester.pumpAndSettle();
       final end = tester.getCenter(indicator).dx;
       expect(during, lessThan(end));
+      expect(tester.getRect(indicator).right, closeTo(pill.right, .5));
       expect(tester.getCenter(navigation).dx, 195);
       expect(find.byKey(const ValueKey('mobile-group-mode')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('mobile-nav-photos')));
@@ -434,6 +442,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('viewer-header')), findsOneWidget);
 
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('touch viewer tracks the finger and hands off the next page', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 6);
+    await mount(tester, gateway);
+    await tester.tap(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+
+    final frame = find.descendant(
+      of: find.byKey(const ValueKey('viewer-stage-p0-1')),
+      matching: find.byKey(const ValueKey('viewer-photo-frame')),
+    );
+    final start = tester.getRect(frame).left;
+    final center = tester.getCenter(find.byKey(const ValueKey('viewer')));
+    final gesture = await tester.startGesture(center);
+    await gesture.moveBy(const Offset(-40, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(-90, 0));
+    await tester.pump();
+
+    // The current page travels with the finger and the neighbour rides in
+    // from the right edge in the same frame.
+    expect(tester.getRect(frame).left, closeTo(start - 130, 1));
+    final preview = find.byKey(const ValueKey('viewer-swipe-preview-next'));
+    expect(preview, findsOneWidget);
+    final width = tester.getSize(find.byKey(const ValueKey('viewer'))).width;
+    expect(tester.getRect(preview).left, closeTo(width - 130, 1));
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 / 6'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('viewer-swipe-preview-next')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
     await disposeApp(tester, gateway);
   });
 

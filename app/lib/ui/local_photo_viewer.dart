@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -103,24 +104,36 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
   int _zoomPercent = 100;
   final _swipe = ValueNotifier<double>(0);
   late final AnimationController _swipeReturn;
-  double _swipeReturnStart = 0;
+  double _swipeFrom = 0, _swipeTo = 0;
+  int? _swipeCommitIndex;
   int? _swipePointer;
   Offset? _swipeStart;
   bool _swipeHorizontal = false;
   VelocityTracker? _swipeVelocity;
   int _navDirection = 1;
+  // A swipe hand-off replaces the whole stage pager in one frame: the driven
+  // offset already shows the incoming photo edge to edge, so an AnimatedSwitcher
+  // reverse-fade underneath it would flash the outgoing photo back on screen.
+  int _stageEpoch = 0;
   @override
   void initState() {
     super.initState();
     _transform.addListener(_boundTransform);
     _swipeReturn =
         AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 180),
-        )..addListener(() {
-          final t = Curves.easeOutCubic.transform(_swipeReturn.value);
-          _swipe.value = _swipeReturnStart * (1 - t);
-        });
+            vsync: this,
+            duration: const Duration(milliseconds: 180),
+          )
+          ..addListener(() {
+            final t = Curves.easeOutCubic.transform(_swipeReturn.value);
+            _swipe.value = _swipeFrom + (_swipeTo - _swipeFrom) * t;
+          })
+          ..addStatusListener((status) {
+            if (status != AnimationStatus.completed) return;
+            final commit = _swipeCommitIndex;
+            _swipeCommitIndex = null;
+            if (commit != null) _commitSwipe(commit);
+          });
   }
 
   void _boundTransform() {
@@ -347,12 +360,15 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
       return;
     }
     _swipePointer = event.pointer;
-    _swipeStart = event.localPosition;
+    // Catching a settling page continues from where it is on screen instead of
+    // teleporting back to centre.
+    _swipeStart = event.localPosition - Offset(_swipe.value, 0);
     _swipeHorizontal = false;
     _swipeVelocity = VelocityTracker.withKind(event.kind)
       ..addPosition(event.timeStamp, event.localPosition);
     _swipeReturn.stop();
-    _swipe.value = 0;
+    _swipeCommitIndex = null;
+    _swipeTo = _swipe.value;
   }
 
   void _swipeMove(PointerMoveEvent event) {
@@ -370,7 +386,13 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
     }
     if (!_swipeHorizontal) return;
     _swipeVelocity?.addPosition(event.timeStamp, event.localPosition);
-    final limit = MediaQuery.sizeOf(context).width * .42;
+    final width = MediaQuery.sizeOf(context).width;
+    final library = ref.read(localLibraryProvider);
+    final index = library.indexOf(_photo.id) ?? _resolvedIndex;
+    final beyondStart = delta.dx > 0 && index <= 0;
+    final beyondEnd = delta.dx < 0 && index + 1 >= library.total;
+    // Rubber-band at the ends instead of dragging a blank page halfway in.
+    final limit = beyondStart || beyondEnd ? width * .12 : width;
     _swipe.value = delta.dx.clamp(-limit, limit);
   }
 
@@ -397,13 +419,15 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
     final commit =
         (fast || dx.abs() >= math.max(56.0, width * .16)) &&
         target >= 0 &&
-        target < library.total;
+        target < library.total &&
+        library.photoAt(target) != null;
     if (!commit) {
       _settleSwipe();
       return;
     }
-    _swipe.value = 0;
-    unawaited(_move(forward ? 1 : -1));
+    // Finish the page turn from wherever the finger left it; the neighbour
+    // preview then hands over to the real stage without another load pause.
+    _animateSwipe(forward ? -width : width, commitIndex: target);
   }
 
   void _cancelSwipe() {
@@ -414,14 +438,58 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
     _settleSwipe();
   }
 
+  void _animateSwipe(double target, {int? commitIndex}) {
+    _swipeFrom = _swipe.value;
+    _swipeTo = target;
+    _swipeCommitIndex = commitIndex;
+    final width = math.max(MediaQuery.sizeOf(context).width, 1.0);
+    final remaining = ((target - _swipeFrom).abs() / width).clamp(0.0, 1.0);
+    _swipeReturn.duration = Duration(
+      milliseconds: (110 + 130 * remaining).round(),
+    );
+    _swipeReturn.forward(from: 0);
+  }
+
   void _settleSwipe() {
     if (_swipe.value.abs() < .5) {
       _swipeReturn.stop();
+      _swipeCommitIndex = null;
+      _swipeFrom = 0;
+      _swipeTo = 0;
       _swipe.value = 0;
       return;
     }
-    _swipeReturnStart = _swipe.value;
-    _swipeReturn.forward(from: 0);
+    _animateSwipe(0);
+  }
+
+  /// The settle animation landed exactly on the neighbouring page, so swap the
+  /// stage identity in place. The incoming photo object and its thumbnail are
+  /// already resident; the original decodes progressively after this frame.
+  void _commitSwipe(int target) {
+    if (!mounted) return;
+    final library = ref.read(localLibraryProvider);
+    final photo = library.photoAt(target);
+    if (photo == null) {
+      _settleSwipe();
+      return;
+    }
+    final current = library.indexOf(_photo.id) ?? _resolvedIndex;
+    _navGeneration++;
+    _prefetchGeneration++;
+    _prefetchIdentity = null;
+    _pendingIndex = null;
+    _navigating = false;
+    _navigationThumbnail?.release();
+    _navigationThumbnail = null;
+    _swipe.value = 0;
+    setState(() {
+      _stageEpoch++;
+      _navDirection = target >= current ? 1 : -1;
+      _photo = photo;
+      _resolvedIndex = target;
+      _videoControlsVisible = false;
+      _transform.value = Matrix4.identity();
+    });
   }
 
   Future<void> _prefetchNeighbors(int index, String identity) async {
@@ -1075,89 +1143,113 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
               body: Stack(
                 fit: StackFit.expand,
                 children: [
-                  AnimatedSwitcher(
-                    key: const ValueKey('viewer-stage-switcher'),
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 220),
-                    switchInCurve: Curves.easeOut,
-                    switchOutCurve: Curves.easeIn,
-                    // Fade the incoming stage over an opaque outgoing one.
-                    // Fading both toward zero would dim the composite and
-                    // briefly expose the dark scaffold (a visible blink).
-                    transitionBuilder: (child, animation) => AnimatedBuilder(
-                      animation: animation,
-                      builder: (context, child) {
-                        final outgoing =
-                            animation.status == AnimationStatus.reverse;
-                        // Touch pages slide with the swipe; desktop keeps its
-                        // existing cross-fade.
-                        final shift = mobile
-                            ? (outgoing ? -1.0 : 1.0) *
-                                  _navDirection *
-                                  .10 *
-                                  (1 - animation.value)
-                            : 0.0;
-                        return Opacity(
-                          opacity: outgoing ? 1 : animation.value,
-                          child: FractionalTranslation(
-                            translation: Offset(shift, 0),
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: child,
-                    ),
-                    // The photo, its blurred fill, and its frame all live in
-                    // one stage, so both media and backdrop cross-fade.
-                    layoutBuilder: (current, previous) => Stack(
-                      fit: StackFit.expand,
-                      children: [...previous, ?current],
-                    ),
-                    child: KeyedSubtree(
-                      key: ValueKey(
-                        'viewer-stage-${photo.id}-${photo.contentVersion}',
-                      ),
-                      child: Builder(
-                        builder: (context) {
-                          final videoStage =
-                              photo.mediaKind == 'video' || _showMotion;
-                          Widget stage = GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            // Tap reveals/hides the touch chrome; desktop keeps
-                            // click-to-leave-immersive. Video taps belong to
-                            // the player's own touch controls.
-                            onTap: mobile
-                                ? (videoStage ? null : _toggleMobileChrome)
-                                : (_immersive ? _toggleImmersive : null),
-                            onLongPressStart: _hasMotion
-                                ? (_) => _startMotionHold()
-                                : null,
-                            onLongPressEnd: _hasMotion
-                                ? (_) => _endMotionHold()
-                                : null,
-                            child: _stage(context, strings, photo, scheme),
+                  KeyedSubtree(
+                    key: ValueKey('viewer-stage-epoch-$_stageEpoch'),
+                    child: AnimatedSwitcher(
+                      key: const ValueKey('viewer-stage-switcher'),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      // Fade the incoming stage over an opaque outgoing one.
+                      // Fading both toward zero would dim the composite and
+                      // briefly expose the dark scaffold (a visible blink).
+                      transitionBuilder: (child, animation) => AnimatedBuilder(
+                        animation: animation,
+                        builder: (context, child) {
+                          final outgoing =
+                              animation.status == AnimationStatus.reverse;
+                          // Touch pages slide with the swipe; desktop keeps its
+                          // existing cross-fade.
+                          final shift = mobile
+                              ? (outgoing ? -1.0 : 1.0) *
+                                    _navDirection *
+                                    .10 *
+                                    (1 - animation.value)
+                              : 0.0;
+                          return Opacity(
+                            opacity: outgoing ? 1 : animation.value,
+                            child: FractionalTranslation(
+                              translation: Offset(shift, 0),
+                              child: child,
+                            ),
                           );
-                          if (mobile) {
-                            stage = Listener(
-                              behavior: HitTestBehavior.opaque,
-                              onPointerDown: _swipeDown,
-                              onPointerMove: _swipeMove,
-                              onPointerUp: _swipeUp,
-                              onPointerCancel: (_) => _cancelSwipe(),
-                              child: ValueListenableBuilder<double>(
-                                valueListenable: _swipe,
-                                builder: (context, offset, child) =>
-                                    Transform.translate(
-                                      offset: Offset(offset, 0),
-                                      child: child,
-                                    ),
-                                child: stage,
-                              ),
-                            );
-                          }
-                          return stage;
                         },
+                        child: child,
+                      ),
+                      // The photo, its blurred fill, and its frame all live in
+                      // one stage, so both media and backdrop cross-fade.
+                      layoutBuilder: (current, previous) => Stack(
+                        fit: StackFit.expand,
+                        children: [...previous, ?current],
+                      ),
+                      child: KeyedSubtree(
+                        key: ValueKey(
+                          'viewer-stage-${photo.id}-${photo.contentVersion}',
+                        ),
+                        child: Builder(
+                          builder: (context) {
+                            final videoStage =
+                                photo.mediaKind == 'video' || _showMotion;
+                            Widget stage = GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              // Tap reveals/hides the touch chrome; desktop
+                              // keeps click-to-leave-immersive. Video taps
+                              // belong to the player's own touch controls.
+                              onTap: mobile
+                                  ? (videoStage ? null : _toggleMobileChrome)
+                                  : (_immersive ? _toggleImmersive : null),
+                              onLongPressStart: _hasMotion
+                                  ? (_) => _startMotionHold()
+                                  : null,
+                              onLongPressEnd: _hasMotion
+                                  ? (_) => _endMotionHold()
+                                  : null,
+                              child: _stage(context, strings, photo, scheme),
+                            );
+                            if (mobile) {
+                              final previous = index != null && index > 0
+                                  ? library.photoAt(index - 1)
+                                  : null;
+                              final next =
+                                  index != null && index + 1 < library.total
+                                  ? library.photoAt(index + 1)
+                                  : null;
+                              Widget? neighbour(LocalPhoto? photo, Key key) =>
+                                  photo == null
+                                  ? null
+                                  : _NeighborPreview(
+                                      key: key,
+                                      photo: photo,
+                                      gateway: gateway,
+                                      scheme: scheme,
+                                    );
+                              stage = Listener(
+                                behavior: HitTestBehavior.opaque,
+                                onPointerDown: _swipeDown,
+                                onPointerMove: _swipeMove,
+                                onPointerUp: _swipeUp,
+                                onPointerCancel: (_) => _cancelSwipe(),
+                                child: _SwipeStage(
+                                  offset: _swipe,
+                                  previous: neighbour(
+                                    previous,
+                                    const ValueKey(
+                                      'viewer-swipe-preview-previous',
+                                    ),
+                                  ),
+                                  next: neighbour(
+                                    next,
+                                    const ValueKey('viewer-swipe-preview-next'),
+                                  ),
+                                  stage: stage,
+                                ),
+                              );
+                            }
+                            return stage;
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -1330,6 +1422,13 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
     ColorScheme scheme,
   ) {
     final gateway = ref.read(coreGatewayProvider) as LocalLibraryGateway;
+    ImageProvider? fillPlaceholder() {
+      final pool = ThumbnailPool.forGateway(gateway);
+      final size = pool.bestAvailableSize(photo);
+      final path = size == null ? null : pool.cachedPath(photo, size);
+      return path == null ? null : ThumbnailImage.file(path, photo);
+    }
+
     final videoInset = _chromeHidden
         ? 0.0
         : (_mobileLayout
@@ -1518,7 +1617,11 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
         return Stack(
           fit: StackFit.expand,
           children: [
-            _PhotoFillBackdrop(image: image, scheme: scheme),
+            _PhotoFillBackdrop(
+              image: image,
+              scheme: scheme,
+              placeholder: fillPlaceholder(),
+            ),
             InteractiveViewer(
               key: ValueKey('viewer-image-${photo.id}-${photo.contentVersion}'),
               transformationController: _transform,
@@ -2400,13 +2503,163 @@ class _RevealRegion extends StatelessWidget {
   }
 }
 
+/// The touch page turn: the current stage follows the finger while the
+/// neighbouring photo rides in from the opposite edge. Neighbours are built
+/// only while the page is actually moving off centre.
+class _SwipeStage extends StatelessWidget {
+  const _SwipeStage({
+    required this.offset,
+    required this.stage,
+    required this.previous,
+    required this.next,
+  });
+
+  final ValueListenable<double> offset;
+  final Widget stage;
+  final Widget? previous, next;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<double>(
+    valueListenable: offset,
+    child: stage,
+    builder: (context, dx, child) {
+      final width = MediaQuery.sizeOf(context).width;
+      return Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.hardEdge,
+        children: [
+          if (dx > 0 && previous != null)
+            Transform.translate(
+              offset: Offset(dx - width, 0),
+              child: RepaintBoundary(child: previous),
+            ),
+          if (dx < 0 && next != null)
+            Transform.translate(
+              offset: Offset(dx + width, 0),
+              child: RepaintBoundary(child: next),
+            ),
+          Transform.translate(offset: Offset(dx, 0), child: child),
+        ],
+      );
+    },
+  );
+}
+
+/// Still preview of the page entering from either side. It mirrors the framed
+/// thumbnail and blurred fill of the settled stage so the swipe hand-off does
+/// not visibly swap artwork mid-page.
+class _NeighborPreview extends StatefulWidget {
+  const _NeighborPreview({
+    super.key,
+    required this.photo,
+    required this.gateway,
+    required this.scheme,
+  });
+
+  final LocalPhoto photo;
+  final LocalLibraryGateway gateway;
+
+  /// See [_PhotoFillBackdrop.scheme]; captured above the viewer's dark theme.
+  final ColorScheme scheme;
+
+  @override
+  State<_NeighborPreview> createState() => _NeighborPreviewState();
+}
+
+class _NeighborPreviewState extends State<_NeighborPreview> {
+  ThumbnailHandle? _request;
+  String? _identity;
+
+  @override
+  void dispose() {
+    _request?.release();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = widget.photo;
+    final pool = ThumbnailPool.forGateway(widget.gateway);
+    final identity = '${photo.id}:${photo.contentVersion}';
+    if (_identity != identity) {
+      _identity = identity;
+      _request?.release();
+      _request = pool.acquire(
+        photo,
+        pool.bestAvailableSize(photo) ?? 512,
+        priority: 1,
+      );
+    }
+    final request = _request!;
+    return ExcludeSemantics(
+      child: ClipRect(
+        child: FutureBuilder<String>(
+          future: request.future,
+          initialData: request.path,
+          builder: (context, snapshot) {
+            final path = snapshot.data;
+            final scheme = widget.scheme;
+            final sigma = (MediaQuery.sizeOf(context).shortestSide * .055)
+                .clamp(24.0, 72.0)
+                .toDouble();
+            final scrim = scheme.surface.withValues(
+              alpha: scheme.brightness == Brightness.dark ? .58 : .62,
+            );
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(color: scheme.surface),
+                if (path != null) ...[
+                  ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(
+                      sigmaX: sigma,
+                      sigmaY: sigma,
+                    ),
+                    child: Image(
+                      image: ThumbnailImage.file(path, photo),
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      excludeFromSemantics: true,
+                    ),
+                  ),
+                  ColoredBox(color: scrim),
+                  Center(
+                    child: _PhotoStageFrame(
+                      photo: photo,
+                      scheme: scheme,
+                      frameKey: null,
+                      child: Image(
+                        image: ThumbnailImage.file(path, photo),
+                        fit: BoxFit.contain,
+                        excludeFromSemantics: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 /// Draws the photo's own colors into letterbox gaps on either axis. The heavy
 /// blur and theme-tinted scrim read as decoration, and the framed original
 /// above keeps the true image boundary crisp.
 class _PhotoFillBackdrop extends StatelessWidget {
-  const _PhotoFillBackdrop({required this.image, required this.scheme});
+  const _PhotoFillBackdrop({
+    required this.image,
+    required this.scheme,
+    this.placeholder,
+  });
 
   final ImageProvider image;
+
+  /// Already-decoded thumbnail used until the bounded original paints. It keeps
+  /// the blurred letterbox fill continuous when a swipe hands the stage over.
+  final ImageProvider? placeholder;
 
   /// The app-level scheme, captured above the viewer's forced dark chrome, so
   /// the veil lightens or darkens with the user's theme.
@@ -2431,6 +2684,15 @@ class _PhotoFillBackdrop extends StatelessWidget {
               // A solid base keeps the gaps from flashing the dark scaffold
               // while the blurred copy is still decoding.
               ColoredBox(color: scheme.surface),
+              if (placeholder != null)
+                Image(
+                  key: const ValueKey('viewer-photo-fill-placeholder'),
+                  image: placeholder!,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  excludeFromSemantics: true,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
               ImageFiltered(
                 key: const ValueKey('viewer-photo-fill-blur'),
                 imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
@@ -2522,6 +2784,7 @@ class _PhotoStageFrame extends StatelessWidget {
     required this.photo,
     required this.scheme,
     required this.child,
+    this.frameKey = const ValueKey('viewer-photo-frame'),
   });
 
   final LocalPhoto photo;
@@ -2529,6 +2792,7 @@ class _PhotoStageFrame extends StatelessWidget {
   /// See [_PhotoFillBackdrop.scheme]; the hairline and shadow follow it too.
   final ColorScheme scheme;
   final Widget child;
+  final Key? frameKey;
 
   static double? _aspectRatio(LocalPhoto photo) {
     final width = photo.width, height = photo.height;
@@ -2550,7 +2814,7 @@ class _PhotoStageFrame extends StatelessWidget {
       child: AspectRatio(
         aspectRatio: aspect,
         child: DecoratedBox(
-          key: const ValueKey('viewer-photo-frame'),
+          key: frameKey,
           decoration: BoxDecoration(
             border: border,
             boxShadow: [
