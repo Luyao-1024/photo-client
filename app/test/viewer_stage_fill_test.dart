@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_client/app.dart';
+import 'package:photo_client/services/thumbnail_pipeline.dart';
 import 'package:photo_client/ui/local_photo_image.dart';
 import 'package:photo_client/ui/photo_theme.dart';
 
@@ -160,6 +161,33 @@ void main() {
       await disposeApp(tester, gateway);
     },
   );
+
+  testWidgets('the cached fill placeholder is blurred with the backdrop', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 2);
+    gateway.photos[0] = gateway.photo(0, width: 2000, height: 1000);
+    ThumbnailPool.forGateway(gateway)
+        .rememberCached(gateway.photos[0], 512, image);
+    await mount(tester, gateway);
+    await openViewer(tester, 'p0');
+
+    final placeholder = find.byKey(
+      const ValueKey('viewer-photo-fill-placeholder'),
+    );
+    expect(placeholder, findsOneWidget);
+    // The thumbnail must blur with the backdrop; a sharp placeholder flashes
+    // a clear fill before the blurred original paints after a swipe.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('viewer-photo-fill-blur')),
+        matching: placeholder,
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester, gateway);
+  });
 
   testWidgets('the fill scrim and hairline follow the app light/dark theme', (
     tester,

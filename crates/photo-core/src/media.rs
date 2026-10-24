@@ -17,7 +17,7 @@ pub use thumbnail::{prepare_embedded_thumbnail, prepare_thumbnail};
 /// Published thumbnail encoding revision. Bump it whenever the thumbnail
 /// encoder changes, so entries written by an older encoder are rebuilt
 /// instead of reused.
-pub const THUMBNAIL_CACHE_REVISION: u32 = 4;
+pub const THUMBNAIL_CACHE_REVISION: u32 = 5;
 
 use std::collections::HashMap;
 use std::fs::{self, File, Metadata};

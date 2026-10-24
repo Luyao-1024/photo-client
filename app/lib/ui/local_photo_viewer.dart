@@ -12,6 +12,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
+    show GlassMaterializeTransition;
 
 import '../services/local_library_gateway.dart';
 import '../services/window_controller.dart';
@@ -499,6 +501,9 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
     _navigationThumbnail?.release();
     _navigationThumbnail = null;
     _swipe.value = 0;
+    // Move the strip by the same tile that the follow translation consumed in
+    // this frame, so clearing that translation does not flick it back.
+    _centerStripOn(target);
     setState(() {
       _stageEpoch++;
       _navDirection = target >= current ? 1 : -1;
@@ -1331,6 +1336,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                     child: _RevealRegion(
                       revealed: !_chromeHidden,
                       foldOffset: const Offset(0, -.35),
+                      glass: true,
                       child: _header(
                         strings: strings,
                         photo: photo,
@@ -1349,6 +1355,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                     child: _RevealRegion(
                       revealed: !_chromeHidden,
                       foldOffset: const Offset(0, .35),
+                      glass: true,
                       child: _filmstrip(
                         library: library,
                         index: index,
@@ -2168,7 +2175,7 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final layout = _stripLayout!;
-                  return ListView.builder(
+                  final list = ListView.builder(
                     controller: _strip,
                     scrollDirection: Axis.horizontal,
                     clipBehavior: Clip.none,
@@ -2262,6 +2269,14 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
                       );
                     },
                   );
+                  return ValueListenableBuilder<double>(
+                    valueListenable: _swipe,
+                    child: list,
+                    builder: (context, dx, child) => Transform.translate(
+                      offset: Offset(_stripFollow(dx, layout, index), 0),
+                      child: child,
+                    ),
+                  );
                 },
               ),
             ),
@@ -2270,6 +2285,17 @@ class _LocalPhotoViewerState extends ConsumerState<LocalPhotoViewer>
       ),
     ),
   );
+
+  /// One filmstrip tile per full page travelled: the strip follows the page
+  /// turn in phase, and a cancelled swipe walks it back with the photo.
+  double _stripFollow(double dx, ViewerFilmstripLayout layout, int? index) {
+    if (dx == 0 || index == null) return 0;
+    final target = index + (dx < 0 ? 1 : -1);
+    if (target < 0 || target >= layout.count) return 0;
+    final width = MediaQuery.sizeOf(context).width;
+    if (width <= 0) return 0;
+    return (dx / width).clamp(-1.0, 1.0) * layout.extentAt(index);
+  }
 
   /// Overlay glass side panel sliding over the stage's right side; the media
   /// stays visible behind it and the stage is never re-laid-out.
@@ -2500,6 +2526,7 @@ class _RevealRegion extends StatelessWidget {
     required this.revealed,
     required this.child,
     this.foldOffset = Offset.zero,
+    this.glass = false,
   });
 
   final bool revealed;
@@ -2508,6 +2535,11 @@ class _RevealRegion extends StatelessWidget {
   /// Fraction of the region's own size travelled while folding; zero
   /// crossfades in place.
   final Offset foldOffset;
+
+  /// Fades the shader visibility instead of wrapping glass in [Opacity]. An
+  /// ancestor opacity forces the backdrop pass into a layer that samples
+  /// black, so the glass would flash a dark plate before blurring.
+  final bool glass;
 
   @override
   Widget build(BuildContext context) {
@@ -2526,17 +2558,26 @@ class _RevealRegion extends StatelessWidget {
         ),
         transitionBuilder: (child, animation) => AnimatedBuilder(
           animation: animation,
-          child: child,
-          builder: (context, child) => Opacity(
-            opacity: animation.value,
-            child: FractionalTranslation(
+          child: glass
+              ? GlassMaterializeTransition(
+                  animation: animation,
+                  scaleFrom: 1,
+                  contentSigma: 0,
+                  child: child,
+                )
+              : child,
+          builder: (context, child) {
+            final value = animation.value;
+            return FractionalTranslation(
               translation: Offset(
-                foldOffset.dx * (1 - animation.value),
-                foldOffset.dy * (1 - animation.value),
+                foldOffset.dx * (1 - value),
+                foldOffset.dy * (1 - value),
               ),
-              child: child,
-            ),
-          ),
+              child: glass
+                  ? GlassRevealScope(progress: value, child: child!)
+                  : Opacity(opacity: value, child: child),
+            );
+          },
         ),
         child: revealed ? child : const SizedBox.shrink(),
       ),
@@ -2698,8 +2739,9 @@ class _PhotoFillBackdrop extends StatelessWidget {
 
   final ImageProvider image;
 
-  /// Already-decoded thumbnail used until the bounded original paints. It keeps
-  /// the blurred letterbox fill continuous when a swipe hands the stage over.
+  /// Already-decoded thumbnail drawn under the bounded original until it
+  /// paints. It sits inside the blur layer so a swipe hand-off keeps the fill
+  /// soft instead of flashing a sharp thumbnail first.
   final ImageProvider? placeholder;
 
   /// The app-level scheme, captured above the viewer's forced dark chrome, so
@@ -2725,32 +2767,37 @@ class _PhotoFillBackdrop extends StatelessWidget {
               // A solid base keeps the gaps from flashing the dark scaffold
               // while the blurred copy is still decoding.
               ColoredBox(color: scheme.surface),
-              if (placeholder != null)
-                Image(
-                  key: const ValueKey('viewer-photo-fill-placeholder'),
-                  image: placeholder!,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  excludeFromSemantics: true,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                ),
               ImageFiltered(
                 key: const ValueKey('viewer-photo-fill-blur'),
                 imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-                child: Image(
-                  key: const ValueKey('viewer-photo-fill-image'),
-                  image: image,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  excludeFromSemantics: true,
-                  frameBuilder: (context, child, frame, synchronous) =>
-                      AnimatedOpacity(
-                        opacity: synchronous || frame != null ? 1 : 0,
-                        duration: fade,
-                        curve: Curves.easeOut,
-                        child: child,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (placeholder != null)
+                      Image(
+                        key: const ValueKey('viewer-photo-fill-placeholder'),
+                        image: placeholder!,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        excludeFromSemantics: true,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       ),
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    Image(
+                      key: const ValueKey('viewer-photo-fill-image'),
+                      image: image,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      excludeFromSemantics: true,
+                      frameBuilder: (context, child, frame, synchronous) =>
+                          AnimatedOpacity(
+                            opacity: synchronous || frame != null ? 1 : 0,
+                            duration: fade,
+                            curve: Curves.easeOut,
+                            child: child,
+                          ),
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ],
                 ),
               ),
               ColoredBox(

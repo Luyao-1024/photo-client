@@ -48,10 +48,11 @@ class _NativeVideoSession implements VideoPlaybackSession {
     controller = VideoController(
       player,
       configuration: Platform.isAndroid
-          ? const VideoControllerConfiguration(
-              vo: 'mediacodec_embed',
-              hwdec: 'mediacodec',
-            )
+          // mediacodec_embed bypasses mpv's renderer, so it ignores the
+          // container rotation while the surface is already sized for the
+          // rotated frame: portrait clips arrive stretched sideways. The gpu
+          // VO applies the display matrix before the frame reaches the surface.
+          ? const VideoControllerConfiguration(vo: 'gpu', hwdec: 'mediacodec')
           : const VideoControllerConfiguration(hwdec: 'auto'),
     );
   }

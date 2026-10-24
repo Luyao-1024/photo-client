@@ -168,7 +168,6 @@ object AndroidMediaBridge {
     fun videoThumbnail(path: String, destination: String, maxEdge: Int): Boolean {
         val retriever = MediaMetadataRetriever()
         var frame: Bitmap? = null
-        var rotated: Bitmap? = null
         return try {
             if (maxEdge <= 0) return false
             retriever.setDataSource(path)
@@ -182,19 +181,14 @@ object AndroidMediaBridge {
                 ?: retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: return false
             frame = decoded
-            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
-                ?.toIntOrNull() ?: 0
-            val bitmap = if (rotation % 360 != 0) {
-                val matrix = android.graphics.Matrix()
-                matrix.postRotate(rotation.toFloat())
-                Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
-                    .also { if (it !== decoded) rotated = it }
-            } else decoded
-            writeJpeg(bitmap, destination, maxEdge)
+            // The retriever already applies the container display matrix.
+            // Rotating again by METADATA_KEY_VIDEO_ROTATION turns portrait
+            // clips sideways; the platform's own ThumbnailUtils relies on the
+            // returned frame as-is too.
+            writeJpeg(decoded, destination, maxEdge)
         } catch (_: Exception) {
             false
         } finally {
-            rotated?.recycle()
             frame?.recycle()
             retriever.release()
         }

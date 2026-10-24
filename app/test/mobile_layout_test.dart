@@ -5,8 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
+    show GlassMaterializeTransition;
 
 import 'package:photo_client/app.dart';
+import 'package:photo_client/ui/glass_surface.dart';
 import 'package:photo_client/ui/library_layout.dart';
 import 'package:photo_client/ui/local_library_controller.dart';
 import 'package:photo_client/ui/presentation_preferences.dart';
@@ -685,6 +688,130 @@ void main() {
     await waitForFilmstripFrames(tester);
     await tester.pumpAndSettle();
     expect(find.textContaining('3 / 6'), findsOneWidget);
+
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('returning chrome materializes its glass without a fade layer', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 2);
+    await mount(tester, gateway);
+    await tester.tap(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+
+    final center = tester.getCenter(find.byKey(const ValueKey('viewer')));
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-header')), findsNothing);
+
+    await tester.tapAt(center);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+
+    final header = find.byKey(const ValueKey('viewer-header'));
+    expect(header, findsOneWidget);
+    // A backdrop pass under an ancestor Opacity samples black, which is the
+    // dark plate that used to appear before the frost on the returning bar.
+    expect(
+      find.ancestor(of: header, matching: find.byType(Opacity)),
+      findsNothing,
+    );
+    final scope = tester.widget<GlassRevealScope>(
+      find.ancestor(of: header, matching: find.byType(GlassRevealScope)).first,
+    );
+    expect(scope.progress, inExclusiveRange(0, 1));
+    expect(
+      find.ancestor(
+        of: header,
+        matching: find.byType(GlassMaterializeTransition),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpAndSettle();
+    expect(header, findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('filmstrip follows the page turn and returns on cancel', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 6);
+    await mount(tester, gateway);
+    await tester.tap(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+
+    final first = find.byKey(const ValueKey('viewer-strip-p0'));
+    final settled = tester.getRect(first);
+    final center = tester.getCenter(find.byKey(const ValueKey('viewer')));
+
+    // A short drag moves the strip in phase with the photo, then walks it
+    // back when the page returns.
+    final gesture = await tester.startGesture(center);
+    await gesture.moveBy(const Offset(-40, 0));
+    await tester.pump();
+    expect(tester.getRect(first).left, lessThan(settled.left - 3));
+    await tester.pump(const Duration(milliseconds: 300));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(tester.getRect(first).left, closeTo(settled.left, .01));
+    expect(find.textContaining('1 / 6'), findsOneWidget);
+
+    // A committed turn hands the follow translation over to the strip's
+    // centring, leaving the incoming tile in the middle.
+    await tester.dragFrom(center, const Offset(-320, 0));
+    await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 / 6'), findsOneWidget);
+    expect(
+      tester.getCenter(find.byKey(const ValueKey('viewer-strip-p1'))).dx,
+      closeTo(center.dx, 1),
+    );
+
+    await disposeApp(tester, gateway);
+  });
+
+  testWidgets('revealed chrome keeps the filmstrip on the current photo', (
+    tester,
+  ) async {
+    final gateway = FakeLocalGateway(imagePath: image, count: 12);
+    await mount(tester, gateway);
+    await tester.tap(find.byKey(const ValueKey('photo-p0')));
+    await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+
+    final center = tester.getCenter(find.byKey(const ValueKey('viewer')));
+    await tester.dragFrom(center, const Offset(-320, 0));
+    await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 / 12'), findsOneWidget);
+    expect(
+      tester.getCenter(find.byKey(const ValueKey('viewer-strip-p1'))).dx,
+      closeTo(center.dx, 1),
+    );
+
+    // Hiding the chrome unmounts the strip once its fold ends; revealing it
+    // builds a fresh list, which must re-centre instead of starting at p0.
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('viewer-filmstrip')), findsNothing);
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    await waitForFilmstripFrames(tester);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getCenter(find.byKey(const ValueKey('viewer-strip-p1'))).dx,
+      closeTo(center.dx, 1),
+    );
 
     await disposeApp(tester, gateway);
   });

@@ -9,6 +9,27 @@ import 'presentation_preferences.dart';
 /// text on a near-opaque panel.
 enum GlassRole { chrome, raised, overlay, reading }
 
+/// Reveal progress for glass chrome. The shader fades the backdrop through its
+/// visibility uniform; this scope only carries the matching content fade,
+/// applied below the glass layer so the backdrop pass stays outside any
+/// ancestor [Opacity].
+class GlassRevealScope extends InheritedWidget {
+  const GlassRevealScope({
+    required this.progress,
+    required super.child,
+    super.key,
+  });
+
+  final double progress;
+
+  static double? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<GlassRevealScope>()?.progress;
+
+  @override
+  bool updateShouldNotify(GlassRevealScope oldWidget) =>
+      progress != oldWidget.progress;
+}
+
 /// A translucent surface.
 ///
 /// The rendering comes from `liquid_glass_widgets`, which draws the real
@@ -54,6 +75,7 @@ class GlassSurface extends ConsumerWidget {
       reading ? .98 : (overlay ? .62 : (raised ? .28 : .32)),
     );
     final flat = reading || opaque;
+    final reveal = GlassRevealScope.maybeOf(context);
     // Start from the package's native-material example: paraxial folded lens,
     // independent frost and blur, and directional rim shading. A low blur
     // preserves the displaced backdrop rather than hiding it under frosting.
@@ -143,11 +165,21 @@ class GlassSurface extends ConsumerWidget {
             // Keep the package's container contract even though its background
             // is a sibling (so the standard rim can be clipped independently).
             // Nested search/buttons use vibrancy, not another backdrop read.
+            // Content fades below the glass layer; an opacity above it would
+            // black out the backdrop pass during the reveal.
             InheritedLiquidGlass(
               settings: settings,
               quality: quality,
               avoidsRefraction: true,
-              child: Material(type: MaterialType.transparency, child: child),
+              child: Material(
+                type: MaterialType.transparency,
+                // Keep this wrapper in place at every progress: inserting or
+                // removing it remounts the content, which resets a contained
+                // scrollable (the filmstrip) to offset zero.
+                child: reveal == null
+                    ? child
+                    : Opacity(opacity: reveal.clamp(0.0, 1.0), child: child),
+              ),
             ),
             if (opaque)
               Positioned.fill(
